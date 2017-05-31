@@ -1,0 +1,22 @@
+{
+    "description":
+    [
+        "Tests the handling of the location setting"
+    ],
+    "utterances":
+    [
+        "Set location to {location}"
+    ],
+    "types":
+    {
+        "location":
+        [
+            "west saint paul, minnesota",
+            "file:{testsdir}/type_location",
+            "55118",
+            "zip code 55118",
+            "west saint paul, minnesota"
+        ]
+    }
+}
+       

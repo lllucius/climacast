@@ -1,0 +1,24 @@
+{
+    "description":
+    [
+        "Tests the handling of the custom forecast"
+    ],
+    "utterances":
+    [
+        "For the custom forecast",
+        "Remove {metric} from the custom forecast",
+        "Add {metric} to the custom forecast",
+        "Get the custom forecast setting",
+        "To reset the custom forecast"
+    ],
+    "types":
+    {
+        "metric":
+        [
+            "temperature",
+            "dewpoint",
+            "summary"
+        ]
+    }
+}
+       

@@ -1,0 +1,126 @@
+{
+  "intents": [
+    {
+      "intent": "AMAZON.CancelIntent"
+    },
+    {
+      "intent": "AMAZON.HelpIntent"
+    },
+    {
+      "intent": "AMAZON.StopIntent"
+    },
+    {
+      "slots": [
+        {
+          "name": "leadin",
+          "type": "TYPE_LEADIN"
+        },
+        {
+          "name": "metric",
+          "type": "TYPE_METRIC"
+        },
+        {
+          "name": "when_abs",
+          "type": "TYPE_WHEN_ABS"
+        },
+        {
+          "name": "when_any",
+          "type": "TYPE_WHEN_ANY"
+        },
+        {
+          "name": "when_pos",
+          "type": "TYPE_WHEN_POS"
+        },
+        {
+          "name": "day",
+          "type": "TYPE_DAY"
+        },
+        {
+          "name": "month",
+          "type": "TYPE_MONTH"
+        },
+        {
+          "name": "location",
+          "type": "AMAZON.AdministrativeArea"
+        },
+        {
+          "name": "zip_conn",
+          "type": "TYPE_ZIP_CONN"
+        },
+        {
+          "name": "zipcode",
+          "type": "AMAZON.NUMBER"
+        }
+      ],
+      "intent": "MetricIntent"
+    },
+    {
+      "slots": [
+        {
+          "name": "setting",
+          "type": "TYPE_SETTING"
+        }
+      ],
+      "intent": "GetSettingIntent"
+    },
+    {
+      "slots": [
+        {
+          "name": "percent",
+          "type": "AMAZON.NUMBER"
+        }
+      ],
+      "intent": "SetRateIntent"
+    },
+    {
+      "slots": [
+        {
+          "name": "percent",
+          "type": "AMAZON.NUMBER"
+        }
+      ],
+      "intent": "SetPitchIntent"
+    },
+    {
+      "slots": [
+        {
+          "name": "location",
+          "type": "AMAZON.AdministrativeArea"
+        },
+        {
+          "name": "zip_conn",
+          "type": "TYPE_ZIP_CONN"
+        },
+        {
+          "name": "zipcode",
+          "type": "AMAZON.NUMBER"
+        }
+      ],
+      "intent": "SetLocationIntent"
+    },
+    {
+      "intent": "GetCustomIntent"
+    },
+    {
+      "slots": [
+        {
+          "name": "metric",
+          "type": "TYPE_METRIC"
+        }
+      ],
+      "intent": "AddCustomIntent"
+    },
+    {
+      "slots": [
+        {
+          "name": "metric",
+          "type": "TYPE_METRIC"
+        }
+      ],
+      "intent": "RemCustomIntent"
+    },
+    {
+      "intent": "RstCustomIntent"
+    }
+  ]
+}

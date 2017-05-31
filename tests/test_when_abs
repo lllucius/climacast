@@ -1,0 +1,19 @@
+{
+    "description":
+    [
+        "Make sure all of the absolute day references are handled properly"
+    ],
+    "utterances":
+    [
+        "For the temperature {when_abs}",
+        "For the temperature on {when_abs}"
+    ],
+    "types":
+    {
+        "when_abs":
+        [
+            "file:{skilldir}/type_when_abs"
+        ]
+    }
+}
+       

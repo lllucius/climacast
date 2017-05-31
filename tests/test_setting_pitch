@@ -1,0 +1,23 @@
+{
+    "description":
+    [
+        "Tests the handling of the pitch setting"
+    ],
+    "utterances":
+    [
+        "Set pitch to {percent} percent"
+    ],
+    "types":
+    {
+        "percent":
+        [
+            "file:{testsdir}/type_percent",
+            "70",
+            "130",
+            "131",
+            "69",
+            "100"
+        ]
+    }
+}
+       
