@@ -1,20 +1,13 @@
-#!/usr/bin/python3
+#!/usr/bin/python
 
-# =============================================================================
-#
-# Copyright 2017 by Leland Lucius
-#
-# Released under the GNU Affero GPL
-# See: https://github.com/lllucius/climocast/blob/master/LICENSE
-#
-# =============================================================================
+from __future__ import print_function
 
 import argparse
-import array
 import base64
 import io
 import itertools
 import json
+import numpy as np
 import os
 import random
 import re
@@ -22,7 +15,6 @@ import requests
 import samplerate
 import soundfile
 import sys
-import urllib.parse
 import wave
 import zlib
 from bs4 import BeautifulSoup
@@ -30,7 +22,12 @@ from copy import deepcopy
 from datetime import datetime
 from requests_toolbelt import MultipartDecoder
 from subprocess import Popen, PIPE, check_output
-from urllib.parse import unquote_plus, quote_plus
+
+try:
+    from urllib.parse import unquote_plus, quote_plus, urlparse, parse_qs, urljoin
+except ImportError:
+    from urllib import unquote_plus, quote_plus
+    from urlparse import urlparse, parse_qs, urljoin
 
 VAR_RE = re.compile(r"(?P<var>{.*?})")
 SUB_RE = re.compile(r"{(?P<var>.*?)\}[/\\]*")
@@ -103,7 +100,11 @@ def avs_recognize(wav):
 
     wav.seek(0)
     url = "https://access-alexa-na.amazon.com/v1/avs/speechrecognizer/recognize"
-    r = requests.post(url, headers=headers, files=files)
+    try:
+        r = requests.post(url, headers=headers, files=files)
+    except:
+        wav.seek(0)
+        r = requests.post(url, headers=headers, files=files)
 
     # Possibly refresh token and retry
     if r.status_code == 403:
@@ -167,7 +168,7 @@ def avs_auth():
         target = SESS.get_redirect_target(resp)
         while target is not None:
             if target.startswith(CFG["avs"]["redirect"]):
-                query = urllib.parse.parse_qs(urllib.parse.urlparse(target).query)
+                query = parse_qs(urlparse(target).query)
                 return resp, query["code"][0] if "code" in query else None
             resp =  SESS.get(target, headers=headers, allow_redirects=False)
             target = SESS.get_redirect_target(resp)
@@ -287,7 +288,7 @@ def login():
         quit()
         
     # Refrieve the login page
-    r = SESS.get(urllib.parse.urljoin(base, login["href"]), headers=headers)
+    r = SESS.get(urljoin(base, login["href"]), headers=headers)
     
     # Extract the form fields
     form = BeautifulSoup(r.text, "html.parser").find("form", {"name": "signIn"})
@@ -339,7 +340,7 @@ def sapiTTS(text):
         spkr.AudioOutputStream = strm
         spkr.Speak(text)
 
-        return array.array("h", bytes(strm.GetData()));
+        return np.fromstring(bytes(strm.GetData()), np.int16);
 
     # Get powershell up and running
     p = Popen("powershell.exe -NonInteractive -File -", shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE, universal_newlines=False, cwd="/mnt/c")
@@ -360,22 +361,27 @@ def sapiTTS(text):
           """ % text.replace("'", "''")
 
     # Send them and get the response from stderr
-    out = p.communicate(bytes(cmd, "UTF-8"))[1]
-
-    return array.array("h", base64.b64decode(out.decode("UTF-8")))
+    out = p.communicate(cmd.encode("UTF-8"))[1]
+    return np.fromstring(base64.b64decode(out.decode("UTF-8")), np.int16)
 
 def espeakTTS(text):
     p = Popen("espeak -v en+m2 --stdin --stdout", shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE)
 
-    out = p.communicate(bytes(text, "UTF-8"))[0]
+    out = p.communicate(text.encode("UTF-8"))[0]
     raw, rate = soundfile.read(io.BytesIO(out))
     return samplerate.resample(raw, 16000.0 / rate, "sinc_best")
+
+def osxTTS(text):
+    p = Popen("tmp=$(mktemp) ; say --file-format=WAVE --data-format=LEI16@16000 -o ${tmp} && cat ${tmp} ; rm ${tmp}", shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+
+    out = p.communicate(bytes(text))[0]
+    return soundfile.read(io.BytesIO(out))[0]
 
 def amazonTTS(text):
     speak = '<speak><prosody rate="90%%" pitch="-20%%">%s</prosody></speak>' % text
     data = {"audioFormat": "OGG",
             "contentType": "SSML",
-            "text": base64.b64encode(bytes(speak, "UTF-8")).decode("UTF-8"),
+            "text": base64.b64encode(speak.encode("UTF-8")).decode("UTF-8"),
             "voiceName": "en_us_nina"}
 
     out = base64.b64decode(api(data, True)["audioFiles"][0])
@@ -389,6 +395,8 @@ def tts(text):
         return espeakTTS(text)
     elif CFG["ttsmethod"] == "sapi":
         return sapiTTS(text)
+    elif CFG["ttsmethod"] == "osx":
+        return osxTTS(text)
 
     return ""
 
@@ -430,7 +438,7 @@ def test_utterance(utterance, types):
 
     if CFG["callavs"]:
         print("Converting text to speech")
-        raw = tts("alexa ask climocast %s" % totts)
+        raw = tts("alexa ask %s %s" % (CFG["skill"]["name"], totts))
 
         # Save the file
         soundfile.write(outpfx + ".wav", raw, 16000, format="WAV")
