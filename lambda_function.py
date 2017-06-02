@@ -5,7 +5,7 @@
 # Copyright 2017 by Leland Lucius
 #
 # Released under the GNU Affero GPL
-# See: https://github.com/lllucius/climocast/blob/master/LICENSE
+# See: https://github.com/lllucius/climacast/blob/master/LICENSE
 #
 # =============================================================================
 
@@ -56,7 +56,7 @@ FUNCS = {"LaunchRequest": ["launch_request", False],
          "MetricIntent": ["metric_intent", True],
          "MetricPosIntent": ["metric_intent", True],
 
-         "GetSettingIntent": ["get_setting_intent", False],
+         "GetSettingIntent": ["get_setting_intent", True],
          "SetPitchIntent": ["set_pitch_intent", False],
          "SetRateIntent": ["set_rate_intent", False],
          "SetLocationIntent": ["set_location_intent", False],
@@ -544,7 +544,7 @@ class Base(object):
         """
             Retrieve the JSON data from the given path and location
         """
-        headers = {"User-Agent": "ClimocastAlexaSkill/1.0 (climocast@homerow.net)",
+        headers = {"User-Agent": "ClimacastAlexaSkill/1.0 (climacast@homerow.net)",
                    "Accept": "application/ld+json"}
         r = HTTPS.get("https://%s/%s" % (loc, path.replace(" ", "+")), headers=headers)
         if r.status_code != 200 or r.text is None or r.text == "":
@@ -1605,16 +1605,13 @@ class Skill(Base):
     def __init__(self, event):
         super().__init__(event)
         self.loc = None
-        self.prompt = None
+        self.end = True
 
     def handle_event(self):
         self.session = self.event["session"]
         self.attrs = self.session.get("attributes", {})
         self.request = self.event["request"]
         self.intent = self.request.get("intent", {})
-
-        # If there's a prompt attribute, then we're waiting for a response from the user
-        self.prompt = self.attrs.get("prompt", None)
 
         # Load or create the user's profile
         self.user = User(self.event, self.session["user"]["userId"])
@@ -1665,7 +1662,17 @@ class Skill(Base):
         return getattr(self, name, self.default_handler)()
 
     def respond(self, text, end=None):
-        self.attrs["prompt"] = self.prompt
+        new = self.session["new"]
+        if end is None:
+            end = new
+
+        prompt = None
+        if not end:
+            prompt = "For %s, say help, " % ("more examples" if new else "example requests") + \
+                     "To interrupt speaking, say Alexa, cancel, " + \
+                     "If you are done, say stop."
+            text += ". " if text.strip()[-1] != "." else " "
+            text += prompt if new else "if you are done, say stop."
         return {
                  "version": "1.0",
                  "sessionAttributes": self.attrs,
@@ -1687,10 +1694,10 @@ class Skill(Base):
                         "ssml": '<speak><prosody rate="%d%%" pitch="%+d%%">%s</prosody></speak>' % \
                                 (self.user.rate,
                                  self.user.pitch - 100,
-                                 self.prompt)
+                                 prompt)
                      },
                    },
-                   "shouldEndSession": end if end is not None else self.prompt is None
+                   "shouldEndSession": end
                  } 
                }
 
@@ -1701,19 +1708,17 @@ class Skill(Base):
                              self.intent["name"] if self.request["type"] == "IntentRequest" else ""))
 
     def launch_request(self):
-        text = "Welcome to Climocast."
+        text = "Welcome to Clima Cast. " \
+               "For current conditions, use phrases like: What's the weather. "\
+               "For forecasts, try phrases like: What's the forecast."
         if self.loc is None:
             text += "You must set your default location by saying something like: " \
                     "set location to Miami Florida."
 
-        self.prompt = "For example requests, say help, " \
-                      "To interrupt speaking, say Alexa, cancel, " \
-                      "If you are done, say stop."
-
-        return self.respond(text)
+        return self.respond(text, end=False)
 
     def session_end_request(self):
-        return self.respond("Thank you for using Climocast.", end=True)
+        return self.respond("Thank you for using Clima Cast.", end=True)
 
     def session_ended_request(self):
         if "error" in self.request:
@@ -1724,7 +1729,7 @@ class Skill(Base):
         return self.respond(self.request["reason"], end=True)
 
     def cancel_intent(self):
-        return self.respond("Canceled.", end=False)
+        return self.respond("Canceled.")
  
     def stop_intent(self):
         return self.session_end_request()
@@ -1732,7 +1737,7 @@ class Skill(Base):
     def help_intent(self):
         text = \
             """
-            For complete information, please refer to the Climocast skill
+            For complete information, please refer to the Clima Cast skill
             page in the Alexa app.
             You may get the current conditions with phrases like:
                 For the current conditions.
@@ -2163,9 +2168,9 @@ class Skill(Base):
         elif self.loc is None:
             text = """"
                    You must set a default location by using phrases like:
-                       Alexa, ask Climocast to set my location to Boulder Colorado.
+                       Alexa, ask Clima Cast to set my location to Boulder Colorado.
                    or:
-                       Alexa, ask Climocast to set my location to zip code 5 5 1 1 8.
+                       Alexa, ask Clima Cast to set my location to zip code 5 5 1 1 8.
                    """
         else:
             text = None
