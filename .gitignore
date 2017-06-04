@@ -100,6 +100,9 @@ ENV/
 # mypy
 .mypy_cache/
 
-# my stuff
+# climacast
 .config
+.webcache
+results
+test.json
 
