@@ -398,6 +398,10 @@ def notify(event, sub, msg=None):
             text += "  %-15s %s\n" % (slot + ":", str(slots.get(slot, {}).get("value", None)))
         text += "\n"
 
+    text += "EVENT:\n\n"
+    text += json.dumps(event, indent=4)
+    text += "\n\n"
+
     if msg:
         text += "MESSAGE:\n\n"
         text += "  " + msg
@@ -421,8 +425,8 @@ class Base(object):
         if zone is None:
             data = self.https("zones/%s/%s" % (zoneType, zoneId))
             if data is None or data.get("status", 0) != 0:
-                notify(self.event, "Unable to get zone info for %s" % zoneid, data)
-                return None
+                notify(self.event, "Unable to get zone info for %s" % zoneId, data)
+                return {}
             zone = self.put_zone(ZONECACHE, data)
 
         return zone
@@ -653,20 +657,21 @@ class Base(object):
         """
             Convert the given degrees (angle), if any, to a compass direction
         """
-        for item in ANGLES:
-            if da < item[2]:
-                return item[0]
+        if da is not None:
+            for item in ANGLES:
+                if da < item[2]:
+                    return item[0]
         return None
 
     def dir_to_dir(self, da):
         """
             Convert the given short direction to long
         """
-        for item in ANGLES:
-            if da == item[1]:
-                return item[0]
+        if da is not None:
+            for item in ANGLES:
+                if da == item[1]:
+                    return item[0]
         return None
-
 
     def normalize(self, text):
         """
@@ -1318,6 +1323,10 @@ class Location(Base):
         if words[-1].isdigit():
             name = words[-1]
 
+            # Zipcodes preceded by the word "for" can be misunderstood by Alexa
+            if len(name) == 6 and name[0] == "2":
+                name = name[1:]
+
             if len(name) != 5:
                 return "%s could not be located" % self.spoken_name(name)
 
@@ -1328,8 +1337,8 @@ class Location(Base):
                 return None
 
             # Have a new location, so retrieve the base info
-            geo = self.https("/v1/search/structured?api_key=%s&boundary.country=USA&postalcode=%s" % (MZID, name), loc="search.mapzen.com")
-            if geo is None or len(geo["features"]) == 0:
+            coords, props = self.mapzen("postalcode=%s" % name)
+            if coords is None:
                 #notify(self.event, "Zip code not found: %s" % name)
                 return "%s could not be located" % self.spoken_name(name)
             city = name
@@ -1363,14 +1372,10 @@ class Location(Base):
                 return None
 
             # Have a new location, so retrieve the base info
-            geo = self.https("/v1/search/structured?api_key=%s&boundary.country=USA&layers=locality&locality=%s&region=%s" % (MZID, city, state), loc="search.mapzen.com")
-            if geo is None or len(geo["features"]) == 0:
+            coords, props = self.mapzen("layers=locality&locality=%s&region=%s" % (city, state))
+            if coords is None:
                 #notify(self.event, "City '%s' State '%s' not found" % (city, state))
-                return "%s %s could not be located" % (city, state)
-
-        # Use the coordinates to get us "close" to the NWS location
-        coords = geo["features"][0]["geometry"]["coordinates"]
-        props = geo["features"][0]["properties"]
+                return "%s %s could not be located.  Try using the zip code." % (city, state)
 
         # Get the NWS location information (limit to 4 decimal places for the API)
         point = self.https("points/%s,%s" % \
@@ -1409,10 +1414,25 @@ class Location(Base):
         loc["forecastZoneId"] = data["id"]
         loc["forecastZoneName"] = data["name"]
 
+        # Some NWS locations are missing the county zone, so try to deduce it by getting
+        # the county coordinates from mapzen and asking NWS for that point.
+        if "county" not in point and "county" in props:
+            county = props["county"].lower().split()
+            if county[-1] == "county":
+                county[-1] = ""
+            county = " ".join(list(county))
+            coords, props = self.mapzen("county=%s" % county)
+            if coords is not None:
+                pt = self.https("points/%s,%s" % \
+                                (("%.4f" % coords[1]).rstrip("0").rstrip("."),
+                                 ("%.4f" % coords[0]).rstrip("0").rstrip(".")))
+                if "county" in pt:
+                    point["county"] = pt["county"]
+
         # Retrieve the county zone name
-        data = self.get_county_zone(point.get("county", {}))
-        loc["countyZoneId"] = data.get("id", "N/A")
-        loc["countyZoneName"] = data.get("name", "N/A")
+        data = self.get_county_zone(point.get("county", "missing"))
+        loc["countyZoneId"] = data.get("id", "missing")
+        loc["countyZoneName"] = data.get("name", "missing")
 
         # Retrieve the observation stations
         data = self.get_stations(loc["coords"])
@@ -1426,6 +1446,14 @@ class Location(Base):
         self.loc = loc
 
         return None
+
+    def mapzen(self, search):
+        geo = self.https("/v1/search/structured?api_key=%s&boundary.country=USA&%s" % (MZID, search), loc="search.mapzen.com")
+        if geo is None or len(geo["features"]) == 0:
+            return None, None
+
+        return geo["features"][0]["geometry"]["coordinates"], \
+               geo["features"][0]["properties"]
 
     def spoken_name(self, name=None):
         loc = name or self.loc["location"]
@@ -1952,9 +1980,13 @@ class Skill(Base):
                     if obs.wind_speed is None:
                         text += "winds are calm"
                     else:
-                        text += "Winds are out of the %s at %s miles per hour" % \
-                               (obs.wind_direction,
-                                obs.wind_speed)
+                        if obs.wind_direction is None:
+                            text += "Winds are %s miles per hour" % obs.wind_speed
+                        else:
+                            text += "Winds are out of the %s at %s miles per hour" % \
+                                    (obs.wind_direction,
+                                     obs.wind_speed)
+
                         if obs.wind_gust is not None:
                             text += ", gusting to %s" % obs.wind_gust
                 elif metric == "temperature":
@@ -2056,11 +2088,19 @@ class Skill(Base):
                     text = "winds will be calm"
                 else:
                     if wsh == wsl:
-                        text = "winds will be out of the %s at %s miles per hour" % \
-                           (wdi, wsh)
+                        if wdi is None:
+                            text = "winds will be %s miles per hour" % \
+                                   (wsh)
+                        else:
+                            text = "winds will be out of the %s at %s miles per hour" % \
+                                   (wdi, wsh)
                     else:
-                        text = "winds will be out of the %s at %s to %s miles per hour" % \
-                               (wdi, wsl, wsh)
+                        if wdi is None:
+                            text = "winds will be %s to %s miles per hour" % \
+                                   (wsl, wsh)
+                        else:
+                            text = "winds will be out of the %s at %s to %s miles per hour" % \
+                                   (wdi, wsl, wsh)
                     wg = gp.wind_gust_high
                     if wg is not None:
                         text += ", with gusts as high as %s" % wg
@@ -2313,6 +2353,33 @@ def lambda_handler(event, context=None):
     except:
         import traceback
         notify(event, "Exception", traceback.format_exc())
+        text = '<say-as interpret-as="interjection">aw man</say-as>' + \
+               '<prosody pitch="+25%">' + \
+               "Clima Cast has experienced an error.  The author has been " + \
+               "notified and will address it as soon as possible.  Until then " + \
+               "you might be able to rephrase your request to get around the issue." + \
+               '</prosody>'
+        return {
+                 "version": "1.0",
+                 "response":
+                 {
+                   "outputSpeech":
+                   {
+                     "type": "SSML",
+                     "ssml": '<speak>%s</speak>' % text
+                   },
+                   "reprompt":
+                   {
+                     "outputSpeech":
+                     {
+                       "type": "SSML",
+                        "ssml": None
+                     },
+                   },
+                   "shouldEndSession": True
+                 } 
+               }
+
 
 def test_load():
     with open("test.json") as f:
