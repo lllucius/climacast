@@ -5,13 +5,13 @@
     ],
     "utterances":
     [
-        "for {when_pos} dewpoint"
+        "text 'for {when_pos} pressure'"
     ],
     "types":
     {
         "when_pos":
         [
-            "file:{skilldir}/type_when_pos"
+            "file '{skilldir}/type_when_pos'"
         ]
     }
 }

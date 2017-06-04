@@ -5,16 +5,16 @@
     ],
     "utterances":
     [
-        "For the alerts in {zipcode}",
-        "For the alerts in zip code {zipcode}"
+        "text 'For the alerts in {zipcode}'",
+        "text 'For the alerts in zip code {zipcode}'"
     ],
     "types":
     {
         "zipcode":
         [
-            "file:{testsdir}/type_zipcode",
-            "12142",
-            "11112"
+            "file --digits '{testsdir}/type_zipcode'",
+            "text --digits 12142",
+            "text --digits 11112"
         ]
     }
 }

@@ -1,65 +1,61 @@
 {
     "description":
     [
-        "Tests the utterances that ask for things like: for the forecast"
+        "Tests the utterances that ask for things like: for the forecast'"
     ],
     "utterances":
     [
-        "utter:{skilldir}/utterances,.*{leadin} {metric}.*"
+        "file --utterances --filter '.*{leadin} {metric}.*' '{skilldir}/utterances'"
     ],
     "types":
     {
         "leadin":
         [
-            "file:{skilldir}/type_leadin,^(for|what).*"
+            "file --filter '^(for|what).*' '{skilldir}/type_leadin'"
         ],
         "day":
         [
-            "exec:python {testsdir}/exec_month_day day 1 0 7"
+            "exec 'python {testsdir}/exec_month_day day 1 0 7'"
         ],
         "location":
         [
-            "random:{testsdir}/type_location_local,1"
+            "file --random 1 '{testsdir}/type_location_local'"
         ],
         "metric":
         [
-            "temperature"
+            "text temperature"
         ],
         "month":
         [
-            "exec:python {testsdir}/exec_month_day month 1 0 1"
+            "exec 'python {testsdir}/exec_month_day month 1 0 1'"
         ],
         "percent":
         [
-            "random:{testsdir}/type_percent,1"
+            "file --random 1 '{testsdir}/type_percent'"
         ],
         "setting":
         [
-            "random:{skilldir}/type_setting,1"
+            "file --random 1 '{skilldir}/type_setting'"
         ],
         "when_any":
         [
-            "random:{skilldir}/type_when_any,1"
+            "file --random 1 '{skilldir}/type_when_any'"
         ],
         "when_abs":
         [
-            "random:{skilldir}/type_when_abs,1"
+            "file --random 1 '{skilldir}/type_when_abs'"
         ],
         "when_pos":
         [
-            "random:{skilldir}/type_when_pos,1"
-        ],
-        "when_conn":
-        [
-            "random:{skilldir}/type_when_conn,1"
+            "file --random 1 '{skilldir}/type_when_pos'"
         ],
         "zip_conn":
         [
-            "random:{skilldir}/type_zip_conn,1"
+            "file --random 1 '{skilldir}/type_zip_conn'"
         ],
         "zipcode":
         [
-            "random:{testsdir}/type_zipcode,1"
+            "file --random 1 '{testsdir}/type_zipcode'"
         ]
     }
 }

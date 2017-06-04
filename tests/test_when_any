@@ -5,13 +5,13 @@
     ],
     "utterances":
     [
-        "If it will rain {when_any}"
+        "text 'If it will rain {when_any}'"
     ],
     "types":
     {
         "when_any":
         [
-            "file:{skilldir}/type_when_any"
+            "file '{skilldir}/type_when_any'"
         ]
     }
 }

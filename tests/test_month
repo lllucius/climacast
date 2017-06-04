@@ -5,18 +5,18 @@
     ],
     "utterances":
     [
-        "For the forecast on {month} {day}"
+        "text 'For the forecast on {month} {day}'"
     ],
     "types":
     {
         "month":
         [
-            "file:{skilldir}/type_month",
-            "bogus month"
+            "file '{skilldir}/type_month'",
+            "text 'bogus month'"
         ],
         "day":
         [
-            "1st"
+            "text '1st'"
         ]
 
     }

@@ -5,14 +5,14 @@
     ],
     "utterances":
     [
-        "For the forecast on the {day}"
+        "text 'For the forecast on the {day}'"
     ],
     "types":
     {
         "day":
         [
-            "file:{skilldir}/type_day",
-            "bogus day"
+            "file '{skilldir}/type_day'",
+            "text 'bogus day'"
         ]
     }
 }

@@ -5,17 +5,17 @@
     ],
     "utterances":
     [
-        "For the forecast in {location}",
-        "For the current temperature in {location}"
+        "text 'For the forecast in {location}'",
+        "text 'For the current temperature in {location}'"
     ],
     "types":
     {
         "location":
         [
-            "west saint paul minnesota",
-            "duluth",
-            "phoenix",
-            "new ulm minnesnowta"
+            "text 'west saint paul minnesota'",
+            "text 'duluth'",
+            "text 'phoenix'",
+            "text 'new ulm minnesnowta'"
         ]
     }
 }

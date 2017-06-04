@@ -28,6 +28,9 @@ lahaina hawaii
 las vegas nevada
 west saint paul minnesota
 
+# This one is missing the NWS county zoneId
+miami beach florida
+
 #
 # Valid cities without state name
 #

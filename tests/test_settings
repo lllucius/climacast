@@ -5,15 +5,15 @@
     ],
     "utterances":
     [
-        "for the {setting} setting"
+        "text 'for the {setting} setting'"
     ],
     "types":
     {
         "setting":
         [
-            "file:{skilldir}/type_setting",
-            "dewpoint",
-            "summary"
+            "file '{skilldir}/type_setting'",
+            "text 'dewpoint'",
+            "text 'summary'"
         ]
     }
 }

@@ -6,15 +6,15 @@
     ],
     "utterances":
     [
-        "For the {metric}",
-        "For the {metric} tomorrow"
+        "text 'For the {metric}'",
+        "text 'For the {metric} tomorrow'"
     ],
     "types":
     {
         "metric":
         [
-            "file:{skilldir}/type_metric",
-            "bogus metric"
+            "file '{skilldir}/type_metric'",
+            "text 'bogus metric'"
         ]
     }
 }

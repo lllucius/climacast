@@ -5,20 +5,27 @@
     ],
     "utterances":
     [
-        "For the custom forecast",
-        "Remove {metric} from the custom forecast",
-        "Add {metric} to the custom forecast",
-        "Get the custom forecast setting",
-        "To reset the custom forecast"
+        "text 'For the custom forecast'",
+        "text 'Remove {metric} from the custom forecast'",
+        "text 'Add {metric} to the custom forecast'",
+        "text 'Get the custom forecast setting'",
+        "text 'To reset the custom forecast'"
     ],
     "types":
     {
         "metric":
         [
-            "temperature",
-            "dewpoint",
-            "summary"
+            "text 'temperature'",
+            "text 'dewpoint'",
+            "text 'summary'"
         ]
-    }
+    },
+    "setup":
+    [
+        "text 'Reset the custom forecast'"
+    ],
+    "cleanup":
+    [
+        "text 'Reset the custom forecast'"
+    ]
 }
-       
