@@ -27,7 +27,7 @@ from time import time
 VERSION = 1
 REVISION = 0
 
-EVTID = os.environ.get("event_id", "arn:aws:sns:us-east-1:266487037805:climocast_event")
+EVTID = os.environ.get("event_id", "")
 APPID = os.environ.get("app_id", "amzn1.ask.skill.test")
 MZID = os.environ.get("mapzen_id", "")
 DUID = os.environ.get("dataupdate_id", "amzn1.ask.data.update")
@@ -407,7 +407,7 @@ def notify(event, sub, msg=None):
         text += "  " + msg
         text += "\n\n"
 
-    if "testing" in event["session"]:
+    if "testing" in event["session"] or EVTID == "":
         print("NOTIFY:\n\n  %s\n\n%s" % (sub, text))
     else:
         SNS.publish(TopicArn=EVTID, Subject=sub, Message=text[:2**18])
