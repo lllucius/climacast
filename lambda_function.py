@@ -18,6 +18,7 @@ from boto3 import resource as awsresource, client as awsclient
 from datetime import datetime
 from dateutil import parser, tz
 from dateutil.relativedelta import *
+from lxml import objectify
 from time import time
 
 """
@@ -673,6 +674,44 @@ class Base(object):
                     return item[0]
         return None
 
+    def to_wind_chill(self, F, mph):
+        if F > 50.0 or mph <= 3.0:
+            return None
+
+        return round(35.74 + .6215*F - 35.75*pow(mph, 0.16) + 0.4275*F*pow(mph, 0.16))
+
+    def to_heat_index(self, F, rh):
+        """
+            Calculate the heat index
+            Taken from: http://www.wpc.ncep.noaa.gov/html/heatindex.shtml
+        """
+        if rh > 100.0 or rh < 0.0:
+            return None
+
+        if F <= 40.0:
+            return F
+
+        hitemp = 61.0+((F-68.0)*1.2)+(rh*0.094)
+        hifinal = 0.5*(F+hitemp)
+
+        if hifinal > 79.0:
+            hi = -42.379+2.04901523*F+10.14333127*rh-0.22475541*F*rh-6.83783*(pow(10, -3))*(pow(F, 2))-5.481717*(pow(10, -2))*(pow(rh, 2))+1.22874*(pow(10, -3))*(pow(F, 2))*rh+8.5282*(pow(10, -4))*F*(pow(rh, 2))-1.99*(pow(10, -6))*(pow(F, 2))*(pow(rh,2))
+            if (rh <= 13) and (F >= 80.0) and (F <= 112.0):
+                from math import sqrt
+                adj1 = (13.0-rh)/4.0
+                adj2 = sqrt((17.0-abs(F-95.0))/17.0)
+                adj = adj1 * adj2
+                hi = hi - adj
+            elif (rh > 85.0) and (F >= 80.0) and (F <= 87.0):
+                adj1 = (rh-85.0)/10.0
+                adj2 = (87.0-F)/5.0
+                adj = adj1 * adj2
+                hi = hi + adj
+        else:
+            hi = hifinal
+
+        return round(hi)
+
     def normalize(self, text):
         """
             Tries to identify various text patterns and replaces them
@@ -1135,10 +1174,121 @@ class Observations(Base):
     def __init__(self, event, stations, limit=3):
         super().__init__(event)
         self.stations = stations
+        self.xml = None
+        self.station = None
+
+        # Retrieve the current observations from the nearest station
+        for stationid in self.stations:
+            # Get the station info
+            station = self.get_station(stationid)
+            #print("STATION", station)
+            if station is None:
+                continue
+
+            r = HTTPS.get("http://w1.weather.gov/xml/current_obs/%s.xml" % stationid)
+            if r.status_code != 200 or r.text is None or r.text == "":
+                continue
+            print(r.text)
+
+            self.station = station
+            self.xml = objectify.fromstring(r.text.encode("UTF-8"))
+            break
+
+    def get_value(self, metric):
+        return self.xml.observations[metric]["value"]
+
+    @property
+    def is_good(self):
+        return self.xml is not None
+
+    @property
+    def station_id(self):
+        return self.station["stationIdentifier"]
+
+    @property
+    def station_name(self):
+        return self.station["name"]
+
+    @property
+    def time_reported(self):
+        return parser.parse(self.xml.observation_time_rfc822.text) if hasattr(self.xml, "observation_time_rfc822") else None
+
+    @property
+    def description(self):
+        return self.xml.weather if hasattr(self.xml, "weather") else None
+
+    @property
+    def wind_speed(self):
+        return "%.0f" % self.xml.wind_mph if hasattr(self.xml, "wind_mph") else None
+
+    @property
+    def wind_direction(self):
+        return self.xml.wind_dir if hasattr(self.xml, "wind_dir") else None
+
+    @property
+    def wind_gust(self):
+        return "%.0f" % self.xml.wind_gust_mph if hasattr(self.xml, "wind_gust_mph") else None
+
+    @property
+    def temp(self):
+        return "%.0f" % self.xml.temp_f if hasattr(self.xml, "temp_f") else None
+
+    @property
+    def wind_chill(self):
+        if hasattr(self.xml, "windchill_f"):
+            return self.xml.windchill_f
+
+        if hasattr(self.xml, "temp_f") and hasattr(self.xml, "wind_mph"):
+            return self.to_wind_chill(float(self.xml.temp_f), float(self.xml.wind_mph))
+
+        return None
+
+    @property
+    def heat_index(self):
+        if hasattr(self.xml, "heat_index_f"):
+            return self.xml.heat_index_f
+
+        if hasattr(self.xml, "temp_f") and hasattr(self.xml, "relative_humidity"):
+            return self.to_heat_index(float(self.xml.temp_f), float(self.xml.relative_humidity))
+
+        return None
+
+    @property
+    def feels_like(self):
+        return self.wind_chill() or self.heat_index()
+
+    @property
+    def dewpoint(self):
+        return "%.0f" % self.xml.dewpoint_f if hasattr(self.xml, "dewpoint_f") else None
+
+    @property
+    def humidity(self):
+        return self.xml.relative_humidity if hasattr(self.xml, "relative_humidity") else None
+
+    @property
+    def pressure(self):
+        return self.xml.pressure_in if hasattr(self.xml, "pressure_in") else None
+
+    @property
+    def pressure_trend(self):
+        return None
+
+class Observationsv3(Base):
+    def __init__(self, event, stations, limit=3):
+        super().__init__(event)
+        self.stations = stations
         self.data = None
         self.observations = None
         self.station = None
         self.index = 0
+
+        # Retrieve the current observations from the nearest station
+        for stationid in self.stations:
+            # Get the station info
+            station = self.get_station(stationid)
+            #print("STATION", station)
+            if station is None:
+                continue
 
         # Retrieve the current observations from the nearest station
         for stationid in self.stations:
