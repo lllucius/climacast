@@ -18,7 +18,7 @@ from boto3 import resource as awsresource, client as awsclient
 from datetime import datetime
 from dateutil import parser, tz
 from dateutil.relativedelta import *
-from lxml import objectify
+from xml.etree.ElementTree import *
 from time import time
 
 """
@@ -1191,11 +1191,16 @@ class Observations(Base):
             print(r.text)
 
             self.station = station
-            self.xml = objectify.fromstring(r.text.encode("UTF-8"))
+            self.xml = XML(r.text.encode("UTF-8"))
             break
 
     def get_value(self, metric):
-        return self.xml.observations[metric]["value"]
+        e = self.xml.find(metric)
+        return e.text if e is not None else None
+
+    def get_rounded(self, metric):
+        f = self.get_value(metric)
+        return "%.0f" % float(f) if f else None
 
     @property
     def is_good(self):
@@ -1211,45 +1216,52 @@ class Observations(Base):
 
     @property
     def time_reported(self):
-        return parser.parse(self.xml.observation_time_rfc822.text) if hasattr(self.xml, "observation_time_rfc822") else None
+        print(self.get_value("observation_time_rfc822"))
+        return parser.parse(self.get_value("observation_time_rfc822"))
 
     @property
     def description(self):
-        return self.xml.weather if hasattr(self.xml, "weather") else None
+        return self.get_value("weather")
 
     @property
     def wind_speed(self):
-        return "%.0f" % self.xml.wind_mph if hasattr(self.xml, "wind_mph") else None
+        return self.get_rounded("wind_mph")
 
     @property
     def wind_direction(self):
-        return self.xml.wind_dir if hasattr(self.xml, "wind_dir") else None
+        return self.get_value("wind_dir")
 
     @property
     def wind_gust(self):
-        return "%.0f" % self.xml.wind_gust_mph if hasattr(self.xml, "wind_gust_mph") else None
+        return self.get_rounded("wind_gust_mph")
 
     @property
     def temp(self):
-        return "%.0f" % self.xml.temp_f if hasattr(self.xml, "temp_f") else None
+        return self.get_rounded("temp_f")
 
     @property
     def wind_chill(self):
-        if hasattr(self.xml, "windchill_f"):
-            return self.xml.windchill_f
+        wc = self.get_value("windchill_f")
+        if wc:
+            return wc
 
-        if hasattr(self.xml, "temp_f") and hasattr(self.xml, "wind_mph"):
-            return self.to_wind_chill(float(self.xml.temp_f), float(self.xml.wind_mph))
+        t = self.get_value("temp_f")
+        ws = self.get_value("wind_mph")
+        if t and ws:
+            return self.to_wind_chill(float(t), float(ws))
 
         return None
 
     @property
     def heat_index(self):
-        if hasattr(self.xml, "heat_index_f"):
-            return self.xml.heat_index_f
+        hi = self.get_value("heat_index_f")
+        if hi:
+            return hi
 
-        if hasattr(self.xml, "temp_f") and hasattr(self.xml, "relative_humidity"):
-            return self.to_heat_index(float(self.xml.temp_f), float(self.xml.relative_humidity))
+        t = self.get_value("temp_f")
+        rh = self.get_value("relative_humidity")
+        if t and rh:
+            return self.to_heat_index(float(t), float(rh))
 
         return None
 
@@ -1259,15 +1271,15 @@ class Observations(Base):
 
     @property
     def dewpoint(self):
-        return "%.0f" % self.xml.dewpoint_f if hasattr(self.xml, "dewpoint_f") else None
+        return self.get_rounded("dewpoint_f")
 
     @property
     def humidity(self):
-        return self.xml.relative_humidity if hasattr(self.xml, "relative_humidity") else None
+        return self.get_value("relative_humidity")
 
     @property
     def pressure(self):
-        return self.xml.pressure_in if hasattr(self.xml, "pressure_in") else None
+        return self.get_value("pressure_in")
 
     @property
     def pressure_trend(self):
