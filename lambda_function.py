@@ -1400,7 +1400,6 @@ class Observationsv3(Base):
 class Alerts(Base):
     class Alert(Base):
         def __init__(self, event, alert):
-            super().__init__(event)
             self.alert = alert
 
         @property
