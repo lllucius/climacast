@@ -368,36 +368,28 @@ USERCACHE = DDB.Table("UserCache")
 ZONECACHE = DDB.Table("ZoneCache")
 HTTPS = requests.Session()
 
-def timeme(method):
-    def wrapper(*args, **kw):
-        startTime = int(round(time() * 1000))
-        result = method(*args, **kw)
-        endTime = int(round(time() * 1000))
-        print("FUNC:", method.func_name, "TIME:", (endTime - startTime) / 1000.0)
-        return result
-    return wrapper
-
 def notify(event, sub, msg=None):
     """
         Send SNS message of an unusual event
     """
     text = ""
-    request = event["request"]
-    intent = request.get("intent", None) if request else None
-    slots = intent.get("slots", None) if intent else None
+    if "request" in event:
+        request = event["request"]
+        intent = request.get("intent", None) if request else None
+        slots = intent.get("slots", None) if intent else None
 
-    if intent:
-        text += "REQUEST:\n\n"
-        text += "  " + request["type"]
-        if "name" in intent:
-            text += " - " + intent["name"]
-        text += "\n\n"
+        if intent:
+            text += "REQUEST:\n\n"
+            text += "  " + request["type"]
+            if "name" in intent:
+                text += " - " + intent["name"]
+            text += "\n\n"
 
-    if slots:
-        text += "SLOTS:\n\n"
-        for slot in SLOTS:
-            text += "  %-15s %s\n" % (slot + ":", str(slots.get(slot, {}).get("value", None)))
-        text += "\n"
+        if slots:
+            text += "SLOTS:\n\n"
+            for slot in SLOTS:
+                text += "  %-15s %s\n" % (slot + ":", str(slots.get(slot, {}).get("value", None)))
+            text += "\n"
 
     text += "EVENT:\n\n"
     text += json.dumps(event, indent=4)
@@ -408,7 +400,7 @@ def notify(event, sub, msg=None):
         text += "  " + msg
         text += "\n\n"
 
-    if "testing" in event["session"] or EVTID == "":
+    if ("session" in event and "testing" in event["session"]) or EVTID == "":
         print("NOTIFY:\n\n  %s\n\n%s" % (sub, text))
     else:
         SNS.publish(TopicArn=EVTID, Subject=sub, Message=text[:2**18])
@@ -1188,7 +1180,6 @@ class Observations(Base):
             r = HTTPS.get("http://w1.weather.gov/xml/current_obs/%s.xml" % stationid)
             if r.status_code != 200 or r.text is None or r.text == "":
                 continue
-            print(r.text)
 
             self.station = station
             self.xml = XML(r.text.encode("UTF-8"))
@@ -1216,7 +1207,6 @@ class Observations(Base):
 
     @property
     def time_reported(self):
-        print(self.get_value("observation_time_rfc822"))
         return parser.parse(self.get_value("observation_time_rfc822"))
 
     @property
@@ -1771,7 +1761,6 @@ class DataLoad(Base):
     def __init__(self, event):
         super().__init__(event)
 
-    @timeme
     def handle_event(self):
         if DUID not in self.event.get("resources", []):
             return None
@@ -1783,7 +1772,6 @@ class DataLoad(Base):
         print("Loading stations")
         self.load_data("stations", STATIONCACHE, self.put_station)
 
-    @timeme
     def load_data(self, url, table, putter):
         data = self.https(url)
         with table.batch_writer() as batch:
