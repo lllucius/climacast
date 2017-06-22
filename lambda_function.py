@@ -615,6 +615,8 @@ class Base(object):
 
         if inches < 0.1:
             amt = "less than a tenth"
+        elif 0.1 <= frac < 0.125:
+            amt = "less than a quarter"
         elif 0.125 <= frac < 0.375:
             amt = "a quarter"
         elif 0.375 <= frac < 0.625:
