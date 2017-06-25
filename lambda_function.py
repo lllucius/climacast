@@ -232,6 +232,7 @@ STATES = ["alabama", "al",
           "alaska", "ak",
           "arizona", "az",
           "arkansas", "ar", 
+          "dc", "dc",
           "california", "ca",
           "colorado", "co",
           "connecticut", "ct",
@@ -276,7 +277,6 @@ STATES = ["alabama", "al",
           "vermont", "vt",
           "virginia", "va",
           "washington", "wa",
-          "washington dc", "dc",
           "west virginia", "wv",
           "wisconsin", "wi",
           "wyoming", "wy"]
@@ -1500,7 +1500,7 @@ class Location(Base):
             # Extract city and state when the state name has 2 words
             city = " ".join(words[:-2])
             state = " ".join(words[-2:])
-            
+
             hasstate = state in STATES
             if not hasstate:
                 # Must be a 1 word state name
