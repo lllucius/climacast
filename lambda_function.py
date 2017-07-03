@@ -2133,6 +2133,10 @@ class Skill(Base):
                     else:
                         if obs.wind_direction is None:
                             text += "Winds are %s miles per hour" % obs.wind_speed
+                        elif obs.wind_direction == "Variable":
+                            text += "Winds are %s at %s miles per hour" % \
+                                    (obs.wind_direction,
+                                     obs.wind_speed)
                         else:
                             text += "Winds are out of the %s at %s miles per hour" % \
                                     (obs.wind_direction,
