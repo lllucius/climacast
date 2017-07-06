@@ -2499,10 +2499,13 @@ class Skill(Base):
 def lambda_handler(event, context=None):
     #print(json.dumps(event, indent=4))
     try:
-        if "detail-type" not in event:
-            return Skill(event).handle_event()
+        if "event-type" in event:
+            if event["event-type"] == "pinger":
+                return 
+            else:
+                DataLoad(event).handle_event()
         else:
-            DataLoad(event).handle_event()
+            return Skill(event).handle_event()
     except SystemExit:
         pass
     except:
@@ -2537,7 +2540,7 @@ def lambda_handler(event, context=None):
 
 
 def test_load():
-    with open("test.json") as f:
+    with open("datarefresh.json") as f:
         event = json.load(f)
         event["resources"] = ["amzn1.ask.data.update"]
         lambda_handler(event)
