@@ -2111,12 +2111,13 @@ class Skill(Base):
     def get_current(self, metrics):
         text = ""
 
-        alerts = Alerts(self.event, self.loc.countyZoneId)
-        cnt = len(alerts)
-        if cnt > 0:
-            text += "There's %d alert%s in effect for your area! " % \
-                   (cnt,
-                    "s" if cnt > 1 else "")
+        if False:
+            alerts = Alerts(self.event, self.loc.countyZoneId)
+            cnt = len(alerts)
+            if cnt > 0:
+                text += "There's %d alert%s in effect for your area! " % \
+                       (cnt,
+                        "s" if cnt > 1 else "")
 
         # Retrieve the current observations from the nearest station
         obs = Observations(self.event, self.loc.observationStations)
@@ -2128,7 +2129,7 @@ class Skill(Base):
 
             for metric in metrics:
                 if metric == "wind":
-                    if obs.wind_speed is None:
+                    if obs.wind_speed is None or obs.wind_speed == "0":
                         text += "winds are calm"
                     else:
                         if obs.wind_direction is None:
