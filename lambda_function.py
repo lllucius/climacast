@@ -1441,7 +1441,7 @@ class Alerts(Base):
         self.zoneid = zoneid
         self._title = ""
         self._alerts = []
-        data = self.https("alerts?active=1&zone=" + zoneid)
+        data = self.https("alerts/active?status=actual&zone=" + zoneid)
         if data is not None and "@graph" in data:
             self._title = data["title"]
             self._alerts = data["@graph"]
