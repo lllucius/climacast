@@ -13,7 +13,8 @@ import json
 import os
 import re
 import requests
-from aniso8601 import parse_duration
+#from aniso8601 import parse_duration
+from aniso8601.duration import parse_duration
 from boto3 import resource as awsresource, client as awsclient
 from datetime import datetime
 from dateutil import parser, tz
@@ -30,11 +31,12 @@ REVISION = 0
 
 EVTID = os.environ.get("event_id", "")
 APPID = os.environ.get("app_id", "amzn1.ask.skill.test")
-MZID = os.environ.get("mapzen_id", "")
+MQID = os.environ.get("mapquest_id", "")
 DUID = os.environ.get("dataupdate_id", "amzn1.ask.data.update")
 
 NORMALIZE = None
 NORMALIZE_RE = [r"(?P<meridian>\d+\s*(am|pm))",
+                r"(?P<deg>\s(1|-1))\s*degrees",
                 r"(?P<ign>[A-Z][A-Z][CZ]\d\d\d.*?/.*?/)",
                 r"(?P<nm>\d+\s*(nm))(?=\s|\W|$)",
                 r"(?P<kt>\d+\s*(kt))(?=\s|\W|$)",
@@ -459,7 +461,9 @@ class Base(object):
             Returns the list of stations nearest to furthest order
             from the given coordinates
         """
+        #print("coords", coords)
         data = self.https("points/%s/stations" % coords)
+        #print("DATA", data)
         if data is None or data.get("status", 0) != 0:
             notify(self.event, "Unable to get stations for %s" % coords, data)
             return []
@@ -468,7 +472,7 @@ class Base(object):
 
     def get_station(self, stationId):
         """
-            Returns the station informationi for the given station ID
+            Returns the station information for the given station ID
         """
         stationId = stationId.rsplit("/")[-1]
         station = self.cache_get(STATIONCACHE, {"id": stationId})
@@ -704,14 +708,14 @@ class Base(object):
         else:
             hi = hifinal
 
-        return round(hi)
+        return int(round(hi))
 
     def normalize(self, text):
         """
             Tries to identify various text patterns and replaces them
             with easier to hear alternatives
         """
-
+        #print("TEXT", text)
         # Compile (and save) all of the regular expressions
         global NORMALIZE
         if NORMALIZE is None:
@@ -770,7 +774,7 @@ class Base(object):
                     time = value[:-2].strip()
                     if len(time) > 2:
                         time = time[:-2] + ":" + time[-2:]
-                    out += time + ".".join(list(value[-2:])) + "."
+                    out += time + " " + ".".join(list(value[-2:])) + "."
 
                 # Ensure time zone identifiers are abbreviations so they speak properly
                 elif name == "tz":
@@ -787,6 +791,10 @@ class Base(object):
                         if dir[1] == value:
                             value = dir[0]
                     out += value
+
+                # Change -1|1 degrees to -1|1 degree
+                elif name == "deg":
+                    out += value + " degree"
 
         # Tack on the final fragment and return
         return (out + text[last:]).lower()
@@ -1490,7 +1498,7 @@ class Location(Base):
                 return None
 
             # Have a new location, so retrieve the base info
-            coords, props = self.mapzen("postalcode=%s" % name)
+            coords, props = self.mapquest("%s" % name)
             if coords is None:
                 #notify(self.event, "Zip code not found: %s" % name)
                 return "%s could not be located" % self.spoken_name(name)
@@ -1520,40 +1528,32 @@ class Location(Base):
             #print("CITY", city, "STATE", state)
             # Retrieve the location data from the cache
             loc = self.cache_get(LOCATIONCACHE, {"location": "%s %s" % (city, state)})
-            if loc is not None:
-                self.loc = loc
-                return None
+            #print("loc", loc)
+            #if loc is not None:
+            #    self.loc = loc
+            #    return None
 
             # Have a new location, so retrieve the base info
-            coords, props = self.mapzen("layers=locality&locality=%s&region=%s" % (city, state))
+            coords, props = self.mapquest("%s+%s" % (city, state))
             if coords is None:
                 #notify(self.event, "City '%s' State '%s' not found" % (city, state))
                 return "%s %s could not be located.  Try using the zip code." % (city, state)
 
         # Get the NWS location information (limit to 4 decimal places for the API)
         point = self.https("points/%s,%s" % \
-                           (("%.4f" % coords[1]).rstrip("0").rstrip("."),
-                            ("%.4f" % coords[0]).rstrip("0").rstrip(".")))
+                           (("%.4f" % coords[0]).rstrip("0").rstrip("."),
+                            ("%.4f" % coords[1]).rstrip("0").rstrip(".")))
 
         # Make sure we have the real location
         if point is None or "relativeLocation" not in point:
             notify(self.event, "No relativeLocation for city '%s' state '%s'" % (city, state))
             return "%s %s could not be located" % (city, state)
 
+        # Initialize location
+        loc = {}
+
         # Now, get the corrected NWS point
         rel = point["relativeLocation"]
-        yx = re.match(r".*\((.*?)\s+(.*?)\)", rel["geometry"]).groups()
-
-        # And store it
-        loc = {}
-        loc["coords"] = "%s,%s" % \
-                        (("%.4f" % float(yx[1])).rstrip("0").rstrip("."),
-                         ("%.4f" % float(yx[0])).rstrip("0").rstrip("."))
-
-        # Retrieve the NWS location again using the corrected point
-        point = self.https("points/%s" % loc["coords"])
-        if point is None:
-            return "%s %s could not be located" % (city, state)
 
         # Extract the NWS information
         loc["city"] = rel["city"].lower()
@@ -1562,23 +1562,49 @@ class Location(Base):
         loc["gridPoint"] = "%s,%s" % (point["gridX"], point["gridY"])
         loc["timeZone"] = point["timeZone"]
 
+# geometry no longer seems to be provided
+#        yx = re.match(r".*\((.*?)\s+(.*?)\)", rel["geometry"]).groups()
+#
+#        # And store it
+#        loc = {}
+#        loc["coords"] = "%s,%s" % \
+#                        (("%.4f" % float(yx[1])).rstrip("0").rstrip("."),
+#                         ("%.4f" % float(yx[0])).rstrip("0").rstrip("."))
+#
+#        # Retrieve the NWS location again using the corrected point
+#        point = self.https("points/%s" % loc["coords"])
+#        if point is None:
+#            return "%s %s could not be located" % (city, state)
+
+        # Retrieve the location data from the cache
+        rloc = self.cache_get(LOCATIONCACHE, {"location": "%s %s" % (loc["city"], loc["state"])})
+        if rloc is None:
+            # Have a new location, so retrieve the base info
+            rcoords, rprops = self.mapquest("%s+%s" % (loc["city"], loc["state"]))
+            if rcoords is not None:
+                loc["coords"] = "%s,%s" % (rcoords[0], rcoords[1])
+            else:
+                loc["coords"] = coords
+        else:
+            loc["coords"] = rloc["coords"]
+
         # Retrieve the forecast zone name
         data = self.get_forecast_zone(point["forecastZone"])
         loc["forecastZoneId"] = data["id"]
         loc["forecastZoneName"] = data["name"]
 
         # Some NWS locations are missing the county zone, so try to deduce it by getting
-        # the county coordinates from mapzen and asking NWS for that point.
+        # the county coordinates from mapquest and asking NWS for that point.
         if "county" not in point and "county" in props:
             county = props["county"].lower().split()
             if county[-1] == "county":
                 county[-1] = ""
             county = " ".join(list(county))
-            coords, props = self.mapzen("county=%s" % county)
+            coords, props = self.mapquest("%s+county+%s" % (county, loc["state"]))
             if coords is not None:
                 pt = self.https("points/%s,%s" % \
-                                (("%.4f" % coords[1]).rstrip("0").rstrip("."),
-                                 ("%.4f" % coords[0]).rstrip("0").rstrip(".")))
+                                (("%.4f" % coords[0]).rstrip("0").rstrip("."),
+                                 ("%.4f" % coords[1]).rstrip("0").rstrip(".")))
                 if "county" in pt:
                     point["county"] = pt["county"]
 
@@ -1600,13 +1626,26 @@ class Location(Base):
 
         return None
 
-    def mapzen(self, search):
-        geo = self.https("/v1/search/structured?api_key=%s&boundary.country=USA&%s" % (MZID, search), loc="search.mapzen.com")
-        if geo is None or len(geo["features"]) == 0:
+    def mapquest(self, search):
+        geo = self.https("geocoding/v1/address?key=%s&inFormat=kvp&outFormat=json&location=%s&thumbMaps=false" % (MQID, search.replace(" ", "+")), loc="www.mapquestapi.com")
+        if geo is None or \
+           len(geo["results"]) == 0 or \
+           len(geo["results"][0]["locations"]) == 0:
             return None, None
+        #print("GEO", geo)
+        loc = geo["results"][0]["locations"][0]
 
-        return geo["features"][0]["geometry"]["coordinates"], \
-               geo["features"][0]["properties"]
+        props = {}
+        for n in loc:
+            if n.startswith("adminArea") and n.endswith("Type") and loc[n] != "":
+                props[loc[n]] = loc[n[:-4]]
+
+        if "County" in props:
+            props["County"] = props["County"].rsplit(" ", 1)[0]
+
+        return (geo["results"][0]["locations"][0]["latLng"]["lat"], \
+                geo["results"][0]["locations"][0]["latLng"]["lng"]), \
+               props
 
     def spoken_name(self, name=None):
         loc = name or self.loc["location"]
@@ -1887,7 +1926,7 @@ class Skill(Base):
                              self.intent["name"] if self.request["type"] == "IntentRequest" else ""))
 
     def launch_request(self):
-        text = "Welcome to Clima Cast. " \
+        text = "Welcome to Clime a Cast. " \
                "For current conditions, use phrases like: What's the weather. "\
                "For forecasts, try phrases like: What's the forecast."
         if self.loc is None:
@@ -1897,7 +1936,7 @@ class Skill(Base):
         return self.respond(text, end=False)
 
     def session_end_request(self):
-        return self.respond("Thank you for using Clima Cast.", end=True)
+        return self.respond("Thank you for using Clime a Cast.", end=True)
 
     def session_ended_request(self):
         if "error" in self.request:
