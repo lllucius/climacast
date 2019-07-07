@@ -20,6 +20,7 @@ from datetime import datetime
 from dateutil import parser, tz
 from dateutil.relativedelta import *
 from xml.etree.ElementTree import *
+from lxml import html
 from time import time
 
 """
@@ -960,7 +961,7 @@ class GridPoints(Base):
         values = get_values("pressure")
         if values[0] > values[-1]:
             return "falling"
-        elif values[0] < values[-1]:
+        if values[0] < values[-1]:
             return "rising"
         return "steady"
 
@@ -1187,12 +1188,36 @@ class Observations(Base):
             if station is None:
                 continue
 
-            r = HTTPS.get("http://w1.weather.gov/xml/current_obs/%s.xml" % stationid)
+            r = HTTPS.get("https://w1.weather.gov/xml/current_obs/%s.xml" % stationid)
             if r.status_code != 200 or r.text is None or r.text == "":
                 continue
 
             self.station = station
             self.xml = XML(r.text.encode("UTF-8"))
+
+            r = HTTPS.get("https://w1.weather.gov/data/obhistory/%s.html" % stationid)
+            if r.status_code == 200 and r.content:
+                tree = html.fromstring(r.content)
+
+                self.obs = []
+                try:
+                    rows = tree.find(".//th").getparent()
+                    for row in rows.itersiblings():
+                        kids = row.getchildren()
+                        if len(kids) > 0 and kids[0].tag == "td":
+                            self.obs.append({"time": kids[1].text,
+                                             "wind": kids[2].text,
+                                             "weather": kids[4].text,
+                                             "temp": kids[6].text,
+                                             "humidity": kids[10].text,
+                                             "windchill": kids[11].text,
+                                             "heatindex": kids[12].text,
+                                             "pressure": kids[13].text,
+                                             "precip1": kids[15].text,
+                                             "precip3": kids[16].text,
+                                             "precip6": kids[17].text})
+                except:
+                    pass
             break
 
     def get_value(self, metric):
@@ -1283,6 +1308,15 @@ class Observations(Base):
 
     @property
     def pressure_trend(self):
+        if self.obs:
+            prev = float(self.obs[1]["pressure"])
+            curr = float(self.obs[0]["pressure"])
+            if curr < prev:
+                return "falling"
+            if curr > prev:
+                return "rising"
+            return "steady"
+
         return None
 
 class Observationsv3(Base):

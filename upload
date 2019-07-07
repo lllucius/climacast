@@ -2,6 +2,10 @@
 
 rm -f lambda.zip
 zip -r9 lambda.zip lambda_function.py aniso8601 requests
+cd aws-lambda-lxml/3.6.4/py36
+zip -r9 ../../../lambda.zip lxml
+cd ../../..
+unzip -v lambda.zip
 aws lambda update-function-code --function-name climacast --zip-file "fileb://$(pwd)/lambda.zip"
 rm lambda.zip
 
