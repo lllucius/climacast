@@ -1685,751 +1685,12 @@ class User(Base):
     def has_metric(self, metric):
         return metric in self._metrics
 
-class DataLoad(Base):
-    def __init__(self, event):
-        super().__init__(event)
-
-    def handle_event(self):
-        if DUID not in self.event.get("resources", []):
-            return None
-
-        for zoneType in ["forecast", "county"]:
-            print("Loading %s zones" % (zoneType))
-            self.load_data("zones/%s" % (zoneType), ZONECACHE, self.put_zone)
-
-        print("Loading stations")
-        self.load_data("stations", STATIONCACHE, self.put_station)
-
-    def load_data(self, url, table, putter):
-        data = self.https(url)
-        with table.batch_writer() as batch:
-            print("Items:", len(data["@graph"]))
-            for item in data["@graph"]:
-                putter(batch, item)
-
-class Skill(Base):
-    def __init__(self, event):
-        super().__init__(event)
-        self.loc = None
-        self.end = True
-
-    def handle_event(self):
-        self.session = self.event["session"]
-        self.attrs = self.session.get("attributes", {})
-        self.request = self.event["request"]
-        self.intent = self.request.get("intent", {})
-
-        # Load or create the user's profile
-        self.user = User(self.event, self.session["user"]["userId"])
-
-        # Amazon says to verify our application id
-        if self.session["application"]["applicationId"] != APPID:
-            return self.respond("Invoked from unknown application.")
-
-        # Retrieve the default location info
-        if self.user.location:
-            loc = Location(self.event)
-            text = loc.set(self.user.location)
-            if text is None:
-                self.loc = loc
-
-        # Load the slot values
-        self.slots = type("slots", (), {})
-        slots = self.intent.get("slots", {})
-        for slot in SLOTS:
-            val = slots.get(slot, {}).get("value", None)
-            setattr(self.slots, slot, val.strip().lower() if val else None)
-            print("SLOT:", slot, getattr(self.slots, slot))
-
-        # Determine the request type
-        rtype = self.request["type"]
-        if rtype == "IntentRequest":
-            name = self.intent["name"]
-        else:
-            name = rtype
-        print("INTENT:", name)
-
-        # Look it up and verify the location, if the intent expects one
-        if name in FUNCS:
-            # Verify the location, if this request requires it
-            if FUNCS[name][1]:
-                text = self.get_location()
-                if text is not None:
-                    return self.respond(text)
-
-                # Determine the start and end times for the request.
-                # NOTE:  Must be done after getting the requested location to
-                #        set the timezone correctly.
-                self.get_when()
-
-            # Get the associated method name
-            name = FUNCS[name][0]
-        
-        return getattr(self, name, self.default_handler)()
-
-    def respond(self, text, end=None):
-        new = self.session["new"]
-        if end is None:
-            end = new
-
-        prompt = None
-        if not end:
-            prompt = "For %s, say help, " % ("more examples" if new else "example requests") + \
-                     "To interrupt speaking, say Alexa, cancel, " + \
-                     "If you are done, say stop."
-            text += ". " if text.strip()[-1] != "." else " "
-            text += prompt if new else "if you are done, say stop."
-        return {
-                 "version": "1.0",
-                 "sessionAttributes": self.attrs,
-                 "response":
-                 {
-                   "outputSpeech":
-                   {
-                     "type": "SSML",
-                     "ssml": '<speak><prosody rate="%d%%" pitch="%+d%%">%s</prosody></speak>' % \
-                             (self.user.rate,
-                              self.user.pitch - 100,
-                              text)
-                   },
-                   "reprompt":
-                   {
-                     "outputSpeech":
-                     {
-                       "type": "SSML",
-                        "ssml": '<speak><prosody rate="%d%%" pitch="%+d%%">%s</prosody></speak>' % \
-                                (self.user.rate,
-                                 self.user.pitch - 100,
-                                 prompt)
-                     },
-                   },
-                   "shouldEndSession": end
-                 } 
-               }
-
-    def default_handler(self):
-        notify(self.event, "Unrecognized event", json.dumps(self.event, indent=4))
-        return self.respond("Unhandled event %s, %s." % \
-                            (self.request["type"],
-                             self.intent["name"] if self.request["type"] == "IntentRequest" else ""))
-
-    def launch_request(self):
-        text = "Welcome to Clime a Cast. " \
-               "For current conditions, use phrases like: What's the weather. "\
-               "For forecasts, try phrases like: What's the forecast."
-        if self.loc is None:
-            text += "You must set your default location by saying something like: " \
-                    "set location to Miami Florida."
-
-        return self.respond(text, end=False)
-
-    def session_end_request(self):
-        return self.respond("Thank you for using Clime a Cast.", end=True)
-
-    def session_ended_request(self):
-        if "error" in self.request:
-            notify(self.event, "Error detected", self.request["error"]["message"])
-            return self.respond(self.request["error"]["message"], end=True)
-    
-        notify(self.event, "Session Ended", self.request["reason"])
-        return self.respond(self.request["reason"], end=True)
-
-    def cancel_intent(self):
-        return self.respond("Canceled.")
- 
-    def stop_intent(self):
-        return self.session_end_request()
-
-    def help_intent(self):
-        text = \
-            """
-            For complete information, please refer to the Clima Cast skill
-            page in the Alexa app.
-            You may get the current conditions with phrases like:
-                For the current conditions.
-                What's the humidity in Baton Rouge, Louisiana?
-                How's the wind in Chicago, Illinois?
-            You may get forecast by saying things like:
-                For the forecast.
-                What is the extended forecast.
-                What's the forecast in on Saturday in Saint Paul, Minnesota?
-                Is it going to be rainy tomorrow?
-                What will the temperature be on Monday afternoon in Seattle, Washington?
-            To check for active alerts, use phrases like:
-                For the alerts.
-                What are the alerts in Boise, Idaho?
-                Are there any alerts?
-            To get the current settings, use:
-                Get the settings.
-                Get the location.
-                Get the pitch.
-                Get the custom forecast.
-            To change your settings, say:
-                Set location to Boulder, Colorado.
-                Set the rate to 109 percent.
-                Set the pitch to 79 percent.
-                Add temperature to the custom forecast.
-                Remove dewpoint from the custom forecast.
-                Reset the custom forecast.
-            When using a location, you may use either the city name and state or the
-            zip code.
-            """
-        return self.respond(text)
-
-    def metric_intent(self):
-        metric = self.slots.metric
-        if metric is None:
-            return self.respond("You must include a metric like temperature, humidity or wind")
-
-        if metric == "alerts":
-            return self.get_alerts()
- 
-        if metric == "extended forecast":
-            return self.get_extended()
-
-        if metric not in METRICS:
-            return self.respond("%s is an unrecognized metric." % metric)
-
-        metrics = self.user.metrics if METRICS[metric][0] == "all" else [METRICS[metric][0]]
-
-        # These are absolute
-        if metric == "forecast" or self.has_when:
-            return self.get_forecast(metrics)
-
-        # Try to extract the intent of the request
-        leadin = self.slots.leadin or ""
-        if "chance" in metric or "will" in leadin or "going" in leadin:
-            return self.get_forecast(metrics)
-
-        return self.get_current(metrics)
-
-    def get_setting_intent(self):
-        setting = self.slots.setting
-        if setting is None:
-            setting = "settings"
-
-        words = setting.split()
-        if words[0] in ["current", "default"]:
-            words.remove(words[0])
-        setting = words[0]
-
-        if setting == "settings":
-            settings = ["location", "pitch", "rate", "forecast"]
-        elif setting in SETTINGS:
-            settings = [SETTINGS[setting]]
-        else:
-            return self.respond("Unrecognized setting: %s" % setting)
-
-        text = ""
-        for setting in settings:
-            if text != "":
-                text += ", "
-                if setting == settings[-1]:
-                    text += "and "
-            if setting == "location":
-                text += "the location is set to %s." % self.loc.spoken_name()
-            elif setting == "pitch":
-                text += "the voice pitch is set to %d percent." % self.user.pitch
-            elif setting == "rate":
-                text += "the voice rate is set to %d percent." % self.user.rate
-            elif setting == "forecast":
-                text += "the custom forecast will include the %s." % \
-                        ", ".join(list(self.user.metrics[:-1])) + " and " + self.user.metrics[-1]
-
-        return self.respond(text)
-
-    def set_location_intent(self):
-        text = self.get_location(req=True)
-        if text is None:
-            self.user.location = self.loc.name
-            text = "Your default location has been set to %s." % self.loc.spoken_name()
-
-        return self.respond(text)
-
-    def set_pitch_intent(self):
-        if self.slots.percent and self.slots.percent.isdigit():
-            pitch = int(self.slots.percent)
-            if 130 >= pitch >= 70:
-                self.user.pitch = pitch
-                text = "Voice pitch has been set to %d percent." % pitch
-            else:
-                text = "The pitch must be between 70 and 130 percent"
-        else:
-            text = "Expected a percentage when setting the pitch"
-
-        return self.respond(text)
-
-    def set_rate_intent(self):
-        if self.slots.percent and self.slots.percent.isdigit():
-            rate = int(self.slots.percent)
-            if 150 >= rate >= 50:
-                self.user.rate = rate
-                text = "Voice rate has been set to %d percent." % rate
-            else:
-                text = "The rate must be between 50 and 150 percent"
-        else:
-            text = "Expected a percentage when setting the rate"
-
-        return self.respond(text)
-
-    def get_custom_intent(self):
-        text = "The custom forecast will include the %s." % \
-               ", ".join(list(self.user.metrics[:-1])) + " and " + self.user.metrics[-1]
-        return self.respond(text)
-
-
-    def add_custom_intent(self):
-        metric = self.slots.metric
-        if metric is None:
-            return self.respond("You must include a metric like temperature, humidity or wind.")
-
-        if metric not in METRICS:
-            return self.respond("%s is an unrecognized metric." % metric)
-
-        metric = METRICS[metric]
-        if not metric[1]:
-            return self.respond("%s can't be used when customizing the forecast." % metric[0])
-
-        if self.user.has_metric(metric[0]):
-            return self.respond("%s is already included in the custom forecast." % metric[0])
-    
-        self.user.add_metric(metric[0])
-
-        return self.respond("%s has been added to the custom forecast." % metric[0])
-
-    def remove_custom_intent(self):
-        metric = self.slots.metric
-        if metric is None:
-            return self.respond("You must include a metric like temperature, humidity or wind.")
-
-        if metric not in METRICS:
-            return self.respond("%s is an unrecognized metric." % metric)
-
-        metric = METRICS[metric]
-        if not metric[1]:
-            return self.respond("%s can't be used when customizing the forecast." % metric[0])
-
-        if not self.user.has_metric(metric[0]):
-            return self.respond("%s is already excluded from the custom forecast." % metric[0])
-    
-        self.user.remove_metric(metric[0])
-
-        return self.respond("%s has been removed from the custom forecast." % metric[0])
-
-    def reset_custom_intent(self):
-        self.user.reset_metrics()
-
-        return self.respond("the custom forecast has been reset to defaults.")
-
-    def get_alerts(self):
-        alerts = Alerts(self.event, self.loc.countyZoneId)
-        if len(alerts) == 0:
-            text = "No alerts in effect at this time for %s." % self.loc.city
-        else:
-            text = alerts.title + "...\n"
-            for alert in alerts:
-                text += alert.headline + "...\n"
-                text += "for " + alert.area + "...\n"
-                text += alert.description + "...\n"
-                text += alert.instruction + "...\n"
-        
-        return self.respond(self.normalize(text))
-
-    def get_current(self, metrics):
-        text = ""
-
-        if False:
-            alerts = Alerts(self.event, self.loc.countyZoneId)
-            cnt = len(alerts)
-            if cnt > 0:
-                text += "There's %d alert%s in effect for your area! " % \
-                       (cnt,
-                        "s" if cnt > 1 else "")
-
-        # Retrieve the current observations from the nearest station
-        obs = Observationsv3(self.event, self.loc.observationStations)
-        if obs.is_good:
-            text += "At %s, %s reported %s, " % \
-                    (obs.time_reported.astimezone(self.loc.tz).strftime("%I:%M%p"),
-                     obs.station_name,
-                     obs.description)
-
-            for metric in metrics:
-                if metric == "wind":
-                    if obs.wind_speed is None or obs.wind_speed == "0":
-                        text += "winds are calm"
-                    else:
-                        if obs.wind_direction is None:
-                            text += "Winds are %s miles per hour" % obs.wind_speed
-                        elif obs.wind_direction == "Variable":
-                            text += "Winds are %s at %s miles per hour" % \
-                                    (obs.wind_direction,
-                                     obs.wind_speed)
-                        else:
-                            text += "Winds are out of the %s at %s miles per hour" % \
-                                    (obs.wind_direction,
-                                     obs.wind_speed)
-
-                        if obs.wind_gust is not None:
-                            text += ", gusting to %s" % obs.wind_gust
-                elif metric == "temperature":
-                    if obs.temp is not None:
-                        text += "The temperature is %s degrees" % obs.temp
-                        if obs.wind_chill is not None:
-                            text += ", with a wind chill of %s degrees" % obs.wind_chill
-                        elif obs.heat_index is not None:
-                            text += ", with a heat index of %s degrees" % obs.heat_index
-                elif metric == "dewpoint":
-                    if obs.dewpoint is not None:
-                        text += "The dewpoint is %s degrees" % obs.dewpoint
-                elif metric == "barometric pressure":
-                    if obs.pressure is not None:
-                        text += "The barometric pressure is at %s inches" % obs.pressure
-                        trend = obs.pressure_trend
-                        if trend is not None:
-                            text += " and %s" % trend
-                elif metric == "relative humidity":
-                    if obs.humidity is not None:
-                        text += "The relative humidity is %s percent" % obs.humidity
-                text += ". "
-        else:
-            text += "Observation information is currently unavailable."
-
-        return self.respond(self.normalize(text))
-
-    def get_discussion(self):
-        match = re.compile(r".*(^\.SHORT TERM.*?)^&&$",
-                           re.MULTILINE|re.DOTALL).match(self.get_product("AFD"))
-        if not match:
-            return self.respond("Unable to extract forecast discussion")
-
-        text = match.group(1)
-
-        return self.respond(text)
-
-    def get_extended(self):
-        data = self.https("points/%s/forecast" % self.loc.coords)
-        #print(json.dumps(data, indent=4))
-        if data is None or data.get("periods", None) is None:
-            notify(self.event, "Extended forecast missing periods", data)
-            return "the extended forecast is currently unavailable."        
-        
-        text = ""
-        for period in data.get("periods", {}):
-            text += " " + period["name"] + ", " + period["detailedForecast"]
-            if text.lower().find("wind") < 0:
-                wind = period["windSpeed"]
-                if wind.lower().find("to") < 0:
-                    wind = "around " + wind
-                text += ". %s wind %s" % (self.dir_to_dir(period["windDirection"]), wind)
-            text + "."
-
-        header = "The extended forecast for the %s zone " % self.loc.forecastZoneName
-        if not text:
-            header += "is unavailable for %s %s " % \
-                    (MONTH_NAMES[when.month - 1],
-                     MONTH_DAYS[when.day - 1])
-
-        return self.respond(self.normalize(header + text))
-
-    def get_forecast(self, metrics):
-        text = ""
-        snames = {0: "overnight, ",
-                  6: "in the morning, ",
-                  12: "in the afternoon, ",
-                  18: "in the evening, "}
-        enames = {0: "midnight",
-                  6: "the morning",
-                  12: "mid day",
-                  18: "the evening"}
-
-        stime = self.stime
-        etime = self.etime 
-        fulltext = ""
-        gp = GridPoints(self.event, self.loc.tz, self.loc.cwa, self.loc.grid_point)
-        for metric in metrics:
-            metric = METRICS[metric][0]
-            #print("FORECAST METRIC", metric, "STIME", stime, "ETIME", etime)
-#            if gp.set_interval(stime, etime):
-            if not gp.set_interval(stime, etime):
-                text = "Forecast information is unavailable for %s %s" % \
-                       (MONTH_NAMES[self.stime.month - 1],
-                        MONTH_DAYS[self.stime.day - 1])
-                return self.respond(text)
-
-            isday = self.is_day(stime)
-            sname = snames[stime.hour]
-            ename = enames[etime.hour]
-
-            text = ""
-            if metric == "wind":
-                wsh = gp.wind_speed_high
-                wsl = gp.wind_speed_low
-                wdi = gp.wind_direction_initial
-                wdf = gp.wind_direction_final
-                if wsh is None:
-                    text = "winds will be calm"
-                else:
-                    if wsh == wsl:
-                        if wdi is None:
-                            text = "winds will be %s miles per hour" % \
-                                   (wsh)
-                        else:
-                            text = "winds will be out of the %s at %s miles per hour" % \
-                                   (wdi, wsh)
-                    else:
-                        if wdi is None:
-                            text = "winds will be %s to %s miles per hour" % \
-                                   (wsl, wsh)
-                        else:
-                            text = "winds will be out of the %s at %s to %s miles per hour" % \
-                                   (wdi, wsl, wsh)
-                    wg = gp.wind_gust_high
-                    if wg is not None:
-                        text += ", with gusts as high as %s" % wg
-            elif metric == "temperature":
-                t = gp.temp_high if isday else gp.temp_low
-                if t is not None:
-                    text = "the %s temperature will be %s degrees" % \
-                           ("high" if isday else "low", t)
-
-                    wcl = gp.wind_chill_low
-                    wch = gp.wind_chill_high
-                    if wcl is not None:
-                        if wcl == wch:
-                            if wcl != t:
-                                text += ", with a wind chill of %s degrees" % wcl
-                        else:
-                            text += ", with a wind chill of %s to %s degrees" % (wcl, wch)
-
-                    hil = gp.heat_index_low
-                    hih = gp.heat_index_high
-                    if hil is not None:
-                        if hil == hih:
-                            if hil != t:
-                                text += ", with a heat index of %s degrees" % hil
-                        else:
-                            text += ", with a heat index of %s to %s degrees" % (hil, hih)
-            elif metric == "dewpoint":
-                dh = gp.dewpoint_high
-                if dh is not None:
-                    text = "the dewpoint will be %s degrees" % dh
-            elif metric == "barometric pressure":
-                pl = gp.pressure_low
-                if pl is not None:
-                    text = "the barometric pressure will be %s inches" % pl
-            elif metric == "skys":
-                si = gp.skys_initial
-                sf = gp.skys_final
-                if si is not None:
-                    if si == sf:
-                        text = "it will be %s" % si
-                    elif si == None or sf == None:
-                        text = "it will be %s" % si or sf
-                    else:
-                        text = "it will be %s changing to %s" % (si, sf)
-            elif metric == "relative humidity":
-                hh = gp.humidity_high
-                if hh is not None:
-                    text = 'the relative humidity will be %.0f percent' % hh
-            elif metric == "precipitation":
-                pch = gp.precip_chance_high
-                if pch is not None:
-                    if pch == 0:
-                        text = "No precipitation forecasted"
-                    else:
-                        text = 'the chance of precipitation will be %d percent' % pch
-
-                        pal = gp.precip_amount_low
-                        pah = gp.precip_amount_high
-
-                        if pal is not None and pah is not None and pah[0] != 0:
-                            text += ", with amounts of "
-
-                            if pal[1] == pah[1] or pal[0] < 0.1:
-                                text += "%s %s possible" % (pah[1], pah[2])
-                            else:
-                                text += "%s to %s %s possible" % (pal[1], pah[1], pah[2])
-
-                        sal = gp.snow_amount_low
-                        sah = gp.snow_amount_high
-                        if sal is not None and sah is not None and sah[0] != 0:
-                            text += ", snowfall amounts of "
-
-                            if sal[1] == sah[1] or sal[0] < 0.1:
-                                text += "%s %s possible" % (sah[1], sah[2])
-                            else:
-                                text += "%s to %s %s possible" % (sal[1], sah[1], sah[2])
-            elif metric == "summary":
-                wt = gp.weather_text
-                if wt:
-                    text += "expect " + wt
-
-            if text:
-                fulltext += text + ". "
-
-        if fulltext != "":
-            fulltext = "%s in %s, %s" % \
-                       (self.sname,
-                        self.loc.city,
-                        fulltext)
-        else:
-            fulltext = "Forecast information is unavailable for %s in %s" % \
-                       (self.sname,
-                        self.loc.city)
-
-        return self.respond(fulltext)
-
-    def get_location(self, req=False):
-        if self.slots.location or self.slots.zipcode:
-            loc = Location(self.event)
-            text = loc.set(self.slots.location or self.slots.zipcode, self.loc)
-            if text is None:
-                self.loc = loc
-        elif req:
-            text = "You must include the location"
-        elif self.loc is None:
-            text = """"
-                   You must set a default location by using phrases like:
-                       Alexa, ask Clima Cast to set my location to Boulder Colorado.
-                   or:
-                       Alexa, ask Clima Cast to set my location to zip code 5 5 1 1 8.
-                   """
-        else:
-            text = None
-
-        return text
-
-    def get_when(self):
-        self.has_when = (self.slots.when_abs or \
-                         self.slots.when_any or \
-                         self.slots.when_pos or \
-                         self.slots.day or \
-                         self.slots.month) is not None
-
-        now = datetime.now(tz=self.loc.tz) + relativedelta(minute=0, second=0, microsecond=0)
-        base = now + relativedelta(hour=6)
-        stime = base
-        hours = 12
-        quarter = None
-        sname = ""
-
-        # Handle the days like Monday or Today.
-        day = self.slots.when_abs or self.slots.when_any or self.slots.when_pos
-        if day:
-            # Remove possessive/plural suffixes.  Also, sometimes we will get
-            # "over night" instead of "overnight" so fix it.
-            day = re.sub(r"'*s$", "", day).replace("over night", "overnight").split()
-
-            # Handle a couple of special cases
-            if len(day) > 1:
-                # Put "overnight" after the day name.
-                if day[0] == "overnight":
-                    day = [day[1], "overnight"]
-                # Get rid of "this" (as in, this afternoon or this monday)
-                elif day[0] == "this":
-                    day = [day[1]]
-
-            # Now, determine the actual day           
-            if day[0] == "tomorrow":
-                stime += relativedelta(days=+1, hour=6)
-            elif day[0] in DAYS:
-                d = ((DAYS.index(day[0]) - stime.weekday()) % 7)
-                stime += relativedelta(days=+d, hour=6)
-
-            # Set the name now, otherwise the user will hear it as a day off 
-            # if they used "overnight"
-            sname = DAYS[stime.weekday()]
-            is_today = stime == base
-
-            #key: [number of days to add, starting hour, duration, label]
-            specs = {"today":     [0, 6,  12, ""],
-                     "tonight":   [0, 18, 12, " night"],
-                     "night":     [0, 18, 12, " night"],
-                     "overnight": [1, 0,  6,  " overnight"],
-                     "morning":   [0, 6,  6,  " morning"], 
-                     "afternoon": [0, 12, 6,  " afternoon"], 
-                     "evening":   [0, 18, 6,  " evening"]}
-
-            # Handle any special references
-            if day[-1] in specs:
-                spec = specs[day[-1]]
-                stime += relativedelta(days=spec[0], hour=spec[1])
-                hours = spec[2]
-                sname += spec[3]
-
-            # Convert back to today, tonight, this, if the resulting day is the
-            # same as today's
-            if is_today:
-                day = sname.split()
-                if hours == 6:
-                    sname = "overnight" if day[1] == "overnight" else "this " + day[1]
-                else:
-                    sname = "tonight" if stime.hour == 18 else "today"
-
-        # Handle the day and month usage
-        elif self.slots.day is not None:
-            month = stime.month
-            day = stime.day
-
-            # Get and validate the DAY
-            d = self.slots.day
-            if d.isdigit() and 1 <= int(d) <= 31:
-                d = MONTH_DAYS[int(d) - 1]
-            elif d in MONTH_DAYS_XLATE:
-                d = MONTH_DAYS_XLATE[d]
-
-            # If it's valid, look for the MONTH
-            if d in MONTH_DAYS:
-                day = MONTH_DAYS.index(d) + 1
-
-                # Get and validate the month, if any
-                if self.slots.month is not None:
-                    m = self.slots.month
-                    if m in MONTH_NAMES:
-                        month = MONTH_NAMES.index(m) + 1
-                    else:
-                        #notify(self.event, "Unexpected month %s" % m)
-                        pass
-            else:
-                #notify(self.event, "Unexpected day %s" % d)
-                pass
-
-            # Adjust the date relative to today
-            if month == stime.month and day == stime.day:
-                pass
-            elif month == stime.month and day < stime.day:
-                if self.slots.month:
-                    stime += relativedelta(years=+1, month=month, day=day)
-                else:
-                    stime += relativedelta(months=+1, day=day)
-            elif month > stime.month:
-                stime += relativedelta(month=month, day=day)
-            elif month < stime.month:
-                stime += relativedelta(years=+1, month=month, day=day)
-            elif day > stime.day:
-                stime += relativedelta(day=day)
-            elif day < stime.day:
-                stime += relativedelta(months=+1, day=day)
-
-            sname = "today" if stime == base else DAYS[stime.weekday()]
-        else:
-            stime += relativedelta(hour=6 if now.hour < 18 else 18)
-            sname = "today" if stime.hour == 6 else "tonight"
-
-        # Set the start and end times, the period name, and the number of periods
-        self.stime = stime
-        self.etime = self.stime + relativedelta(hours=hours)
-        self.sname = sname
-        self.quarters = hours // 6
-        #print("WHEN:", self.stime, self.etime, self.quarters, quarter)
-
 # =============================================================================
 # ASK SDK Request Handlers
 # =============================================================================
 
 class BaseIntentHandler(AbstractRequestHandler):
-    """Base class for intent handlers with common functionality"""
+    """Base class for intent handlers with common weather functionality"""
     
     def __init__(self):
         super().__init__()
@@ -2514,8 +1775,348 @@ class BaseIntentHandler(AbstractRequestHandler):
         
         response_builder.set_should_end_session(end)
         return response_builder.response
+    
+    def get_location_from_slots(self, event, loc, slots, req=False):
+        """Process location from slot values"""
+        location_name = slots.get("location") or slots.get("zipcode")
+        
+        if location_name:
+            location_obj = Location(event)
+            text = location_obj.set(location_name, loc)
+            if text is None:
+                return location_obj, None
+            return None, text
+        elif req:
+            return None, "You must include the location"
+        elif loc is None:
+            return None, """You must set a default location by using phrases like:
+                       Alexa, ask Clima Cast to set my location to Boulder Colorado.
+                   or:
+                       Alexa, ask Clima Cast to set my location to zip code 5 5 1 1 8.
+                   """
+        return loc, None
+    
+    def parse_when(self, loc, slots):
+        """Parse time/date information from slots"""
+        # type: (Location, dict) -> tuple
+        has_when = (slots.get("when_abs") or slots.get("when_any") or 
+                    slots.get("when_pos") or slots.get("day") or slots.get("month")) is not None
+        
+        now = datetime.now(tz=loc.tz) + relativedelta(minute=0, second=0, microsecond=0)
+        base = now + relativedelta(hour=6)
+        stime = base
+        hours = 12
+        sname = ""
+        
+        # Handle the days like Monday or Today
+        day = slots.get("when_abs") or slots.get("when_any") or slots.get("when_pos")
+        if day:
+            day = re.sub(r"'*s$", "", day).replace("over night", "overnight").split()
+            
+            if len(day) > 1:
+                if day[0] == "overnight":
+                    day = [day[1], "overnight"]
+                elif day[0] == "this":
+                    day = [day[1]]
+            
+            if day[0] == "tomorrow":
+                stime += relativedelta(days=+1, hour=6)
+            elif day[0] in DAYS:
+                d = ((DAYS.index(day[0]) - stime.weekday()) % 7)
+                stime += relativedelta(days=+d, hour=6)
+            
+            sname = DAYS[stime.weekday()]
+            is_today = stime == base
+            
+            specs = {"today":     [0, 6,  12, ""],
+                     "tonight":   [0, 18, 12, " night"],
+                     "night":     [0, 18, 12, " night"],
+                     "overnight": [1, 0,  6,  " overnight"],
+                     "morning":   [0, 6,  6,  " morning"], 
+                     "afternoon": [0, 12, 6,  " afternoon"], 
+                     "evening":   [0, 18, 6,  " evening"]}
+            
+            if day[-1] in specs:
+                spec = specs[day[-1]]
+                stime += relativedelta(days=spec[0], hour=spec[1])
+                hours = spec[2]
+                sname += spec[3]
+            
+            if is_today:
+                day = sname.split()
+                if hours == 6:
+                    sname = "overnight" if day[1] == "overnight" else "this " + day[1]
+                else:
+                    sname = "tonight" if stime.hour == 18 else "today"
+        
+        elif slots.get("day") is not None:
+            month = stime.month
+            day = stime.day
+            
+            d = slots.get("day")
+            if d.isdigit() and 1 <= int(d) <= 31:
+                d = MONTH_DAYS[int(d) - 1]
+            elif d in MONTH_DAYS_XLATE:
+                d = MONTH_DAYS_XLATE[d]
+            
+            if d in MONTH_DAYS:
+                day = MONTH_DAYS.index(d) + 1
+                
+                if slots.get("month") is not None:
+                    m = slots.get("month")
+                    if m in MONTH_NAMES:
+                        month = MONTH_NAMES.index(m) + 1
+            
+            # Adjust the date relative to today
+            if month == stime.month and day == stime.day:
+                pass
+            elif month == stime.month and day < stime.day:
+                if slots.get("month"):
+                    stime += relativedelta(years=+1, month=month, day=day)
+                else:
+                    stime += relativedelta(months=+1, day=day)
+            elif month > stime.month:
+                stime += relativedelta(month=month, day=day)
+            elif month < stime.month:
+                stime += relativedelta(years=+1, month=month, day=day)
+            elif day > stime.day:
+                stime += relativedelta(day=day)
+            elif day < stime.day:
+                stime += relativedelta(months=+1, day=day)
+            
+            sname = "today" if stime == base else DAYS[stime.weekday()]
+        else:
+            stime += relativedelta(hour=6 if now.hour < 18 else 18)
+            sname = "today" if stime.hour == 6 else "tonight"
+        
+        etime = stime + relativedelta(hours=hours)
+        quarters = hours // 6
+        
+        return has_when, stime, etime, sname, quarters
+    
+    def get_alerts(self, event, loc):
+        """Get weather alerts for location"""
+        alerts = Alerts(event, loc.countyZoneId)
+        if len(alerts) == 0:
+            return "No alerts in effect at this time for %s." % loc.city
+        
+        text = alerts.title + "...\n"
+        for alert in alerts:
+            text += alert.headline + "...\n"
+            text += "for " + alert.area + "...\n"
+            text += alert.description + "...\n"
+            text += alert.instruction + "...\n"
+        
+        return text
+    
+    def get_current(self, event, user, loc, metrics):
+        """Get current weather conditions"""
+        text = ""
+        
+        # Retrieve the current observations from the nearest station
+        obs = Observationsv3(event, loc.observationStations)
+        if obs.is_good:
+            text += "At %s, %s reported %s, " % \
+                    (obs.time_reported.astimezone(loc.tz).strftime("%I:%M%p"),
+                     obs.station_name,
+                     obs.description)
+            
+            for metric in metrics:
+                if metric == "wind":
+                    if obs.wind_speed is None or obs.wind_speed == "0":
+                        text += "winds are calm"
+                    else:
+                        if obs.wind_direction is None:
+                            text += "Winds are %s miles per hour" % obs.wind_speed
+                        elif obs.wind_direction == "Variable":
+                            text += "Winds are %s at %s miles per hour" % \
+                                    (obs.wind_direction, obs.wind_speed)
+                        else:
+                            text += "Winds are out of the %s at %s miles per hour" % \
+                                    (obs.wind_direction, obs.wind_speed)
+                        
+                        if obs.wind_gust is not None:
+                            text += ", gusting to %s" % obs.wind_gust
+                elif metric == "temperature":
+                    if obs.temp is not None:
+                        text += "The temperature is %s degrees" % obs.temp
+                        if obs.wind_chill is not None:
+                            text += ", with a wind chill of %s degrees" % obs.wind_chill
+                        elif obs.heat_index is not None:
+                            text += ", with a heat index of %s degrees" % obs.heat_index
+                elif metric == "dewpoint":
+                    if obs.dewpoint is not None:
+                        text += "The dewpoint is %s degrees" % obs.dewpoint
+                elif metric == "barometric pressure":
+                    if obs.pressure is not None:
+                        text += "The barometric pressure is at %s inches" % obs.pressure
+                        trend = obs.pressure_trend
+                        if trend is not None:
+                            text += " and %s" % trend
+                elif metric == "relative humidity":
+                    if obs.humidity is not None:
+                        text += "The relative humidity is %s percent" % obs.humidity
+                text += ". "
+        else:
+            text += "Observation information is currently unavailable."
+        
+        return text
+    
+    def get_extended(self, event, loc):
+        """Get extended forecast"""
+        # Import normalize from Base class
+        base = Base(event)
+        
+        data = base.https("points/%s/forecast" % loc.coords)
+        if data is None or data.get("periods", None) is None:
+            notify(event, "Extended forecast missing periods", data)
+            return "the extended forecast is currently unavailable."
+        
+        text = ""
+        for period in data.get("periods", {}):
+            text += " " + period["name"] + ", " + period["detailedForecast"]
+            if text.lower().find("wind") < 0:
+                wind = period["windSpeed"]
+                if wind.lower().find("to") < 0:
+                    wind = "around " + wind
+                text += ". %s wind %s" % (base.dir_to_dir(period["windDirection"]), wind)
+            text + "."
+        
+        header = "The extended forecast for the %s zone " % loc.forecastZoneName
+        if not text:
+            header += "is unavailable"
+        
+        return base.normalize(header + text)
+    
+    def get_forecast(self, event, user, loc, stime, etime, sname, metrics):
+        """Get weather forecast"""
+        # Import normalize from Base class
+        base = Base(event)
+        
+        fulltext = ""
+        gp = GridPoints(event, loc.tz, loc.cwa, loc.grid_point)
+        
+        for metric in metrics:
+            metric = METRICS[metric][0]
+            
+            if not gp.set_interval(stime, etime):
+                text = "Forecast information is unavailable for %s %s" % \
+                       (MONTH_NAMES[stime.month - 1], MONTH_DAYS[stime.day - 1])
+                return text
+            
+            isday = base.is_day(stime)
+            text = ""
+            
+            if metric == "wind":
+                wsh = gp.wind_speed_high
+                wsl = gp.wind_speed_low
+                wdi = gp.wind_direction_initial
+                if wsh is None:
+                    text = "winds will be calm"
+                else:
+                    if wsh == wsl:
+                        if wdi is None:
+                            text = "winds will be %s miles per hour" % wsh
+                        else:
+                            text = "winds will be out of the %s at %s miles per hour" % (wdi, wsh)
+                    else:
+                        if wdi is None:
+                            text = "winds will be %s to %s miles per hour" % (wsl, wsh)
+                        else:
+                            text = "winds will be out of the %s at %s to %s miles per hour" % (wdi, wsl, wsh)
+                    wg = gp.wind_gust_high
+                    if wg is not None:
+                        text += ", with gusts as high as %s" % wg
+            
+            elif metric == "temperature":
+                t = gp.temp_high if isday else gp.temp_low
+                if t is not None:
+                    text = "the %s temperature will be %s degrees" % ("high" if isday else "low", t)
+                    
+                    wcl = gp.wind_chill_low
+                    wch = gp.wind_chill_high
+                    if wcl is not None:
+                        if wcl == wch and wcl != t:
+                            text += ", with a wind chill of %s degrees" % wcl
+                        elif wcl != wch:
+                            text += ", with a wind chill of %s to %s degrees" % (wcl, wch)
+                    
+                    hil = gp.heat_index_low
+                    hih = gp.heat_index_high
+                    if hil is not None:
+                        if hil == hih and hil != t:
+                            text += ", with a heat index of %s degrees" % hil
+                        elif hil != hih:
+                            text += ", with a heat index of %s to %s degrees" % (hil, hih)
+            
+            elif metric == "dewpoint":
+                dh = gp.dewpoint_high
+                if dh is not None:
+                    text = "the dewpoint will be %s degrees" % dh
+            
+            elif metric == "barometric pressure":
+                pl = gp.pressure_low
+                if pl is not None:
+                    text = "the barometric pressure will be %s inches" % pl
+            
+            elif metric == "skys":
+                si = gp.skys_initial
+                sf = gp.skys_final
+                if si is not None:
+                    if si == sf:
+                        text = "it will be %s" % si
+                    elif si == None or sf == None:
+                        text = "it will be %s" % (si or sf)
+                    else:
+                        text = "it will be %s changing to %s" % (si, sf)
+            
+            elif metric == "relative humidity":
+                hh = gp.humidity_high
+                if hh is not None:
+                    text = 'the relative humidity will be %.0f percent' % hh
+            
+            elif metric == "precipitation":
+                pch = gp.precip_chance_high
+                if pch is not None:
+                    if pch == 0:
+                        text = "No precipitation forecasted"
+                    else:
+                        text = 'the chance of precipitation will be %d percent' % pch
+                        
+                        pal = gp.precip_amount_low
+                        pah = gp.precip_amount_high
+                        
+                        if pal is not None and pah is not None and pah[0] != 0:
+                            text += ", with amounts of "
+                            if pal[1] == pah[1] or pal[0] < 0.1:
+                                text += "%s %s possible" % (pah[1], pah[2])
+                            else:
+                                text += "%s to %s %s possible" % (pal[1], pah[1], pah[2])
+                        
+                        sal = gp.snow_amount_low
+                        sah = gp.snow_amount_high
+                        if sal is not None and sah is not None and sah[0] != 0:
+                            text += ", snowfall amounts of "
+                            if sal[1] == sah[1] or sal[0] < 0.1:
+                                text += "%s %s possible" % (sah[1], sah[2])
+                            else:
+                                text += "%s to %s %s possible" % (sal[1], sah[1], sah[2])
+            
+            elif metric == "summary":
+                wt = gp.weather_text
+                if wt:
+                    text += "expect " + wt
+            
+            if text:
+                fulltext += text + ". "
+        
+        if fulltext != "":
+            fulltext = "%s in %s, %s" % (sname, loc.city, fulltext)
+        else:
+            fulltext = "Forecast information is unavailable for %s in %s" % (sname, loc.city)
+        
+        return fulltext
 
-# Launch Request Handler
 class LaunchRequestHandler(BaseIntentHandler):
     """Handler for Launch Request"""
     def can_handle(self, handler_input):
@@ -2671,68 +2272,45 @@ class MetricIntentHandler(BaseIntentHandler):
                    """
             return self.respond(handler_input, user, text)
         
-        # Create Skill instance for metric processing
-        # Build compatible event structure
-        request = handler_input.request_envelope.request
-        session = handler_input.request_envelope.session
-        event["request"] = {
-            "type": "IntentRequest",
-            "intent": {
-                "name": request.intent.name,
-                "slots": {}
-            }
-        }
+        # Get metric from slots
+        metric = slots.get("metric")
+        if metric is None:
+            return self.respond(handler_input, user, "You must include a metric like temperature, humidity or wind")
         
-        # Convert slots
-        if request.intent.slots:
-            for slot_name, slot in request.intent.slots.items():
-                if slot.value:
-                    event["request"]["intent"]["slots"][slot_name] = {
-                        "name": slot_name,
-                        "value": slot.value
-                    }
+        # Handle special metrics
+        if metric == "alerts":
+            text = self.get_alerts(event, loc)
+            # Normalize text
+            base = Base(event)
+            return self.respond(handler_input, user, base.normalize(text))
         
-        # Use existing Skill logic
-        skill = Skill(event)
-        skill.loc = loc
-        skill.user = user
-        skill.session = event["session"]
-        skill.attrs = session.attributes or {}
-        skill.request = event["request"]
-        skill.intent = event["request"]["intent"]
+        if metric == "extended forecast":
+            text = self.get_extended(event, loc)
+            return self.respond(handler_input, user, text)
         
-        # Load slot values
-        skill.slots = type("slots", (), {})
-        for slot_name in SLOTS:
-            val = slots.get(slot_name)
-            setattr(skill.slots, slot_name, val)
+        if metric not in METRICS:
+            return self.respond(handler_input, user, "%s is an unrecognized metric." % metric)
         
-        # Get when information
-        skill.get_when()
+        # Determine which metrics to report
+        metrics = user.metrics if METRICS[metric][0] == "all" else [METRICS[metric][0]]
         
-        # Call metric_intent
-        response = skill.metric_intent()
+        # Parse when information
+        has_when, stime, etime, sname, quarters = self.parse_when(loc, slots)
         
-        # Convert to ASK SDK response
-        if response and "response" in response:
-            response_builder = handler_input.response_builder
-            
-            if "outputSpeech" in response["response"]:
-                speech = response["response"]["outputSpeech"]
-                if speech["type"] == "SSML":
-                    response_builder.speak(speech["ssml"])
-            
-            if "reprompt" in response["response"] and response["response"]["reprompt"]:
-                reprompt = response["response"]["reprompt"].get("outputSpeech")
-                if reprompt and reprompt.get("ssml"):
-                    response_builder.ask(reprompt["ssml"])
-            
-            should_end = response["response"].get("shouldEndSession", True)
-            response_builder.set_should_end_session(should_end)
-            
-            return response_builder.response
+        # Determine if this is a forecast or current conditions request
+        leadin = slots.get("leadin") or ""
+        is_forecast = (metric == "forecast" or has_when or 
+                      "chance" in metric or "will" in leadin or "going" in leadin)
         
-        return handler_input.response_builder.response
+        if is_forecast:
+            text = self.get_forecast(event, user, loc, stime, etime, sname, metrics)
+        else:
+            text = self.get_current(event, user, loc, metrics)
+            # Normalize text
+            base = Base(event)
+            text = base.normalize(text)
+        
+        return self.respond(handler_input, user, text)
 
 # Settings Intent Handlers
 class GetSettingIntentHandler(BaseIntentHandler):
@@ -2750,63 +2328,39 @@ class GetSettingIntentHandler(BaseIntentHandler):
             text = "You must set a default location first."
             return self.respond(handler_input, user, text)
         
-        # Use existing Skill logic
-        request = handler_input.request_envelope.request
-        session = handler_input.request_envelope.session
-        event["request"] = {
-            "type": "IntentRequest",
-            "intent": {
-                "name": request.intent.name,
-                "slots": {}
-            }
-        }
+        setting = slots.get("setting")
+        if setting is None:
+            setting = "settings"
         
-        if request.intent.slots:
-            for slot_name, slot in request.intent.slots.items():
-                if slot.value:
-                    event["request"]["intent"]["slots"][slot_name] = {
-                        "name": slot_name,
-                        "value": slot.value
-                    }
+        words = setting.split()
+        if words[0] in ["current", "default"]:
+            words.remove(words[0])
+        setting = words[0]
         
-        skill = Skill(event)
-        skill.loc = loc
-        skill.user = user
-        skill.session = event["session"]
-        skill.attrs = session.attributes or {}
-        skill.request = event["request"]
-        skill.intent = event["request"]["intent"]
+        if setting == "settings":
+            settings = ["location", "pitch", "rate", "forecast"]
+        elif setting in SETTINGS:
+            settings = [SETTINGS[setting]]
+        else:
+            return self.respond(handler_input, user, "Unrecognized setting: %s" % setting)
         
-        skill.slots = type("slots", (), {})
-        for slot_name in SLOTS:
-            val = slots.get(slot_name)
-            setattr(skill.slots, slot_name, val)
+        text = ""
+        for setting in settings:
+            if text != "":
+                text += ", "
+                if setting == settings[-1]:
+                    text += "and "
+            if setting == "location":
+                text += "the location is set to %s." % loc.spoken_name()
+            elif setting == "pitch":
+                text += "the voice pitch is set to %d percent." % user.pitch
+            elif setting == "rate":
+                text += "the voice rate is set to %d percent." % user.rate
+            elif setting == "forecast":
+                text += "the custom forecast will include the %s." % \
+                        ", ".join(list(user.metrics[:-1])) + " and " + user.metrics[-1]
         
-        response = skill.get_setting_intent()
-        
-        return self._convert_response(handler_input, response)
-
-    def _convert_response(self, handler_input, response):
-        """Convert Skill response to ASK SDK format"""
-        if response and "response" in response:
-            response_builder = handler_input.response_builder
-            
-            if "outputSpeech" in response["response"]:
-                speech = response["response"]["outputSpeech"]
-                if speech["type"] == "SSML":
-                    response_builder.speak(speech["ssml"])
-            
-            if "reprompt" in response["response"] and response["response"]["reprompt"]:
-                reprompt = response["response"]["reprompt"].get("outputSpeech")
-                if reprompt and reprompt.get("ssml"):
-                    response_builder.ask(reprompt["ssml"])
-            
-            should_end = response["response"].get("shouldEndSession", True)
-            response_builder.set_should_end_session(should_end)
-            
-            return response_builder.response
-        
-        return handler_input.response_builder.response
+        return self.respond(handler_input, user, text)
 
 class SetPitchIntentHandler(BaseIntentHandler):
     """Handler for SetPitchIntent"""
