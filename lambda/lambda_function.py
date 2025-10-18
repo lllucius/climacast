@@ -2241,7 +2241,7 @@ class Skill(Base):
         return self.respond(self.normalize(text))
 
     def get_discussion(self):
-        match = re.compile(".*(^\.SHORT TERM.*?)^&&$",
+        match = re.compile(r".*(^\.SHORT TERM.*?)^&&$",
                            re.MULTILINE|re.DOTALL).match(self.get_product("AFD"))
         if not match:
             return self.respond("Unable to extract forecast discussion")

@@ -17,19 +17,31 @@ This project follows the Alexa-hosted skill pattern:
 
 ## Setup and Deployment
 
-### Alexa-Hosted Skill (Recommended)
+For detailed deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
-1. Create a new Alexa-hosted skill in the Alexa Developer Console
-2. Clone this repository
-3. Copy the contents to your skill's code repository
-4. Set environment variables in the Lambda configuration:
-   - `app_id` - Your skill's application ID
-   - `mapquest_id` - MapQuest API key for geocoding
-   - `event_id` - (Optional) SNS topic for notifications
+**Quick Start for Alexa-Hosted Skills:**
 
-### Self-Hosted Lambda
+1. Create an Alexa-hosted skill in the Alexa Developer Console
+2. Copy files from `lambda/` to your skill's lambda directory
+3. Copy files from `skill-package/` to your skill's skill-package directory
+4. Set up environment variables (see DEPLOYMENT.md)
+5. Create DynamoDB tables (see DEPLOYMENT.md)
+6. Push changes with git
 
-See `lambda/README.md` for deployment instructions.
+**Quick Start for Self-Hosted Lambda:**
+
+1. Run `./upload` to create and deploy the Lambda package
+2. Deploy interaction model with ASK CLI: `ask deploy`
+3. Set up environment variables and DynamoDB tables
+
+For complete instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
+
+## Requirements
+
+- Python 3.8+
+- MapQuest API key (free tier available)
+- AWS account for DynamoDB tables
+- Four DynamoDB tables: LocationCache, StationCache, UserCache, ZoneCache
 
 ## Usage
 
