@@ -23,6 +23,14 @@ from xml.etree.ElementTree import *
 from lxml import html
 from time import time
 
+# ASK SDK imports
+from ask_sdk_core.skill_builder import SkillBuilder
+from ask_sdk_core.dispatch_components import AbstractRequestHandler, AbstractExceptionHandler
+from ask_sdk_core.utils import is_request_type, is_intent_name
+from ask_sdk_core.handler_input import HandlerInput
+from ask_sdk_model import Response
+from ask_sdk_model.ui import SimpleCard
+
 """
     Anything defined here will persist for the duration of the lambda
     container, so only initialize them once to reduce initialization time.
@@ -2416,12 +2424,556 @@ class Skill(Base):
         self.quarters = hours // 6
         #print("WHEN:", self.stime, self.etime, self.quarters, quarter)
 
-# ASK SDK imports and handler
-from ask_sdk_core.skill_builder import SkillBuilder
-from ask_sdk_core.dispatch_components import AbstractRequestHandler, AbstractExceptionHandler
-from ask_sdk_core.utils import is_request_type, is_intent_name
-from ask_sdk_core.handler_input import HandlerInput
-from ask_sdk_model import Response
+# =============================================================================
+# ASK SDK Request Handlers
+# =============================================================================
+
+class BaseIntentHandler(AbstractRequestHandler):
+    """Base class for intent handlers with common functionality"""
+    
+    def __init__(self):
+        super().__init__()
+    
+    def get_user_and_location(self, handler_input):
+        """Get user profile and location from handler_input"""
+        # type: (HandlerInput) -> tuple
+        session = handler_input.request_envelope.session
+        user_id = session.user.user_id
+        
+        # Build event for legacy code compatibility
+        event = {
+            "session": {
+                "new": session.new,
+                "sessionId": session.session_id,
+                "application": {
+                    "applicationId": session.application.application_id
+                },
+                "attributes": session.attributes or {},
+                "user": {
+                    "userId": user_id
+                }
+            },
+            "request": {}
+        }
+        
+        # Load user profile
+        user = User(event, user_id)
+        
+        # Try to load default location
+        loc = None
+        if user.location:
+            location_obj = Location(event)
+            text = location_obj.set(user.location)
+            if text is None:
+                loc = location_obj
+        
+        return user, loc, event
+    
+    def get_slot_values(self, handler_input):
+        """Extract slot values from intent"""
+        # type: (HandlerInput) -> dict
+        slots = {}
+        request = handler_input.request_envelope.request
+        if hasattr(request, 'intent') and request.intent.slots:
+            for slot_name, slot in request.intent.slots.items():
+                if slot.value:
+                    slots[slot_name] = slot.value.strip().lower()
+                else:
+                    slots[slot_name] = None
+        return slots
+    
+    def respond(self, handler_input, user, text, end=None):
+        """Build response with proper formatting"""
+        # type: (HandlerInput, User, str, bool) -> Response
+        session = handler_input.request_envelope.session
+        new = session.new
+        if end is None:
+            end = new
+        
+        response_builder = handler_input.response_builder
+        
+        # Add reprompt if session should continue
+        prompt = None
+        if not end:
+            prompt = "For %s, say help, " % ("more examples" if new else "example requests") + \
+                     "To interrupt speaking, say Alexa, cancel, " + \
+                     "If you are done, say stop."
+            text += ". " if text.strip()[-1] != "." else " "
+            text += prompt if new else "if you are done, say stop."
+        
+        # Format with user's rate and pitch
+        ssml = '<speak><prosody rate="%d%%" pitch="%+d%%">%s</prosody></speak>' % \
+               (user.rate, user.pitch - 100, text)
+        
+        response_builder.speak(ssml)
+        
+        if not end and prompt:
+            prompt_ssml = '<speak><prosody rate="%d%%" pitch="%+d%%">%s</prosody></speak>' % \
+                          (user.rate, user.pitch - 100, prompt)
+            response_builder.ask(prompt_ssml)
+        
+        response_builder.set_should_end_session(end)
+        return response_builder.response
+
+# Launch Request Handler
+class LaunchRequestHandler(BaseIntentHandler):
+    """Handler for Launch Request"""
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        return is_request_type("LaunchRequest")(handler_input)
+    
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        user, loc, event = self.get_user_and_location(handler_input)
+        
+        text = "Welcome to Clime a Cast. " \
+               "For current conditions, use phrases like: What's the weather. "\
+               "For forecasts, try phrases like: What's the forecast."
+        if loc is None:
+            text += "You must set your default location by saying something like: " \
+                    "set location to Miami Florida."
+        
+        return self.respond(handler_input, user, text, end=False)
+
+# Session Ended Request Handler
+class SessionEndedRequestHandler(BaseIntentHandler):
+    """Handler for Session Ended Request"""
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        return is_request_type("SessionEndedRequest")(handler_input)
+    
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        request = handler_input.request_envelope.request
+        
+        # Build event for notify
+        session = handler_input.request_envelope.session
+        event = {
+            "session": {
+                "sessionId": session.session_id,
+                "user": {"userId": session.user.user_id}
+            },
+            "request": {
+                "type": "SessionEndedRequest",
+                "reason": str(getattr(request, 'reason', 'USER_INITIATED'))
+            }
+        }
+        
+        if hasattr(request, 'error') and request.error:
+            event["request"]["error"] = {
+                "message": request.error.message
+            }
+            notify(event, "Error detected", request.error.message)
+        else:
+            notify(event, "Session Ended", event["request"]["reason"])
+        
+        return handler_input.response_builder.response
+
+# Help Intent Handler
+class HelpIntentHandler(BaseIntentHandler):
+    """Handler for Help Intent"""
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        return is_intent_name("AMAZON.HelpIntent")(handler_input)
+    
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        user, loc, event = self.get_user_and_location(handler_input)
+        
+        text = """
+            For complete information, please refer to the Clima Cast skill
+            page in the Alexa app.
+            You may get the current conditions with phrases like:
+                For the current conditions.
+                What's the humidity in Baton Rouge, Louisiana?
+                How's the wind in Chicago, Illinois?
+            You may get forecast by saying things like:
+                For the forecast.
+                What is the extended forecast.
+                What's the forecast in on Saturday in Saint Paul, Minnesota?
+                Is it going to be rainy tomorrow?
+                What will the temperature be on Monday afternoon in Seattle, Washington?
+            To check for active alerts, use phrases like:
+                For the alerts.
+                What are the alerts in Boise, Idaho?
+                Are there any alerts?
+            To get the current settings, use:
+                Get the settings.
+                Get the location.
+                Get the pitch.
+                Get the custom forecast.
+            To change your settings, say:
+                Set location to Boulder, Colorado.
+                Set the rate to 109 percent.
+                Set the pitch to 79 percent.
+                Add temperature to the custom forecast.
+                Remove dewpoint from the custom forecast.
+                Reset the custom forecast.
+            When using a location, you may use either the city name and state or the
+            zip code.
+            """
+        return self.respond(handler_input, user, text)
+
+# Cancel and Stop Intent Handler
+class CancelAndStopIntentHandler(BaseIntentHandler):
+    """Handler for Cancel and Stop Intent"""
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        return (is_intent_name("AMAZON.CancelIntent")(handler_input) or
+                is_intent_name("AMAZON.StopIntent")(handler_input))
+    
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        user, loc, event = self.get_user_and_location(handler_input)
+        
+        text = "Thank you for using Clime a Cast."
+        return self.respond(handler_input, user, text, end=True)
+
+# Fallback, Yes, No, and StartOver Intent Handler (basic responses)
+class FallbackIntentHandler(BaseIntentHandler):
+    """Handler for Fallback, Yes, No, and StartOver intents"""
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        return (is_intent_name("AMAZON.FallbackIntent")(handler_input) or
+                is_intent_name("AMAZON.YesIntent")(handler_input) or
+                is_intent_name("AMAZON.NoIntent")(handler_input) or
+                is_intent_name("AMAZON.StartOverIntent")(handler_input))
+    
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        user, loc, event = self.get_user_and_location(handler_input)
+        
+        # For now, these all return to help
+        text = "I didn't understand that. " \
+               "You can ask for current conditions, forecasts, or alerts. " \
+               "Say help for more information."
+        return self.respond(handler_input, user, text, end=False)
+
+# Metric Intent Handlers
+class MetricIntentHandler(BaseIntentHandler):
+    """Handler for MetricIntent and MetricPosIntent"""
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        return (is_intent_name("MetricIntent")(handler_input) or
+                is_intent_name("MetricPosIntent")(handler_input))
+    
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        user, loc, event = self.get_user_and_location(handler_input)
+        slots = self.get_slot_values(handler_input)
+        
+        # Check if location is required
+        if loc is None:
+            text = """You must set a default location by using phrases like:
+                       Alexa, ask Clima Cast to set my location to Boulder Colorado.
+                   or:
+                       Alexa, ask Clima Cast to set my location to zip code 5 5 1 1 8.
+                   """
+            return self.respond(handler_input, user, text)
+        
+        # Create Skill instance for metric processing
+        # Build compatible event structure
+        request = handler_input.request_envelope.request
+        session = handler_input.request_envelope.session
+        event["request"] = {
+            "type": "IntentRequest",
+            "intent": {
+                "name": request.intent.name,
+                "slots": {}
+            }
+        }
+        
+        # Convert slots
+        if request.intent.slots:
+            for slot_name, slot in request.intent.slots.items():
+                if slot.value:
+                    event["request"]["intent"]["slots"][slot_name] = {
+                        "name": slot_name,
+                        "value": slot.value
+                    }
+        
+        # Use existing Skill logic
+        skill = Skill(event)
+        skill.loc = loc
+        skill.user = user
+        skill.session = event["session"]
+        skill.attrs = session.attributes or {}
+        skill.request = event["request"]
+        skill.intent = event["request"]["intent"]
+        
+        # Load slot values
+        skill.slots = type("slots", (), {})
+        for slot_name in SLOTS:
+            val = slots.get(slot_name)
+            setattr(skill.slots, slot_name, val)
+        
+        # Get when information
+        skill.get_when()
+        
+        # Call metric_intent
+        response = skill.metric_intent()
+        
+        # Convert to ASK SDK response
+        if response and "response" in response:
+            response_builder = handler_input.response_builder
+            
+            if "outputSpeech" in response["response"]:
+                speech = response["response"]["outputSpeech"]
+                if speech["type"] == "SSML":
+                    response_builder.speak(speech["ssml"])
+            
+            if "reprompt" in response["response"] and response["response"]["reprompt"]:
+                reprompt = response["response"]["reprompt"].get("outputSpeech")
+                if reprompt and reprompt.get("ssml"):
+                    response_builder.ask(reprompt["ssml"])
+            
+            should_end = response["response"].get("shouldEndSession", True)
+            response_builder.set_should_end_session(should_end)
+            
+            return response_builder.response
+        
+        return handler_input.response_builder.response
+
+# Settings Intent Handlers
+class GetSettingIntentHandler(BaseIntentHandler):
+    """Handler for GetSettingIntent"""
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        return is_intent_name("GetSettingIntent")(handler_input)
+    
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        user, loc, event = self.get_user_and_location(handler_input)
+        slots = self.get_slot_values(handler_input)
+        
+        if loc is None:
+            text = "You must set a default location first."
+            return self.respond(handler_input, user, text)
+        
+        # Use existing Skill logic
+        request = handler_input.request_envelope.request
+        session = handler_input.request_envelope.session
+        event["request"] = {
+            "type": "IntentRequest",
+            "intent": {
+                "name": request.intent.name,
+                "slots": {}
+            }
+        }
+        
+        if request.intent.slots:
+            for slot_name, slot in request.intent.slots.items():
+                if slot.value:
+                    event["request"]["intent"]["slots"][slot_name] = {
+                        "name": slot_name,
+                        "value": slot.value
+                    }
+        
+        skill = Skill(event)
+        skill.loc = loc
+        skill.user = user
+        skill.session = event["session"]
+        skill.attrs = session.attributes or {}
+        skill.request = event["request"]
+        skill.intent = event["request"]["intent"]
+        
+        skill.slots = type("slots", (), {})
+        for slot_name in SLOTS:
+            val = slots.get(slot_name)
+            setattr(skill.slots, slot_name, val)
+        
+        response = skill.get_setting_intent()
+        
+        return self._convert_response(handler_input, response)
+
+    def _convert_response(self, handler_input, response):
+        """Convert Skill response to ASK SDK format"""
+        if response and "response" in response:
+            response_builder = handler_input.response_builder
+            
+            if "outputSpeech" in response["response"]:
+                speech = response["response"]["outputSpeech"]
+                if speech["type"] == "SSML":
+                    response_builder.speak(speech["ssml"])
+            
+            if "reprompt" in response["response"] and response["response"]["reprompt"]:
+                reprompt = response["response"]["reprompt"].get("outputSpeech")
+                if reprompt and reprompt.get("ssml"):
+                    response_builder.ask(reprompt["ssml"])
+            
+            should_end = response["response"].get("shouldEndSession", True)
+            response_builder.set_should_end_session(should_end)
+            
+            return response_builder.response
+        
+        return handler_input.response_builder.response
+
+class SetPitchIntentHandler(BaseIntentHandler):
+    """Handler for SetPitchIntent"""
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        return is_intent_name("SetPitchIntent")(handler_input)
+    
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        user, loc, event = self.get_user_and_location(handler_input)
+        slots = self.get_slot_values(handler_input)
+        
+        percent = slots.get("percent")
+        if percent and percent.isdigit():
+            pitch = int(percent)
+            if 130 >= pitch >= 70:
+                user.pitch = pitch
+                text = "Voice pitch has been set to %d percent." % pitch
+            else:
+                text = "The pitch must be between 70 and 130 percent"
+        else:
+            text = "Expected a percentage when setting the pitch"
+        
+        return self.respond(handler_input, user, text)
+
+class SetRateIntentHandler(BaseIntentHandler):
+    """Handler for SetRateIntent"""
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        return is_intent_name("SetRateIntent")(handler_input)
+    
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        user, loc, event = self.get_user_and_location(handler_input)
+        slots = self.get_slot_values(handler_input)
+        
+        percent = slots.get("percent")
+        if percent and percent.isdigit():
+            rate = int(percent)
+            if 150 >= rate >= 50:
+                user.rate = rate
+                text = "Voice rate has been set to %d percent." % rate
+            else:
+                text = "The rate must be between 50 and 150 percent"
+        else:
+            text = "Expected a percentage when setting the rate"
+        
+        return self.respond(handler_input, user, text)
+
+class SetLocationIntentHandler(BaseIntentHandler):
+    """Handler for SetLocationIntent"""
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        return is_intent_name("SetLocationIntent")(handler_input)
+    
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        user, loc, event = self.get_user_and_location(handler_input)
+        slots = self.get_slot_values(handler_input)
+        
+        location_name = slots.get("location") or slots.get("zipcode")
+        if not location_name:
+            text = "You must include the location"
+            return self.respond(handler_input, user, text)
+        
+        location_obj = Location(event)
+        text = location_obj.set(location_name, loc)
+        if text is None:
+            user.location = location_obj.name
+            text = "Your default location has been set to %s." % location_obj.spoken_name()
+        
+        return self.respond(handler_input, user, text)
+
+# Custom Forecast Intent Handlers
+class GetCustomIntentHandler(BaseIntentHandler):
+    """Handler for GetCustomIntent"""
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        return is_intent_name("GetCustomIntent")(handler_input)
+    
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        user, loc, event = self.get_user_and_location(handler_input)
+        
+        text = "The custom forecast will include the %s." % \
+               ", ".join(list(user.metrics[:-1])) + " and " + user.metrics[-1]
+        return self.respond(handler_input, user, text)
+
+class AddCustomIntentHandler(BaseIntentHandler):
+    """Handler for AddCustomIntent"""
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        return is_intent_name("AddCustomIntent")(handler_input)
+    
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        user, loc, event = self.get_user_and_location(handler_input)
+        slots = self.get_slot_values(handler_input)
+        
+        metric = slots.get("metric")
+        if metric is None:
+            text = "You must include a metric like temperature, humidity or wind."
+            return self.respond(handler_input, user, text)
+        
+        if metric not in METRICS:
+            text = "%s is an unrecognized metric." % metric
+            return self.respond(handler_input, user, text)
+        
+        metric_info = METRICS[metric]
+        if not metric_info[1]:
+            text = "%s can't be used when customizing the forecast." % metric_info[0]
+            return self.respond(handler_input, user, text)
+        
+        if user.has_metric(metric_info[0]):
+            text = "%s is already included in the custom forecast." % metric_info[0]
+            return self.respond(handler_input, user, text)
+        
+        user.add_metric(metric_info[0])
+        text = "%s has been added to the custom forecast." % metric_info[0]
+        return self.respond(handler_input, user, text)
+
+class RemoveCustomIntentHandler(BaseIntentHandler):
+    """Handler for RemCustomIntent"""
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        return is_intent_name("RemCustomIntent")(handler_input)
+    
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        user, loc, event = self.get_user_and_location(handler_input)
+        slots = self.get_slot_values(handler_input)
+        
+        metric = slots.get("metric")
+        if metric is None:
+            text = "You must include a metric like temperature, humidity or wind."
+            return self.respond(handler_input, user, text)
+        
+        if metric not in METRICS:
+            text = "%s is an unrecognized metric." % metric
+            return self.respond(handler_input, user, text)
+        
+        metric_info = METRICS[metric]
+        if not metric_info[1]:
+            text = "%s can't be used when customizing the forecast." % metric_info[0]
+            return self.respond(handler_input, user, text)
+        
+        if not user.has_metric(metric_info[0]):
+            text = "%s is already excluded from the custom forecast." % metric_info[0]
+            return self.respond(handler_input, user, text)
+        
+        user.remove_metric(metric_info[0])
+        text = "%s has been removed from the custom forecast." % metric_info[0]
+        return self.respond(handler_input, user, text)
+
+class ResetCustomIntentHandler(BaseIntentHandler):
+    """Handler for RstCustomIntent"""
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        return is_intent_name("RstCustomIntent")(handler_input)
+    
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        user, loc, event = self.get_user_and_location(handler_input)
+        
+        user.reset_metrics()
+        text = "the custom forecast has been reset to defaults."
+        return self.respond(handler_input, user, text)
 
 class SkillRequestHandler(AbstractRequestHandler):
     """Handle all Alexa requests using the Skill class"""
@@ -2563,8 +3115,28 @@ class SkillExceptionHandler(AbstractExceptionHandler):
 
 # Build the skill
 sb = SkillBuilder()
-sb.add_request_handler(SkillRequestHandler())
+
+# Register individual intent handlers
+# Order matters - more specific handlers should be registered first
+sb.add_request_handler(LaunchRequestHandler())
+sb.add_request_handler(SessionEndedRequestHandler())
+sb.add_request_handler(HelpIntentHandler())
+sb.add_request_handler(CancelAndStopIntentHandler())
+sb.add_request_handler(MetricIntentHandler())
+sb.add_request_handler(GetSettingIntentHandler())
+sb.add_request_handler(SetPitchIntentHandler())
+sb.add_request_handler(SetRateIntentHandler())
+sb.add_request_handler(SetLocationIntentHandler())
+sb.add_request_handler(GetCustomIntentHandler())
+sb.add_request_handler(AddCustomIntentHandler())
+sb.add_request_handler(RemoveCustomIntentHandler())
+sb.add_request_handler(ResetCustomIntentHandler())
+sb.add_request_handler(FallbackIntentHandler())
+
+# Add exception handler
 sb.add_exception_handler(SkillExceptionHandler())
+
+# Create lambda handler
 lambda_handler = sb.lambda_handler()
 
 
