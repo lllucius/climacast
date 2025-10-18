@@ -1174,157 +1174,6 @@ class GridPoints(Base):
         return self.to_skys(self.get_final("skyCover"), self.is_day(self.stime))
 
 class Observations(Base):
-    """
-    DEPRECATED: Legacy observations class using XML endpoints.
-    Use Observationsv3 instead which uses the modern JSON API.
-    This class is kept for backward compatibility but uses deprecated NWS endpoints.
-    """
-    def __init__(self, event, stations, limit=3):
-        super().__init__(event)
-        self.stations = stations
-        self.xml = None
-        self.station = None
-
-        # Retrieve the current observations from the nearest station
-        for stationid in self.stations:
-            # Get the station info
-            station = self.get_station(stationid)
-            #print("STATION", station)
-            if station is None:
-                continue
-
-            r = HTTPS.get("https://w1.weather.gov/xml/current_obs/%s.xml" % stationid)
-            if r.status_code != 200 or r.text is None or r.text == "":
-                continue
-
-            self.station = station
-            self.xml = XML(r.text.encode("UTF-8"))
-
-            r = HTTPS.get("https://w1.weather.gov/data/obhistory/%s.html" % stationid)
-            if r.status_code == 200 and r.content:
-                tree = html.fromstring(r.content)
-
-                self.obs = []
-                try:
-                    rows = tree.find(".//th").getparent()
-                    for row in rows.itersiblings():
-                        kids = row.getchildren()
-                        if len(kids) > 0 and kids[0].tag == "td":
-                            self.obs.append({"time": kids[1].text,
-                                             "wind": kids[2].text,
-                                             "weather": kids[4].text,
-                                             "temp": kids[6].text,
-                                             "humidity": kids[10].text,
-                                             "windchill": kids[11].text,
-                                             "heatindex": kids[12].text,
-                                             "pressure": kids[13].text,
-                                             "precip1": kids[15].text,
-                                             "precip3": kids[16].text,
-                                             "precip6": kids[17].text})
-                except:
-                    pass
-            break
-
-    def get_value(self, metric):
-        e = self.xml.find(metric)
-        return e.text if e is not None else None
-
-    def get_rounded(self, metric):
-        f = self.get_value(metric)
-        return "%.0f" % float(f) if f else None
-
-    @property
-    def is_good(self):
-        return self.xml is not None
-
-    @property
-    def station_id(self):
-        return self.station["stationIdentifier"]
-
-    @property
-    def station_name(self):
-        return self.station["name"]
-
-    @property
-    def time_reported(self):
-        return parser.parse(self.get_value("observation_time_rfc822"))
-
-    @property
-    def description(self):
-        return self.get_value("weather")
-
-    @property
-    def wind_speed(self):
-        return self.get_rounded("wind_mph")
-
-    @property
-    def wind_direction(self):
-        return self.get_value("wind_dir")
-
-    @property
-    def wind_gust(self):
-        return self.get_rounded("wind_gust_mph")
-
-    @property
-    def temp(self):
-        return self.get_rounded("temp_f")
-
-    @property
-    def wind_chill(self):
-        wc = self.get_value("windchill_f")
-        if wc:
-            return wc
-
-        t = self.get_value("temp_f")
-        ws = self.get_value("wind_mph")
-        if t and ws:
-            return self.to_wind_chill(float(t), float(ws))
-
-        return None
-
-    @property
-    def heat_index(self):
-        hi = self.get_value("heat_index_f")
-        if hi:
-            return hi
-
-        t = self.get_value("temp_f")
-        rh = self.get_value("relative_humidity")
-        if t and rh:
-            return self.to_heat_index(float(t), float(rh))
-
-        return None
-
-    @property
-    def feels_like(self):
-        return self.wind_chill() or self.heat_index()
-
-    @property
-    def dewpoint(self):
-        return self.get_rounded("dewpoint_f")
-
-    @property
-    def humidity(self):
-        return self.get_value("relative_humidity")
-
-    @property
-    def pressure(self):
-        return self.get_value("pressure_in")
-
-    @property
-    def pressure_trend(self):
-        if self.obs:
-            prev = float(self.obs[1]["pressure"])
-            curr = float(self.obs[0]["pressure"])
-            if curr < prev:
-                return "falling"
-            if curr > prev:
-                return "rising"
-            return "steady"
-
-        return None
-
-class Observationsv3(Base):
     def __init__(self, event, stations, limit=3):
         super().__init__(event)
         self.stations = stations
@@ -2567,185 +2416,156 @@ class Skill(Base):
         self.quarters = hours // 6
         #print("WHEN:", self.stime, self.etime, self.quarters, quarter)
 
-def legacy_lambda_handler(event, context=None):
-    """Legacy handler for backward compatibility with old direct invocations"""
-    #print(json.dumps(event, indent=4))
-    try:
-        if "event-type" in event:
-            if event["event-type"] == "pinger":
-                return 
-            else:
-                DataLoad(event).handle_event()
-        else:
-            return Skill(event).handle_event()
-    except SystemExit:
-        pass
-    except:
-        import traceback
-        notify(event, "Exception", traceback.format_exc())
-        text = '<say-as interpret-as="interjection">aw man</say-as>' + \
-               '<prosody pitch="+25%">' + \
-               "Clima Cast has experienced an error.  The author has been " + \
-               "notified and will address it as soon as possible.  Until then " + \
-               "you might be able to rephrase your request to get around the issue." + \
-               '</prosody>'
-        return {
-                 "version": "1.0",
-                 "response":
-                 {
-                   "outputSpeech":
-                   {
-                     "type": "SSML",
-                     "ssml": '<speak>%s</speak>' % text
-                   },
-                   "reprompt":
-                   {
-                     "outputSpeech":
-                     {
-                       "type": "SSML",
-                        "ssml": None
-                     },
-                   },
-                   "shouldEndSession": True
-                 } 
-               }
+# ASK SDK imports and handler
+from ask_sdk_core.skill_builder import SkillBuilder
+from ask_sdk_core.dispatch_components import AbstractRequestHandler, AbstractExceptionHandler
+from ask_sdk_core.utils import is_request_type, is_intent_name
+from ask_sdk_core.handler_input import HandlerInput
+from ask_sdk_model import Response
 
-# ASK SDK imports
-try:
-    from ask_sdk_core.skill_builder import SkillBuilder
-    from ask_sdk_core.dispatch_components import AbstractRequestHandler, AbstractExceptionHandler
-    from ask_sdk_core.utils import is_request_type, is_intent_name
-    from ask_sdk_core.handler_input import HandlerInput
-    from ask_sdk_model import Response
-    ASK_SDK_AVAILABLE = True
-except ImportError:
-    ASK_SDK_AVAILABLE = False
-
-if ASK_SDK_AVAILABLE:
-    class ASKSDKRequestHandler(AbstractRequestHandler):
-        """Adapter to handle ASK SDK requests using the legacy Skill class"""
-        def can_handle(self, handler_input):
-            # type: (HandlerInput) -> bool
-            return True  # Handle all requests
-        
-        def handle(self, handler_input):
-            # type: (HandlerInput) -> Response
-            # Convert ASK SDK format to legacy format
-            legacy_event = {
-                "version": "1.0",
-                "session": {
-                    "new": handler_input.request_envelope.session.new,
-                    "sessionId": handler_input.request_envelope.session.session_id,
-                    "application": {
-                        "applicationId": handler_input.request_envelope.session.application.application_id
-                    },
-                    "attributes": handler_input.request_envelope.session.attributes or {},
-                    "user": {
-                        "userId": handler_input.request_envelope.session.user.user_id
-                    }
-                },
-                "request": {}
-            }
-            
-            # Convert request
-            request = handler_input.request_envelope.request
-            if is_request_type("LaunchRequest")(handler_input):
-                legacy_event["request"] = {
-                    "type": "LaunchRequest",
-                    "requestId": request.request_id,
-                    "timestamp": str(request.timestamp)
-                }
-            elif is_request_type("SessionEndedRequest")(handler_input):
-                legacy_event["request"] = {
-                    "type": "SessionEndedRequest",
-                    "requestId": request.request_id,
-                    "timestamp": str(request.timestamp),
-                    "reason": getattr(request, 'reason', 'USER_INITIATED')
-                }
-                if hasattr(request, 'error'):
-                    legacy_event["request"]["error"] = {
-                        "type": request.error.error_type,
-                        "message": request.error.message
-                    }
-            elif is_request_type("IntentRequest")(handler_input):
-                legacy_event["request"] = {
-                    "type": "IntentRequest",
-                    "requestId": request.request_id,
-                    "timestamp": str(request.timestamp),
-                    "intent": {
-                        "name": request.intent.name,
-                        "slots": {}
-                    }
-                }
-                # Convert slots
-                if request.intent.slots:
-                    for slot_name, slot in request.intent.slots.items():
-                        if slot.value:
-                            legacy_event["request"]["intent"]["slots"][slot_name] = {
-                                "name": slot_name,
-                                "value": slot.value
-                            }
-            
-            # Call legacy handler
-            legacy_response = legacy_lambda_handler(legacy_event, None)
-            
-            # Convert response back to ASK SDK format
-            if legacy_response and "response" in legacy_response:
-                response_builder = handler_input.response_builder
-                
-                if "outputSpeech" in legacy_response["response"]:
-                    speech = legacy_response["response"]["outputSpeech"]
-                    if speech["type"] == "SSML":
-                        response_builder.speak(speech["ssml"])
-                
-                if "reprompt" in legacy_response["response"] and legacy_response["response"]["reprompt"]:
-                    reprompt = legacy_response["response"]["reprompt"].get("outputSpeech")
-                    if reprompt and reprompt.get("ssml"):
-                        response_builder.ask(reprompt["ssml"])
-                
-                should_end = legacy_response["response"].get("shouldEndSession", True)
-                response_builder.set_should_end_session(should_end)
-                
-                return response_builder.response
-            
-            return handler_input.response_builder.response
+class SkillRequestHandler(AbstractRequestHandler):
+    """Handle all Alexa requests using the Skill class"""
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        return True  # Handle all requests
     
-    class ErrorHandler(AbstractExceptionHandler):
-        """Generic error handler"""
-        def can_handle(self, handler_input, exception):
-            # type: (HandlerInput, Exception) -> bool
-            return True
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        # Build event from ASK SDK request
+        event = {
+            "version": "1.0",
+            "session": {
+                "new": handler_input.request_envelope.session.new,
+                "sessionId": handler_input.request_envelope.session.session_id,
+                "application": {
+                    "applicationId": handler_input.request_envelope.session.application.application_id
+                },
+                "attributes": handler_input.request_envelope.session.attributes or {},
+                "user": {
+                    "userId": handler_input.request_envelope.session.user.user_id
+                }
+            },
+            "request": {}
+        }
         
-        def handle(self, handler_input, exception):
-            # type: (HandlerInput, Exception) -> Response
-            import traceback
-            event = {
-                "session": {
-                    "sessionId": handler_input.request_envelope.session.session_id,
-                    "user": {"userId": handler_input.request_envelope.session.user.user_id}
+        # Convert request
+        request = handler_input.request_envelope.request
+        if is_request_type("LaunchRequest")(handler_input):
+            event["request"] = {
+                "type": "LaunchRequest",
+                "requestId": request.request_id,
+                "timestamp": str(request.timestamp)
+            }
+        elif is_request_type("SessionEndedRequest")(handler_input):
+            event["request"] = {
+                "type": "SessionEndedRequest",
+                "requestId": request.request_id,
+                "timestamp": str(request.timestamp),
+                "reason": getattr(request, 'reason', 'USER_INITIATED')
+            }
+            if hasattr(request, 'error'):
+                event["request"]["error"] = {
+                    "type": request.error.error_type,
+                    "message": request.error.message
+                }
+        elif is_request_type("IntentRequest")(handler_input):
+            event["request"] = {
+                "type": "IntentRequest",
+                "requestId": request.request_id,
+                "timestamp": str(request.timestamp),
+                "intent": {
+                    "name": request.intent.name,
+                    "slots": {}
                 }
             }
-            notify(event, "ASK SDK Exception", traceback.format_exc())
-            
+            # Convert slots
+            if request.intent.slots:
+                for slot_name, slot in request.intent.slots.items():
+                    if slot.value:
+                        event["request"]["intent"]["slots"][slot_name] = {
+                            "name": slot_name,
+                            "value": slot.value
+                        }
+        
+        # Process with Skill class
+        try:
+            if "event-type" in event:
+                if event["event-type"] == "pinger":
+                    return handler_input.response_builder.response
+                else:
+                    DataLoad(event).handle_event()
+                    return handler_input.response_builder.response
+            else:
+                skill_response = Skill(event).handle_event()
+        except SystemExit:
+            return handler_input.response_builder.response
+        except Exception as e:
+            import traceback
+            notify(event, "Exception", traceback.format_exc())
             speech_text = '<say-as interpret-as="interjection">aw man</say-as>' + \
                          '<prosody pitch="+25%">' + \
                          "Clima Cast has experienced an error. The author has been " + \
                          "notified and will address it as soon as possible. Until then " + \
                          "you might be able to rephrase your request to get around the issue." + \
                          '</prosody>'
-            
             return handler_input.response_builder.speak(
                 f"<speak>{speech_text}</speak>"
             ).set_should_end_session(True).response
+        
+        # Convert Skill response to ASK SDK format
+        if skill_response and "response" in skill_response:
+            response_builder = handler_input.response_builder
+            
+            if "outputSpeech" in skill_response["response"]:
+                speech = skill_response["response"]["outputSpeech"]
+                if speech["type"] == "SSML":
+                    response_builder.speak(speech["ssml"])
+            
+            if "reprompt" in skill_response["response"] and skill_response["response"]["reprompt"]:
+                reprompt = skill_response["response"]["reprompt"].get("outputSpeech")
+                if reprompt and reprompt.get("ssml"):
+                    response_builder.ask(reprompt["ssml"])
+            
+            should_end = skill_response["response"].get("shouldEndSession", True)
+            response_builder.set_should_end_session(should_end)
+            
+            return response_builder.response
+        
+        return handler_input.response_builder.response
+
+class SkillExceptionHandler(AbstractExceptionHandler):
+    """Handle exceptions"""
+    def can_handle(self, handler_input, exception):
+        # type: (HandlerInput, Exception) -> bool
+        return True
     
-    # Build the skill
-    sb = SkillBuilder()
-    sb.add_request_handler(ASKSDKRequestHandler())
-    sb.add_exception_handler(ErrorHandler())
-    lambda_handler = sb.lambda_handler()
-else:
-    # Fallback to legacy handler if ASK SDK not available
-    lambda_handler = legacy_lambda_handler
+    def handle(self, handler_input, exception):
+        # type: (HandlerInput, Exception) -> Response
+        import traceback
+        event = {
+            "session": {
+                "sessionId": handler_input.request_envelope.session.session_id,
+                "user": {"userId": handler_input.request_envelope.session.user.user_id}
+            }
+        }
+        notify(event, "ASK SDK Exception", traceback.format_exc())
+        
+        speech_text = '<say-as interpret-as="interjection">aw man</say-as>' + \
+                     '<prosody pitch="+25%">' + \
+                     "Clima Cast has experienced an error. The author has been " + \
+                     "notified and will address it as soon as possible. Until then " + \
+                     "you might be able to rephrase your request to get around the issue." + \
+                     '</prosody>'
+        
+        return handler_input.response_builder.speak(
+            f"<speak>{speech_text}</speak>"
+        ).set_should_end_session(True).response
+
+# Build the skill
+sb = SkillBuilder()
+sb.add_request_handler(SkillRequestHandler())
+sb.add_exception_handler(SkillExceptionHandler())
+lambda_handler = sb.lambda_handler()
 
 
 def test_load():

@@ -9,7 +9,7 @@ This is a major refactoring that modernizes the skill to use the current Alexa-h
 
 **Key improvements:**
 - 🎯 Modern Alexa-hosted skill structure with ASK SDK support
-- 🔄 Updated to NWS API v3 JSON endpoints (removed deprecated XML)
+- 🔄 Updated to NWS API v3 JSON endpoints
 - 📦 Simplified deployment with git push for hosted skills
 - 📚 Comprehensive documentation (deployment, testing, migration)
 - 🔧 Better dependency management with requirements.txt
@@ -26,9 +26,9 @@ This project follows the Alexa-hosted skill pattern:
 - `skill-package/` - Skill metadata and interaction model
   - `skill.json` - Skill manifest
   - `interactionModels/custom/` - Interaction models by locale
-- `skill/` - Legacy skill definition files (deprecated)
+- `skill/` - Original skill definition files (reference only)
 - `tests/` - Test files
-- `aniso8601/`, `requests/`, `aws-lambda-lxml/` - Vendored dependencies (for legacy deployment)
+- `aniso8601/`, `requests/`, `aws-lambda-lxml/` - Vendored dependencies (optional, for environments without pip)
 
 ## Setup and Deployment
 

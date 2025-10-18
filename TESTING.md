@@ -4,14 +4,15 @@ This guide explains how to test the Clima Cast Alexa skill.
 
 ## Local Testing (Without ASK SDK)
 
-The skill can be tested locally using the legacy handler mode. This is useful for debugging business logic without needing the full ASK SDK environment.
+The skill requires ASK SDK for Python. For debugging business logic, you can test locally with proper dependencies installed.
 
 ### Prerequisites
 
 1. Install Python dependencies:
    ```bash
    cd lambda
-   # Use the vendored dependencies from the legacy structure
+   pip install -r requirements.txt
+   # Or use the vendored dependencies if pip is not available
    export PYTHONPATH=../aniso8601:../requests:../aws-lambda-lxml/3.6.4/py36:$PYTHONPATH
    ```
 
@@ -44,7 +45,7 @@ Available test files:
 
 ### Creating Test Cases
 
-Test cases are JSON files in the legacy Alexa request format. Example:
+Test cases are JSON files in the Alexa request format. Example:
 
 ```json
 {

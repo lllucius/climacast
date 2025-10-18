@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.0.0] - 2024-10-18
 
 ### Added
-- ASK SDK for Python support with automatic fallback to legacy handler
+- ASK SDK for Python support
 - Modern Alexa-hosted skill directory structure (`lambda/`, `skill-package/`)
 - Comprehensive deployment guide (DEPLOYMENT.md)
 - Migration guide for upgrading from v1.x (MIGRATION.md)
@@ -16,18 +16,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Modern interaction model in JSON format (en-US.json)
 - Skill manifest file (skill.json) for Alexa skill configuration
 - Support for both Alexa-hosted and self-hosted deployment options
-- Backward compatibility mode for legacy invocations
 - Lambda function README with API documentation
 - Updated .gitignore for modern development workflow
 
 ### Changed
-- **BREAKING**: Migrated from legacy XML observation endpoints to NWS JSON API v3
+- **BREAKING**: Migrated from XML observation endpoints to NWS JSON API v3
   - Now uses `Observationsv3` class with `/stations/{id}/observations` endpoint
-  - Removed dependency on deprecated `w1.weather.gov/xml/current_obs/` endpoint
-  - Removed dependency on deprecated `w1.weather.gov/data/obhistory/` endpoint
+  - Removed `w1.weather.gov/xml/current_obs/` endpoint
+  - Removed `w1.weather.gov/data/obhistory/` endpoint
+- **BREAKING**: Requires ASK SDK for Python
 - Reorganized project structure to follow Alexa-hosted skill pattern
 - Updated deployment script to work with new directory structure
-- Dependencies now managed via `requirements.txt` instead of vendored copies
+- Dependencies now managed via `requirements.txt`
 - Updated User-Agent header to "ClimacastAlexaSkill/2.0"
 - Bumped VERSION constant from 1 to 2
 - Updated README with quick start guides for both deployment options
@@ -38,19 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Regex syntax warning in `get_discussion` method (added raw string prefix)
 - Improved error handling for ASK SDK request/response conversion
 
-### Deprecated
-- Legacy `Observations` class (uses deprecated XML endpoints)
-  - Still available for backward compatibility but marked for removal
-  - Use `Observationsv3` instead
-- Legacy directory structure (root-level lambda_function.py)
-  - Now located in `lambda/` directory
-- Legacy skill definition files in `skill/` directory
-  - Now consolidated in `skill-package/interactionModels/custom/`
-
 ### Removed
-- Dependency on bundled `requests/` library (now in requirements.txt)
-- Dependency on bundled `aniso8601/` library (now in requirements.txt)
-- Reliance on deprecated NWS XML observation endpoints
+- XML-based `Observations` class (use `Observationsv3` instead)
+- Old directory structure (root-level lambda_function.py)
+- Bundled dependencies in favor of `requirements.txt`
+- XML observation endpoints
 
 ### Security
 - Updated to use modern NWS API endpoints with better error handling
