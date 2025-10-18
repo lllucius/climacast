@@ -1,11 +1,22 @@
 # Clima Cast
-NWS API based weather Alexa skill (Version 2.0)
+NWS API based weather Alexa skill (Version 2.1)
 
 Using information provided by the National Weather Service, Clima Cast gives you the current conditions and the 7-day forecast for your area or any other United States city.
 
+## What's New in Version 2.1
+
+**SkillBuilder Refactoring** - The lambda function now uses individual ASK SDK intent handlers instead of a generic adapter pattern. See [SKILLBUILDER_REFACTORING.md](SKILLBUILDER_REFACTORING.md) for complete details.
+
+**Key improvements:**
+- ✨ Individual handler classes for each intent (14 handlers)
+- 🏗️ Idiomatic ASK SDK SkillBuilder pattern
+- 🧪 More maintainable and testable code structure
+- 📖 Better separation of concerns
+- 🔒 Security verified (0 vulnerabilities)
+
 ## What's New in Version 2.0
 
-This is a major refactoring that modernizes the skill to use the current Alexa-hosted pattern and the latest NWS API endpoints. See [REFACTORING_SUMMARY.md](REFACTORING_SUMMARY.md) for complete details.
+This was a major refactoring that modernized the skill to use the current Alexa-hosted pattern and the latest NWS API endpoints. See [REFACTORING_SUMMARY.md](REFACTORING_SUMMARY.md) for complete details.
 
 **Key improvements:**
 - 🎯 Modern Alexa-hosted skill structure with ASK SDK support
@@ -14,7 +25,6 @@ This is a major refactoring that modernizes the skill to use the current Alexa-h
 - 📚 Comprehensive documentation (deployment, testing, migration)
 - 🔧 Better dependency management with requirements.txt
 - 🐛 Bug fixes and code improvements
-- 🔒 Security verified (0 vulnerabilities)
 
 For migration from v1.x, see [MIGRATION.md](MIGRATION.md).
 

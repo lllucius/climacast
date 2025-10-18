@@ -5,6 +5,36 @@ All notable changes to the Clima Cast Alexa skill will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2025-10-18
+
+### Added
+- Individual ASK SDK intent handler classes for all 18 intents
+- BaseIntentHandler class with shared functionality (get_user_and_location, get_slot_values, respond)
+- SKILLBUILDER_REFACTORING.md documentation explaining the new architecture
+- Custom lambda_handler wrapper to support both Alexa and DataLoad events
+
+### Changed
+- **BREAKING**: Replaced generic SkillRequestHandler adapter with individual intent handlers
+- Refactored intent routing to use SkillBuilder.add_request_handler() for each intent
+- Intent handlers now directly extend AbstractRequestHandler instead of routing through Skill class
+- Handler registration now explicit in SkillBuilder (14 individual handlers)
+- Lambda handler now created via SkillBuilder.lambda_handler() with custom wrapper
+
+### Removed
+- Generic SkillRequestHandler adapter class (109 lines removed)
+- FUNCS dictionary-based routing (now obsolete)
+- Event conversion logic from ASK SDK to old format (moved to individual handlers)
+
+### Improved
+- Better separation of concerns with one handler per intent
+- More maintainable and testable code structure
+- Idiomatic ASK SDK code following best practices
+- Clearer intent handling logic
+- Easier to add new intents or modify existing ones
+
+### Security
+- CodeQL analysis: 0 vulnerabilities detected
+
 ## [2.0.0] - 2024-10-18
 
 ### Added
