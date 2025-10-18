@@ -168,28 +168,34 @@ All 18 intents from the original FUNCS dictionary are covered:
 - ✅ RemCustomIntent
 - ✅ RstCustomIntent
 
-## Backward Compatibility
+## Architecture Evolution
+
+### v2.1 Final - No Backwards Compatibility
+
+All weather logic has been consolidated into BaseIntentHandler methods:
+- `parse_when()` - Time/date parsing from slots
+- `get_alerts()` - Weather alerts retrieval
+- `get_current()` - Current conditions
+- `get_forecast()` - Forecast data
+- `get_extended()` - Extended forecast
+- `get_location_from_slots()` - Location processing
 
 ### Preserved Components
 
-The refactoring preserves existing functionality:
+Core classes remain unchanged:
+- ✅ **User class** - User profile management
+- ✅ **Location class** - Location handling
+- ✅ **Base class** - Utility methods (normalize, conversions, etc.)
+- ✅ **DataLoad class** - Data update events
+- ✅ **Helper classes** - GridPoints, Observations, Alerts, etc.
 
-- ✅ **Skill class** - Retained for complex weather logic (get_forecast, get_current, get_alerts, get_extended)
-- ✅ **User class** - User profile management unchanged
-- ✅ **Location class** - Location handling unchanged
-- ✅ **Base class** - Utility methods unchanged
-- ✅ **DataLoad class** - Data update events still supported
-- ✅ **All helper classes** - GridPoints, Observations, Alerts, etc.
+### Removed for Simplification
 
-### Why Keep the Skill Class?
+- ❌ **Skill class** - Backwards compatibility adapter (715 lines removed)
+- ❌ **FUNCS dictionary** - String-based routing (23 lines removed)
+- ❌ **Generic SkillRequestHandler** - Adapter pattern (109 lines removed)
 
-The Skill class contains complex weather processing logic that is reused by handlers:
-- Weather metric processing (get_current, get_forecast)
-- Alert handling (get_alerts)
-- Extended forecast (get_extended)
-- Time/date parsing (get_when)
-
-Rather than duplicate this logic in each handler, we reuse the Skill class methods where appropriate.
+All functionality moved directly into BaseIntentHandler for cleaner architecture.
 
 ## Testing
 

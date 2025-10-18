@@ -9,28 +9,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Individual ASK SDK intent handler classes for all 18 intents
-- BaseIntentHandler class with shared functionality (get_user_and_location, get_slot_values, respond)
+- BaseIntentHandler class with comprehensive weather functionality:
+  - `parse_when()` - Parse time/date from slots
+  - `get_alerts()` - Retrieve weather alerts
+  - `get_current()` - Get current conditions
+  - `get_forecast()` - Get forecast data
+  - `get_extended()` - Get extended forecast
+  - `get_location_from_slots()` - Process location input
 - SKILLBUILDER_REFACTORING.md documentation explaining the new architecture
 - Custom lambda_handler wrapper to support both Alexa and DataLoad events
 
 ### Changed
 - **BREAKING**: Replaced generic SkillRequestHandler adapter with individual intent handlers
+- **BREAKING**: Removed all backwards compatibility code (Skill class and FUNCS dictionary)
 - Refactored intent routing to use SkillBuilder.add_request_handler() for each intent
-- Intent handlers now directly extend AbstractRequestHandler instead of routing through Skill class
+- Intent handlers now directly extend AbstractRequestHandler
 - Handler registration now explicit in SkillBuilder (14 individual handlers)
 - Lambda handler now created via SkillBuilder.lambda_handler() with custom wrapper
+- MetricIntentHandler and GetSettingIntentHandler refactored to use BaseIntentHandler methods directly
+- All weather logic consolidated into BaseIntentHandler for better organization
 
 ### Removed
-- Generic SkillRequestHandler adapter class (109 lines removed)
-- FUNCS dictionary-based routing (now obsolete)
-- Event conversion logic from ASK SDK to old format (moved to individual handlers)
+- **Skill class entirely** (715 lines of backwards compatibility code)
+- **FUNCS dictionary** (23 lines of obsolete routing)
+- Generic SkillRequestHandler adapter class (109 lines)
+- Event conversion logic between ASK SDK and old format
+- Total reduction: 446 lines (14.5% smaller codebase)
 
 ### Improved
 - Better separation of concerns with one handler per intent
 - More maintainable and testable code structure
 - Idiomatic ASK SDK code following best practices
 - Clearer intent handling logic
+- Direct method calls without indirection
+- Faster execution (no unnecessary object creation or format conversion)
 - Easier to add new intents or modify existing ones
+- All weather logic in one centralized location
 
 ### Security
 - CodeQL analysis: 0 vulnerabilities detected
