@@ -16,11 +16,11 @@ import requests
 #from aniso8601 import parse_duration
 from aniso8601.duration import parse_duration
 from boto3 import resource as awsresource, client as awsclient
+from cachetools import TTLCache, cached
 from datetime import datetime
 from dateutil import parser, tz
 from dateutil.relativedelta import *
 from xml.etree.ElementTree import *
-from lxml import html
 from time import time
 
 # ASK SDK imports
@@ -29,7 +29,6 @@ from ask_sdk_core.dispatch_components import AbstractRequestHandler, AbstractExc
 from ask_sdk_core.utils import is_request_type, is_intent_name
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model import Response
-from ask_sdk_model.ui import SimpleCard
 
 """
     Anything defined here will persist for the duration of the lambda
@@ -379,6 +378,9 @@ USERCACHE = DDB.Table("UserCache")
 ZONECACHE = DDB.Table("ZoneCache")
 HTTPS = requests.Session()
 
+# Cache up to 100 HTTP responses for 1 hour
+HTTP_CACHE = TTLCache(maxsize=100, ttl=3600)
+
 def notify(event, sub, msg=None):
     """
         Send SNS message of an unusual event
@@ -415,6 +417,18 @@ def notify(event, sub, msg=None):
         print("NOTIFY:\n\n  %s\n\n%s" % (sub, text))
     else:
         SNS.publish(TopicArn=EVTID, Subject=sub, Message=text[:2**18])
+
+@cached(HTTP_CACHE)
+def get_api_data(url):
+    """
+        Cached HTTP GET request for API data
+    """
+    headers = {"User-Agent": "ClimacastAlexaSkill/2.0 (climacast@homerow.net)",
+               "Accept": "application/ld+json"}
+    r = HTTPS.get(url, headers=headers)
+    if r.status_code != 200 or r.text is None or r.text == "":
+        return None, r.status_code, r.url, r.content
+    return json.loads(r.text), r.status_code, r.url, None
 
 class Base(object):
     def __init__(self, event):
@@ -554,19 +568,19 @@ class Base(object):
         """
             Retrieve the JSON data from the given path and location
         """
-        headers = {"User-Agent": "ClimacastAlexaSkill/2.0 (climacast@homerow.net)",
-                   "Accept": "application/ld+json"}
-        r = HTTPS.get("https://%s/%s" % (loc, path.replace(" ", "+")), headers=headers)
-        if r.status_code != 200 or r.text is None or r.text == "":
+        url = "https://%s/%s" % (loc, path.replace(" ", "+"))
+        data, status_code, url_result, content = get_api_data(url)
+        
+        if data is None:
             notify(self.event,
-                        "HTTPSTATUS: %s" % r.status_code,
-                        "URL: %s\n\n%s" % (r.url, r.content))
+                        "HTTPSTATUS: %s" % status_code,
+                        "URL: %s\n\n%s" % (url_result, content))
             return None
             
-        #print("URL:", r.url)
-        #print("PAGE:", json.dumps(r.json(), indent=4))
+        #print("URL:", url_result)
+        #print("PAGE:", json.dumps(data, indent=4))
         
-        return json.loads(r.text)
+        return data
 
     def to_skys(self, percent, isday):
         """
@@ -2617,7 +2631,7 @@ def test_one():
 if __name__ == "__main__":
     import logging
     import sys
-    from cachecontrol import CacheControl, CacheControlAdapter
+    from cachecontrol import CacheControlAdapter
     from cachecontrol.caches.file_cache import FileCache
     from cachecontrol.heuristics import ExpiresAfter
     logging.basicConfig()
