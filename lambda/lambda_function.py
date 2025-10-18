@@ -27,7 +27,7 @@ from time import time
     Anything defined here will persist for the duration of the lambda
     container, so only initialize them once to reduce initialization time.
 """
-VERSION = 1
+VERSION = 2
 REVISION = 0
 
 EVTID = os.environ.get("event_id", "")
@@ -546,7 +546,7 @@ class Base(object):
         """
             Retrieve the JSON data from the given path and location
         """
-        headers = {"User-Agent": "ClimacastAlexaSkill/1.0 (climacast@homerow.net)",
+        headers = {"User-Agent": "ClimacastAlexaSkill/2.0 (climacast@homerow.net)",
                    "Accept": "application/ld+json"}
         r = HTTPS.get("https://%s/%s" % (loc, path.replace(" ", "+")), headers=headers)
         if r.status_code != 200 or r.text is None or r.text == "":
@@ -1174,6 +1174,11 @@ class GridPoints(Base):
         return self.to_skys(self.get_final("skyCover"), self.is_day(self.stime))
 
 class Observations(Base):
+    """
+    DEPRECATED: Legacy observations class using XML endpoints.
+    Use Observationsv3 instead which uses the modern JSON API.
+    This class is kept for backward compatibility but uses deprecated NWS endpoints.
+    """
     def __init__(self, event, stations, limit=3):
         super().__init__(event)
         self.stations = stations
@@ -1327,14 +1332,6 @@ class Observationsv3(Base):
         self.observations = None
         self.station = None
         self.index = 0
-
-        # Retrieve the current observations from the nearest station
-        for stationid in self.stations:
-            # Get the station info
-            station = self.get_station(stationid)
-            #print("STATION", station)
-            if station is None:
-                continue
 
         # Retrieve the current observations from the nearest station
         for stationid in self.stations:
@@ -2193,7 +2190,7 @@ class Skill(Base):
                         "s" if cnt > 1 else "")
 
         # Retrieve the current observations from the nearest station
-        obs = Observations(self.event, self.loc.observationStations)
+        obs = Observationsv3(self.event, self.loc.observationStations)
         if obs.is_good:
             text += "At %s, %s reported %s, " % \
                     (obs.time_reported.astimezone(self.loc.tz).strftime("%I:%M%p"),
