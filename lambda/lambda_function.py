@@ -3136,8 +3136,24 @@ sb.add_request_handler(FallbackIntentHandler())
 # Add exception handler
 sb.add_exception_handler(SkillExceptionHandler())
 
-# Create lambda handler
-lambda_handler = sb.lambda_handler()
+# Create lambda handler from SkillBuilder
+_skill_lambda_handler = sb.lambda_handler()
+
+# Wrap the skill lambda handler to support non-Alexa events (like DataLoad)
+def lambda_handler(event, context=None):
+    """
+    Lambda handler that supports both Alexa skill events and custom events
+    """
+    # Check if this is a custom event (not from Alexa)
+    if isinstance(event, dict) and "event-type" in event:
+        if event["event-type"] == "pinger":
+            return
+        else:
+            DataLoad(event).handle_event()
+            return
+    
+    # For Alexa events, use the SkillBuilder handler
+    return _skill_lambda_handler(event, context)
 
 
 def test_load():
