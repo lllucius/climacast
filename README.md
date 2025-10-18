@@ -1,7 +1,37 @@
 # Clima Cast
-NWS V3 API based weather Alexa skill
+NWS API based weather Alexa skill
 
 Using information provided by the National Weather Service, Clima Cast gives you the current conditions and the 7-day forecast for your area or any other United States city.
+
+## Project Structure
+
+This project follows the Alexa-hosted skill pattern:
+
+- `lambda/` - Lambda function code and dependencies
+- `skill-package/` - Skill metadata and interaction model
+  - `skill.json` - Skill manifest
+  - `interactionModels/custom/` - Interaction models by locale
+- `skill/` - Legacy skill definition files (deprecated)
+- `tests/` - Test files
+- `aniso8601/`, `requests/`, `aws-lambda-lxml/` - Vendored dependencies (for legacy deployment)
+
+## Setup and Deployment
+
+### Alexa-Hosted Skill (Recommended)
+
+1. Create a new Alexa-hosted skill in the Alexa Developer Console
+2. Clone this repository
+3. Copy the contents to your skill's code repository
+4. Set environment variables in the Lambda configuration:
+   - `app_id` - Your skill's application ID
+   - `mapquest_id` - MapQuest API key for geocoding
+   - `event_id` - (Optional) SNS topic for notifications
+
+### Self-Hosted Lambda
+
+See `lambda/README.md` for deployment instructions.
+
+## Usage
 
 When asking for specific weather conditions, you may use:
 

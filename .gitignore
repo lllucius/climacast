@@ -106,4 +106,7 @@ ENV/
 results
 test.json
 tests/test_one_off
+lambda.zip
+.ask/
+.vscode/
 

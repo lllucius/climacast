@@ -1,0 +1,301 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "clima cast",
+      "intents": [
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
+        },
+        {
+          "name": "MetricIntent",
+          "slots": [
+            {
+              "name": "leadin",
+              "type": "TYPE_LEADIN"
+            },
+            {
+              "name": "metric",
+              "type": "TYPE_METRIC"
+            },
+            {
+              "name": "when_abs",
+              "type": "TYPE_WHEN_ABS"
+            },
+            {
+              "name": "when_any",
+              "type": "TYPE_WHEN_ANY"
+            },
+            {
+              "name": "when_pos",
+              "type": "TYPE_WHEN_POS"
+            },
+            {
+              "name": "day",
+              "type": "TYPE_DAY"
+            },
+            {
+              "name": "month",
+              "type": "TYPE_MONTH"
+            },
+            {
+              "name": "location",
+              "type": "AMAZON.AdministrativeArea"
+            },
+            {
+              "name": "zip_conn",
+              "type": "TYPE_ZIP_CONN"
+            },
+            {
+              "name": "zipcode",
+              "type": "AMAZON.NUMBER"
+            }
+          ],
+          "samples": [
+            "for the {metric}",
+            "for the {metric} in {location}",
+            "{leadin} the {metric}",
+            "{leadin} the {metric} in {location}",
+            "{leadin} {metric}",
+            "what is the {metric}",
+            "what's the {metric}"
+          ]
+        },
+        {
+          "name": "GetSettingIntent",
+          "slots": [
+            {
+              "name": "setting",
+              "type": "TYPE_SETTING"
+            }
+          ],
+          "samples": [
+            "for the {setting}",
+            "get the {setting}",
+            "what is the {setting}"
+          ]
+        },
+        {
+          "name": "SetRateIntent",
+          "slots": [
+            {
+              "name": "percent",
+              "type": "AMAZON.NUMBER"
+            }
+          ],
+          "samples": [
+            "set the rate to {percent} percent",
+            "set rate to {percent} percent"
+          ]
+        },
+        {
+          "name": "SetPitchIntent",
+          "slots": [
+            {
+              "name": "percent",
+              "type": "AMAZON.NUMBER"
+            }
+          ],
+          "samples": [
+            "set the pitch to {percent} percent",
+            "set pitch to {percent} percent"
+          ]
+        },
+        {
+          "name": "SetLocationIntent",
+          "slots": [
+            {
+              "name": "location",
+              "type": "AMAZON.AdministrativeArea"
+            },
+            {
+              "name": "zip_conn",
+              "type": "TYPE_ZIP_CONN"
+            },
+            {
+              "name": "zipcode",
+              "type": "AMAZON.NUMBER"
+            }
+          ],
+          "samples": [
+            "set location to {location}",
+            "set location to {zip_conn} {zipcode}",
+            "set my location to {location}"
+          ]
+        },
+        {
+          "name": "GetCustomIntent",
+          "slots": [],
+          "samples": [
+            "for the custom forecast",
+            "get the custom forecast"
+          ]
+        },
+        {
+          "name": "AddCustomIntent",
+          "slots": [
+            {
+              "name": "metric",
+              "type": "TYPE_METRIC"
+            }
+          ],
+          "samples": [
+            "add {metric} to the custom forecast",
+            "add the {metric} to the custom forecast"
+          ]
+        },
+        {
+          "name": "RemCustomIntent",
+          "slots": [
+            {
+              "name": "metric",
+              "type": "TYPE_METRIC"
+            }
+          ],
+          "samples": [
+            "remove {metric} from the custom forecast",
+            "remove the {metric} from the custom forecast"
+          ]
+        },
+        {
+          "name": "RstCustomIntent",
+          "slots": [],
+          "samples": [
+            "reset the custom forecast",
+            "reset custom forecast"
+          ]
+        }
+      ],
+      "types": [
+        {
+          "name": "TYPE_LEADIN",
+          "values": [
+            {"name": {"value": "what is"}},
+            {"name": {"value": "what's"}},
+            {"name": {"value": "how is"}},
+            {"name": {"value": "how's"}},
+            {"name": {"value": "will it be"}}
+          ]
+        },
+        {
+          "name": "TYPE_METRIC",
+          "values": [
+            {"name": {"value": "temperature"}},
+            {"name": {"value": "temp"}},
+            {"name": {"value": "wind chill"}},
+            {"name": {"value": "heat index"}},
+            {"name": {"value": "dewpoint"}},
+            {"name": {"value": "dew point"}},
+            {"name": {"value": "wind"}},
+            {"name": {"value": "barometric pressure"}},
+            {"name": {"value": "pressure"}},
+            {"name": {"value": "precipitation"}},
+            {"name": {"value": "relative humidity"}},
+            {"name": {"value": "humidity"}},
+            {"name": {"value": "weather"}},
+            {"name": {"value": "conditions"}},
+            {"name": {"value": "summary"}},
+            {"name": {"value": "forecast"}},
+            {"name": {"value": "rain chance"}},
+            {"name": {"value": "snow chance"}},
+            {"name": {"value": "chance of rain"}},
+            {"name": {"value": "chance of snow"}},
+            {"name": {"value": "rainy"}},
+            {"name": {"value": "raining"}},
+            {"name": {"value": "snowy"}},
+            {"name": {"value": "snowing"}},
+            {"name": {"value": "windy"}},
+            {"name": {"value": "cloudy"}},
+            {"name": {"value": "overcast"}},
+            {"name": {"value": "clear"}},
+            {"name": {"value": "sunny"}},
+            {"name": {"value": "rain"}},
+            {"name": {"value": "snow"}},
+            {"name": {"value": "alerts"}},
+            {"name": {"value": "extended forecast"}}
+          ]
+        },
+        {
+          "name": "TYPE_DAY",
+          "values": [
+            {"name": {"value": "1"}}, {"name": {"value": "2"}}, {"name": {"value": "3"}},
+            {"name": {"value": "4"}}, {"name": {"value": "5"}}, {"name": {"value": "6"}},
+            {"name": {"value": "7"}}, {"name": {"value": "8"}}, {"name": {"value": "9"}},
+            {"name": {"value": "10"}}, {"name": {"value": "11"}}, {"name": {"value": "12"}},
+            {"name": {"value": "13"}}, {"name": {"value": "14"}}, {"name": {"value": "15"}},
+            {"name": {"value": "16"}}, {"name": {"value": "17"}}, {"name": {"value": "18"}},
+            {"name": {"value": "19"}}, {"name": {"value": "20"}}, {"name": {"value": "21"}},
+            {"name": {"value": "22"}}, {"name": {"value": "23"}}, {"name": {"value": "24"}},
+            {"name": {"value": "25"}}, {"name": {"value": "26"}}, {"name": {"value": "27"}},
+            {"name": {"value": "28"}}, {"name": {"value": "29"}}, {"name": {"value": "30"}},
+            {"name": {"value": "31"}}
+          ]
+        },
+        {
+          "name": "TYPE_MONTH",
+          "values": [
+            {"name": {"value": "january"}}, {"name": {"value": "february"}}, {"name": {"value": "march"}},
+            {"name": {"value": "april"}}, {"name": {"value": "may"}}, {"name": {"value": "june"}},
+            {"name": {"value": "july"}}, {"name": {"value": "august"}}, {"name": {"value": "september"}},
+            {"name": {"value": "october"}}, {"name": {"value": "november"}}, {"name": {"value": "december"}}
+          ]
+        },
+        {
+          "name": "TYPE_SETTING",
+          "values": [
+            {"name": {"value": "location"}},
+            {"name": {"value": "pitch"}},
+            {"name": {"value": "rate"}},
+            {"name": {"value": "forecast"}},
+            {"name": {"value": "settings"}}
+          ]
+        },
+        {
+          "name": "TYPE_WHEN_ABS",
+          "values": [
+            {"name": {"value": "sunday"}}, {"name": {"value": "monday"}}, {"name": {"value": "tuesday"}},
+            {"name": {"value": "wednesday"}}, {"name": {"value": "thursday"}}, {"name": {"value": "friday"}},
+            {"name": {"value": "saturday"}},
+            {"name": {"value": "sunday morning"}}, {"name": {"value": "sunday afternoon"}},
+            {"name": {"value": "sunday evening"}}, {"name": {"value": "sunday night"}}
+          ]
+        },
+        {
+          "name": "TYPE_WHEN_ANY",
+          "values": [
+            {"name": {"value": "today"}}, {"name": {"value": "tonight"}}, {"name": {"value": "tomorrow"}},
+            {"name": {"value": "morning"}}, {"name": {"value": "afternoon"}}, {"name": {"value": "evening"}},
+            {"name": {"value": "overnight"}}
+          ]
+        },
+        {
+          "name": "TYPE_WHEN_POS",
+          "values": [
+            {"name": {"value": "this morning"}}, {"name": {"value": "this afternoon"}},
+            {"name": {"value": "this evening"}}, {"name": {"value": "this night"}}
+          ]
+        },
+        {
+          "name": "TYPE_ZIP_CONN",
+          "values": [
+            {"name": {"value": "zip code"}},
+            {"name": {"value": "zipcode"}},
+            {"name": {"value": "for"}}
+          ]
+        }
+      ]
+    }
+  }
+}
