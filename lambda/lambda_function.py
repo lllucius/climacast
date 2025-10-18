@@ -12,23 +12,21 @@
 import json
 import os
 import re
+from math import sqrt
+from time import time
+
 import requests
-#from aniso8601 import parse_duration
 from aniso8601.duration import parse_duration
 from boto3 import resource as awsresource, client as awsclient
 from cachetools import TTLCache, cached
 from datetime import datetime
 from dateutil import parser, tz
-from dateutil.relativedelta import *
-from xml.etree.ElementTree import *
-from time import time
+from dateutil.relativedelta import relativedelta
 
 # ASK SDK imports
 from ask_sdk_core.skill_builder import SkillBuilder
 from ask_sdk_core.dispatch_components import AbstractRequestHandler, AbstractExceptionHandler
 from ask_sdk_core.utils import is_request_type, is_intent_name
-from ask_sdk_core.handler_input import HandlerInput
-from ask_sdk_model import Response
 
 """
     Anything defined here will persist for the duration of the lambda
@@ -139,7 +137,7 @@ MONTH_DAYS_XLATE = {"1st": "first",
                     "31st": "thirty first",
                     "11st": "eleventh",
                     "13rd": "thirteenth",
-                    "20 second": "twenty second"};
+                    "20 second": "twenty second"}
 
 MONTH_DAYS = ["first",
               "second",
@@ -172,7 +170,7 @@ MONTH_DAYS = ["first",
               "twenty ninth",
               "thirtieth",
               "thirty first"]
- 
+
 MONTH_NAMES = ["january",
                "february",
                "march",
@@ -241,7 +239,7 @@ ANGLES = [["north", "N", 11.25],
 STATES = ["alabama", "al",
           "alaska", "ak",
           "arizona", "az",
-          "arkansas", "ar", 
+          "arkansas", "ar",
           "dc", "dc",
           "california", "ca",
           "colorado", "co",
@@ -381,6 +379,7 @@ HTTPS = requests.Session()
 # Cache up to 100 HTTP responses for 1 hour
 HTTP_CACHE = TTLCache(maxsize=100, ttl=3600)
 
+
 def notify(event, sub, msg=None):
     """
         Send SNS message of an unusual event
@@ -418,6 +417,7 @@ def notify(event, sub, msg=None):
     else:
         SNS.publish(TopicArn=EVTID, Subject=sub, Message=text[:2**18])
 
+
 @cached(HTTP_CACHE)
 def get_api_data(url):
     """
@@ -429,6 +429,7 @@ def get_api_data(url):
     if r.status_code != 200 or r.text is None or r.text == "":
         return None, r.status_code, r.url, r.content
     return json.loads(r.text), r.status_code, r.url, None
+
 
 class Base(object):
     def __init__(self, event):
@@ -448,7 +449,7 @@ class Base(object):
             zone = self.put_zone(ZONECACHE, data)
 
         return zone
- 
+
     def put_zone(self, table, data):
         """
             Writes the zone information to the cache
@@ -570,16 +571,16 @@ class Base(object):
         """
         url = "https://%s/%s" % (loc, path.replace(" ", "+"))
         data, status_code, url_result, content = get_api_data(url)
-        
+
         if data is None:
             notify(self.event,
                         "HTTPSTATUS: %s" % status_code,
                         "URL: %s\n\n%s" % (url_result, content))
             return None
-            
+
         #print("URL:", url_result)
         #print("PAGE:", json.dumps(data, indent=4))
-        
+
         return data
 
     def to_skys(self, percent, isday):
@@ -588,7 +589,7 @@ class Base(object):
         """
         if percent is not None:
             if 0.0 <= percent < 12.5:
-                percent = "sunny" if isday else "clear" 
+                percent = "sunny" if isday else "clear"
             elif 12.5 <= percent < 25.0:
                 percent = "mostly sunny" if isday else "mostly clear"
             elif 25.0 <= percent < 50.0:
@@ -601,13 +602,13 @@ class Base(object):
                 percent = None
 
         return percent
-    
+
     def to_percent(self, percent):
         """
             Return the given value, if any, as an integer
         """
         return None if percent is None else int(percent)
-    
+
     def mb_to_in(self, mb):
         """
             Convert the given millibar value, if any, to inches
@@ -716,9 +717,8 @@ class Base(object):
         hifinal = 0.5*(F+hitemp)
 
         if hifinal > 79.0:
-            hi = -42.379+2.04901523*F+10.14333127*rh-0.22475541*F*rh-6.83783*(pow(10, -3))*(pow(F, 2))-5.481717*(pow(10, -2))*(pow(rh, 2))+1.22874*(pow(10, -3))*(pow(F, 2))*rh+8.5282*(pow(10, -4))*F*(pow(rh, 2))-1.99*(pow(10, -6))*(pow(F, 2))*(pow(rh,2))
+            hi = -42.379+2.04901523*F+10.14333127*rh-0.22475541*F*rh-6.83783*(pow(10, -3))*(pow(F, 2))-5.481717*(pow(10, -2))*(pow(rh, 2))+1.22874*(pow(10, -3))*(pow(F, 2))*rh+8.5282*(pow(10, -4))*F*(pow(rh, 2))-1.99*(pow(10, -6))*(pow(F, 2))*(pow(rh, 2))
             if (rh <= 13) and (F >= 80.0) and (F <= 112.0):
-                from math import sqrt
                 adj1 = (13.0-rh)/4.0
                 adj2 = sqrt((17.0-abs(F-95.0))/17.0)
                 adj = adj1 * adj2
@@ -759,7 +759,7 @@ class Base(object):
                 value = group[1]
                 if value is None:
                     continue
-                
+
                 #print("N", group[0], "V", group[1])
                 name = group[0]
 
@@ -773,7 +773,7 @@ class Base(object):
                             out += value
                         else:
                             out += STATES[STATES.index(st) - 1]
-                    except:
+                    except (ValueError, IndexError):
                         out += value
 
                 # Substitute full text for abbreviations
@@ -828,6 +828,7 @@ class Base(object):
         """
         return True if 6 <= when.hour < 18 else False
 
+
 class GridPoints(Base):
     def __init__(self, event, tz, cwa, gridpoint):
         super().__init__(event)
@@ -852,13 +853,13 @@ class GridPoints(Base):
             if dts and dte:
                 return True
 
-        return False    
+        return False
 
     def in_range(self, time, stime, etime):
         dt, _, dur = time.partition("/")
         dts = parser.parse(dt).astimezone(self.tz)
         dte = dts + parse_duration(dur, relative=True)
-    
+
         if stime >= dts and stime < dte \
            or etime >= dts and etime < dte:
             return dts, dte
@@ -873,7 +874,7 @@ class GridPoints(Base):
             #print("GETV", metric, self.stime, self.etime)
             for value in self.data.get(metric, {}).get("values", {}):
                 dts, dte = self.in_range(value["validTime"], stime, self.etime)
-                if dte and dte:
+                if dts and dte:
                     v = value["value"]
                     #print("VAL", v, stime)
                     while stime < self.etime and stime < dte:
@@ -980,7 +981,7 @@ class GridPoints(Base):
 
     @property
     def pressure_trend(self):
-        values = get_values("pressure")
+        values = self.get_values("pressure")
         if values[0] > values[-1]:
             return "falling"
         if values[0] < values[-1]:
@@ -1074,7 +1075,7 @@ class GridPoints(Base):
                         intens[weath] = {}
                     types[weath].add(inten[1])
                     intens[weath][inten[1]] = inten[0]
-                    
+
                     if cover == "slight_chance":
                         covers[weath].add(0)
                     elif cover == "chance":
@@ -1088,9 +1089,9 @@ class GridPoints(Base):
         for t in types:
             w = ""
             lo = min(types[t])
-            hi =  max(types[t])
+            hi = max(types[t])
             if lo == hi and lo != 0:
-                w += intens[t][lo] + " " 
+                w += intens[t][lo] + " "
             elif lo != 0 and hi != 0:
                 w += intens[t][lo] + " to " + intens[t][hi] + " "
             w += t
@@ -1109,7 +1110,7 @@ class GridPoints(Base):
             if len(attrs) > 1:
                 last = " and " + attrs[-1]
                 attrs.remove(attrs[-1])
-            d +=  ", ".join(attrs) + last
+            d += ", ".join(attrs) + last
 
         return d
 
@@ -1194,6 +1195,7 @@ class GridPoints(Base):
     @property
     def skys_final(self):
         return self.to_skys(self.get_final("skyCover"), self.is_day(self.stime))
+
 
 class Observations(Base):
     def __init__(self, event, stations, limit=3):
@@ -1308,7 +1310,8 @@ class Observations(Base):
             return "steady"
 
         return None
- 
+
+
 class Alerts(Base):
     class Alert(Base):
         def __init__(self, event, alert):
@@ -1358,6 +1361,7 @@ class Alerts(Base):
     @property
     def title(self):
         return self._title
+
 
 class Location(Base):
     def __init__(self, event):
@@ -1442,7 +1446,7 @@ class Location(Base):
                 return "%s %s could not be located.  Try using the zip code." % (city, state)
 
         # Get the NWS location information (limit to 4 decimal places for the API)
-        point = self.https("points/%s,%s" % \
+        point = self.https("points/%s,%s" %
                            (("%.4f" % coords[0]).rstrip("0").rstrip("."),
                             ("%.4f" % coords[1]).rstrip("0").rstrip(".")))
 
@@ -1482,7 +1486,7 @@ class Location(Base):
         rloc = self.cache_get(LOCATIONCACHE, {"location": "%s %s" % (loc["city"], loc["state"])})
         if rloc is None:
             # Have a new location, so retrieve the base info
-            rcoords, rprops = self.mapquest("%s+%s" % (loc["city"], loc["state"]))
+            rcoords, _ = self.mapquest("%s+%s" % (loc["city"], loc["state"]))
             if rcoords is not None:
                 loc["coords"] = "%s,%s" % (rcoords[0], rcoords[1])
             else:
@@ -1504,7 +1508,7 @@ class Location(Base):
             county = " ".join(list(county))
             coords, props = self.mapquest("%s+county+%s" % (county, loc["state"]))
             if coords is not None:
-                pt = self.https("points/%s,%s" % \
+                pt = self.https("points/%s,%s" %
                                 (("%.4f" % coords[0]).rstrip("0").rstrip("."),
                                  ("%.4f" % coords[1]).rstrip("0").rstrip(".")))
                 if "county" in pt:
@@ -1545,7 +1549,7 @@ class Location(Base):
         if "County" in props:
             props["County"] = props["County"].rsplit(" ", 1)[0]
 
-        return (geo["results"][0]["locations"][0]["latLng"]["lat"], \
+        return (geo["results"][0]["locations"][0]["latLng"]["lat"],
                 geo["results"][0]["locations"][0]["latLng"]["lng"]), \
                props
 
@@ -1578,26 +1582,22 @@ class Location(Base):
         return self.loc["gridPoint"]
 
     @property
-    def state(self):
-        return self.loc["state"]
-
-    @property
     def timeZone(self):
         return self.loc["timeZone"]
 
-    @property 
+    @property
     def forecastZoneId(self):
         return self.loc["forecastZoneId"]
 
-    @property 
+    @property
     def forecastZoneName(self):
         return self.loc["forecastZoneName"]
 
-    @property 
+    @property
     def countyZoneId(self):
         return self.loc["countyZoneId"]
 
-    @property 
+    @property
     def countyZoneName(self):
         return self.loc["countyZoneName"]
 
@@ -1608,6 +1608,7 @@ class Location(Base):
     @property
     def tz(self):
         return tz.gettz(self.loc["timeZone"])
+
 
 class User(Base):
     def __init__(self, event, userid):
@@ -1703,18 +1704,19 @@ class User(Base):
 # ASK SDK Request Handlers
 # =============================================================================
 
+
 class BaseIntentHandler(AbstractRequestHandler):
     """Base class for intent handlers with common weather functionality"""
-    
+
     def __init__(self):
         super().__init__()
-    
+
     def get_user_and_location(self, handler_input):
         """Get user profile and location from handler_input"""
         # type: (HandlerInput) -> tuple
         session = handler_input.request_envelope.session
         user_id = session.user.user_id
-        
+
         # Build event for legacy code compatibility
         event = {
             "session": {
@@ -1730,10 +1732,10 @@ class BaseIntentHandler(AbstractRequestHandler):
             },
             "request": {}
         }
-        
+
         # Load user profile
         user = User(event, user_id)
-        
+
         # Try to load default location
         loc = None
         if user.location:
@@ -1741,9 +1743,9 @@ class BaseIntentHandler(AbstractRequestHandler):
             text = location_obj.set(user.location)
             if text is None:
                 loc = location_obj
-        
+
         return user, loc, event
-    
+
     def get_slot_values(self, handler_input):
         """Extract slot values from intent"""
         # type: (HandlerInput) -> dict
@@ -1756,7 +1758,7 @@ class BaseIntentHandler(AbstractRequestHandler):
                 else:
                     slots[slot_name] = None
         return slots
-    
+
     def respond(self, handler_input, user, text, end=None):
         """Build response with proper formatting"""
         # type: (HandlerInput, User, str, bool) -> Response
@@ -1764,9 +1766,9 @@ class BaseIntentHandler(AbstractRequestHandler):
         new = session.new
         if end is None:
             end = new
-        
+
         response_builder = handler_input.response_builder
-        
+
         # Add reprompt if session should continue
         prompt = None
         if not end:
@@ -1775,25 +1777,25 @@ class BaseIntentHandler(AbstractRequestHandler):
                      "If you are done, say stop."
             text += ". " if text.strip()[-1] != "." else " "
             text += prompt if new else "if you are done, say stop."
-        
+
         # Format with user's rate and pitch
         ssml = '<speak><prosody rate="%d%%" pitch="%+d%%">%s</prosody></speak>' % \
                (user.rate, user.pitch - 100, text)
-        
+
         response_builder.speak(ssml)
-        
+
         if not end and prompt:
             prompt_ssml = '<speak><prosody rate="%d%%" pitch="%+d%%">%s</prosody></speak>' % \
                           (user.rate, user.pitch - 100, prompt)
             response_builder.ask(prompt_ssml)
-        
+
         response_builder.set_should_end_session(end)
         return response_builder.response
-    
+
     def get_location_from_slots(self, event, loc, slots, req=False):
         """Process location from slot values"""
         location_name = slots.get("location") or slots.get("zipcode")
-        
+
         if location_name:
             location_obj = Location(event)
             text = location_obj.set(location_name, loc)
@@ -1809,78 +1811,78 @@ class BaseIntentHandler(AbstractRequestHandler):
                        Alexa, ask Clima Cast to set my location to zip code 5 5 1 1 8.
                    """
         return loc, None
-    
+
     def parse_when(self, loc, slots):
         """Parse time/date information from slots"""
         # type: (Location, dict) -> tuple
-        has_when = (slots.get("when_abs") or slots.get("when_any") or 
+        has_when = (slots.get("when_abs") or slots.get("when_any") or
                     slots.get("when_pos") or slots.get("day") or slots.get("month")) is not None
-        
+
         now = datetime.now(tz=loc.tz) + relativedelta(minute=0, second=0, microsecond=0)
         base = now + relativedelta(hour=6)
         stime = base
         hours = 12
         sname = ""
-        
+
         # Handle the days like Monday or Today
         day = slots.get("when_abs") or slots.get("when_any") or slots.get("when_pos")
         if day:
             day = re.sub(r"'*s$", "", day).replace("over night", "overnight").split()
-            
+
             if len(day) > 1:
                 if day[0] == "overnight":
                     day = [day[1], "overnight"]
                 elif day[0] == "this":
                     day = [day[1]]
-            
+
             if day[0] == "tomorrow":
                 stime += relativedelta(days=+1, hour=6)
             elif day[0] in DAYS:
                 d = ((DAYS.index(day[0]) - stime.weekday()) % 7)
                 stime += relativedelta(days=+d, hour=6)
-            
+
             sname = DAYS[stime.weekday()]
             is_today = stime == base
-            
+
             specs = {"today":     [0, 6,  12, ""],
                      "tonight":   [0, 18, 12, " night"],
                      "night":     [0, 18, 12, " night"],
                      "overnight": [1, 0,  6,  " overnight"],
-                     "morning":   [0, 6,  6,  " morning"], 
-                     "afternoon": [0, 12, 6,  " afternoon"], 
+                     "morning":   [0, 6,  6,  " morning"],
+                     "afternoon": [0, 12, 6,  " afternoon"],
                      "evening":   [0, 18, 6,  " evening"]}
-            
+
             if day[-1] in specs:
                 spec = specs[day[-1]]
                 stime += relativedelta(days=spec[0], hour=spec[1])
                 hours = spec[2]
                 sname += spec[3]
-            
+
             if is_today:
                 day = sname.split()
                 if hours == 6:
                     sname = "overnight" if day[1] == "overnight" else "this " + day[1]
                 else:
                     sname = "tonight" if stime.hour == 18 else "today"
-        
+
         elif slots.get("day") is not None:
             month = stime.month
             day = stime.day
-            
+
             d = slots.get("day")
             if d.isdigit() and 1 <= int(d) <= 31:
                 d = MONTH_DAYS[int(d) - 1]
             elif d in MONTH_DAYS_XLATE:
                 d = MONTH_DAYS_XLATE[d]
-            
+
             if d in MONTH_DAYS:
                 day = MONTH_DAYS.index(d) + 1
-                
+
                 if slots.get("month") is not None:
                     m = slots.get("month")
                     if m in MONTH_NAMES:
                         month = MONTH_NAMES.index(m) + 1
-            
+
             # Adjust the date relative to today
             if month == stime.month and day == stime.day:
                 pass
@@ -1897,44 +1899,44 @@ class BaseIntentHandler(AbstractRequestHandler):
                 stime += relativedelta(day=day)
             elif day < stime.day:
                 stime += relativedelta(months=+1, day=day)
-            
+
             sname = "today" if stime == base else DAYS[stime.weekday()]
         else:
             stime += relativedelta(hour=6 if now.hour < 18 else 18)
             sname = "today" if stime.hour == 6 else "tonight"
-        
+
         etime = stime + relativedelta(hours=hours)
         quarters = hours // 6
-        
+
         return has_when, stime, etime, sname, quarters
-    
+
     def get_alerts(self, event, loc):
         """Get weather alerts for location"""
         alerts = Alerts(event, loc.countyZoneId)
         if len(alerts) == 0:
             return "No alerts in effect at this time for %s." % loc.city
-        
+
         text = alerts.title + "...\n"
         for alert in alerts:
             text += alert.headline + "...\n"
             text += "for " + alert.area + "...\n"
             text += alert.description + "...\n"
             text += alert.instruction + "...\n"
-        
+
         return text
-    
+
     def get_current(self, event, user, loc, metrics):
         """Get current weather conditions"""
         text = ""
-        
+
         # Retrieve the current observations from the nearest station
-        obs = Observationsv3(event, loc.observationStations)
+        obs = Observations(event, loc.observationStations)
         if obs.is_good:
             text += "At %s, %s reported %s, " % \
                     (obs.time_reported.astimezone(loc.tz).strftime("%I:%M%p"),
                      obs.station_name,
                      obs.description)
-            
+
             for metric in metrics:
                 if metric == "wind":
                     if obs.wind_speed is None or obs.wind_speed == "0":
@@ -1948,7 +1950,7 @@ class BaseIntentHandler(AbstractRequestHandler):
                         else:
                             text += "Winds are out of the %s at %s miles per hour" % \
                                     (obs.wind_direction, obs.wind_speed)
-                        
+
                         if obs.wind_gust is not None:
                             text += ", gusting to %s" % obs.wind_gust
                 elif metric == "temperature":
@@ -1973,19 +1975,19 @@ class BaseIntentHandler(AbstractRequestHandler):
                 text += ". "
         else:
             text += "Observation information is currently unavailable."
-        
+
         return text
-    
+
     def get_extended(self, event, loc):
         """Get extended forecast"""
         # Import normalize from Base class
         base = Base(event)
-        
+
         data = base.https("points/%s/forecast" % loc.coords)
         if data is None or data.get("periods", None) is None:
             notify(event, "Extended forecast missing periods", data)
             return "the extended forecast is currently unavailable."
-        
+
         text = ""
         for period in data.get("periods", {}):
             text += " " + period["name"] + ", " + period["detailedForecast"]
@@ -1995,32 +1997,32 @@ class BaseIntentHandler(AbstractRequestHandler):
                     wind = "around " + wind
                 text += ". %s wind %s" % (base.dir_to_dir(period["windDirection"]), wind)
             text + "."
-        
+
         header = "The extended forecast for the %s zone " % loc.forecastZoneName
         if not text:
             header += "is unavailable"
-        
+
         return base.normalize(header + text)
-    
+
     def get_forecast(self, event, user, loc, stime, etime, sname, metrics):
         """Get weather forecast"""
         # Import normalize from Base class
         base = Base(event)
-        
+
         fulltext = ""
         gp = GridPoints(event, loc.tz, loc.cwa, loc.grid_point)
-        
+
         for metric in metrics:
             metric = METRICS[metric][0]
-            
+
             if not gp.set_interval(stime, etime):
                 text = "Forecast information is unavailable for %s %s" % \
                        (MONTH_NAMES[stime.month - 1], MONTH_DAYS[stime.day - 1])
                 return text
-            
+
             isday = base.is_day(stime)
             text = ""
-            
+
             if metric == "wind":
                 wsh = gp.wind_speed_high
                 wsl = gp.wind_speed_low
@@ -2041,12 +2043,12 @@ class BaseIntentHandler(AbstractRequestHandler):
                     wg = gp.wind_gust_high
                     if wg is not None:
                         text += ", with gusts as high as %s" % wg
-            
+
             elif metric == "temperature":
                 t = gp.temp_high if isday else gp.temp_low
                 if t is not None:
                     text = "the %s temperature will be %s degrees" % ("high" if isday else "low", t)
-                    
+
                     wcl = gp.wind_chill_low
                     wch = gp.wind_chill_high
                     if wcl is not None:
@@ -2054,7 +2056,7 @@ class BaseIntentHandler(AbstractRequestHandler):
                             text += ", with a wind chill of %s degrees" % wcl
                         elif wcl != wch:
                             text += ", with a wind chill of %s to %s degrees" % (wcl, wch)
-                    
+
                     hil = gp.heat_index_low
                     hih = gp.heat_index_high
                     if hil is not None:
@@ -2062,33 +2064,33 @@ class BaseIntentHandler(AbstractRequestHandler):
                             text += ", with a heat index of %s degrees" % hil
                         elif hil != hih:
                             text += ", with a heat index of %s to %s degrees" % (hil, hih)
-            
+
             elif metric == "dewpoint":
                 dh = gp.dewpoint_high
                 if dh is not None:
                     text = "the dewpoint will be %s degrees" % dh
-            
+
             elif metric == "barometric pressure":
                 pl = gp.pressure_low
                 if pl is not None:
                     text = "the barometric pressure will be %s inches" % pl
-            
+
             elif metric == "skys":
                 si = gp.skys_initial
                 sf = gp.skys_final
                 if si is not None:
                     if si == sf:
                         text = "it will be %s" % si
-                    elif si == None or sf == None:
+                    elif si is None or sf is None:
                         text = "it will be %s" % (si or sf)
                     else:
                         text = "it will be %s changing to %s" % (si, sf)
-            
+
             elif metric == "relative humidity":
                 hh = gp.humidity_high
                 if hh is not None:
                     text = 'the relative humidity will be %.0f percent' % hh
-            
+
             elif metric == "precipitation":
                 pch = gp.precip_chance_high
                 if pch is not None:
@@ -2096,17 +2098,17 @@ class BaseIntentHandler(AbstractRequestHandler):
                         text = "No precipitation forecasted"
                     else:
                         text = 'the chance of precipitation will be %d percent' % pch
-                        
+
                         pal = gp.precip_amount_low
                         pah = gp.precip_amount_high
-                        
+
                         if pal is not None and pah is not None and pah[0] != 0:
                             text += ", with amounts of "
                             if pal[1] == pah[1] or pal[0] < 0.1:
                                 text += "%s %s possible" % (pah[1], pah[2])
                             else:
                                 text += "%s to %s %s possible" % (pal[1], pah[1], pah[2])
-                        
+
                         sal = gp.snow_amount_low
                         sah = gp.snow_amount_high
                         if sal is not None and sah is not None and sah[0] != 0:
@@ -2115,52 +2117,55 @@ class BaseIntentHandler(AbstractRequestHandler):
                                 text += "%s %s possible" % (sah[1], sah[2])
                             else:
                                 text += "%s to %s %s possible" % (sal[1], sah[1], sah[2])
-            
+
             elif metric == "summary":
                 wt = gp.weather_text
                 if wt:
                     text += "expect " + wt
-            
+
             if text:
                 fulltext += text + ". "
-        
+
         if fulltext != "":
             fulltext = "%s in %s, %s" % (sname, loc.city, fulltext)
         else:
             fulltext = "Forecast information is unavailable for %s in %s" % (sname, loc.city)
-        
+
         return fulltext
+
 
 class LaunchRequestHandler(BaseIntentHandler):
     """Handler for Launch Request"""
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
         return is_request_type("LaunchRequest")(handler_input)
-    
+
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
-        
+        user, loc, _ = self.get_user_and_location(handler_input)
+
         text = "Welcome to Clime a Cast. " \
                "For current conditions, use phrases like: What's the weather. "\
                "For forecasts, try phrases like: What's the forecast."
         if loc is None:
             text += "You must set your default location by saying something like: " \
                     "set location to Miami Florida."
-        
+
         return self.respond(handler_input, user, text, end=False)
 
 # Session Ended Request Handler
+
+
 class SessionEndedRequestHandler(BaseIntentHandler):
     """Handler for Session Ended Request"""
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
         return is_request_type("SessionEndedRequest")(handler_input)
-    
+
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
         request = handler_input.request_envelope.request
-        
+
         # Build event for notify
         session = handler_input.request_envelope.session
         event = {
@@ -2173,7 +2178,7 @@ class SessionEndedRequestHandler(BaseIntentHandler):
                 "reason": str(getattr(request, 'reason', 'USER_INITIATED'))
             }
         }
-        
+
         if hasattr(request, 'error') and request.error:
             event["request"]["error"] = {
                 "message": request.error.message
@@ -2181,20 +2186,22 @@ class SessionEndedRequestHandler(BaseIntentHandler):
             notify(event, "Error detected", request.error.message)
         else:
             notify(event, "Session Ended", event["request"]["reason"])
-        
+
         return handler_input.response_builder.response
 
 # Help Intent Handler
+
+
 class HelpIntentHandler(BaseIntentHandler):
     """Handler for Help Intent"""
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
         return is_intent_name("AMAZON.HelpIntent")(handler_input)
-    
+
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
-        
+        user, _, _ = self.get_user_and_location(handler_input)
+
         text = """
             For complete information, please refer to the Clima Cast skill
             page in the Alexa app.
@@ -2230,21 +2237,25 @@ class HelpIntentHandler(BaseIntentHandler):
         return self.respond(handler_input, user, text)
 
 # Cancel and Stop Intent Handler
+
+
 class CancelAndStopIntentHandler(BaseIntentHandler):
     """Handler for Cancel and Stop Intent"""
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
         return (is_intent_name("AMAZON.CancelIntent")(handler_input) or
                 is_intent_name("AMAZON.StopIntent")(handler_input))
-    
+
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
-        
+        user, _, _ = self.get_user_and_location(handler_input)
+
         text = "Thank you for using Clime a Cast."
         return self.respond(handler_input, user, text, end=True)
 
 # Fallback, Yes, No, and StartOver Intent Handler (basic responses)
+
+
 class FallbackIntentHandler(BaseIntentHandler):
     """Handler for Fallback, Yes, No, and StartOver intents"""
     def can_handle(self, handler_input):
@@ -2253,11 +2264,11 @@ class FallbackIntentHandler(BaseIntentHandler):
                 is_intent_name("AMAZON.YesIntent")(handler_input) or
                 is_intent_name("AMAZON.NoIntent")(handler_input) or
                 is_intent_name("AMAZON.StartOverIntent")(handler_input))
-    
+
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
-        
+        user, _, _ = self.get_user_and_location(handler_input)
+
         # For now, these all return to help
         text = "I didn't understand that. " \
                "You can ask for current conditions, forecasts, or alerts. " \
@@ -2265,18 +2276,20 @@ class FallbackIntentHandler(BaseIntentHandler):
         return self.respond(handler_input, user, text, end=False)
 
 # Metric Intent Handlers
+
+
 class MetricIntentHandler(BaseIntentHandler):
     """Handler for MetricIntent and MetricPosIntent"""
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
         return (is_intent_name("MetricIntent")(handler_input) or
                 is_intent_name("MetricPosIntent")(handler_input))
-    
+
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
         user, loc, event = self.get_user_and_location(handler_input)
         slots = self.get_slot_values(handler_input)
-        
+
         # Check if location is required
         if loc is None:
             text = """You must set a default location by using phrases like:
@@ -2285,37 +2298,37 @@ class MetricIntentHandler(BaseIntentHandler):
                        Alexa, ask Clima Cast to set my location to zip code 5 5 1 1 8.
                    """
             return self.respond(handler_input, user, text)
-        
+
         # Get metric from slots
         metric = slots.get("metric")
         if metric is None:
             return self.respond(handler_input, user, "You must include a metric like temperature, humidity or wind")
-        
+
         # Handle special metrics
         if metric == "alerts":
             text = self.get_alerts(event, loc)
             # Normalize text
             base = Base(event)
             return self.respond(handler_input, user, base.normalize(text))
-        
+
         if metric == "extended forecast":
             text = self.get_extended(event, loc)
             return self.respond(handler_input, user, text)
-        
+
         if metric not in METRICS:
             return self.respond(handler_input, user, "%s is an unrecognized metric." % metric)
-        
+
         # Determine which metrics to report
         metrics = user.metrics if METRICS[metric][0] == "all" else [METRICS[metric][0]]
-        
+
         # Parse when information
-        has_when, stime, etime, sname, quarters = self.parse_when(loc, slots)
-        
+        has_when, stime, etime, sname, _ = self.parse_when(loc, slots)
+
         # Determine if this is a forecast or current conditions request
         leadin = slots.get("leadin") or ""
-        is_forecast = (metric == "forecast" or has_when or 
-                      "chance" in metric or "will" in leadin or "going" in leadin)
-        
+        is_forecast = (metric == "forecast" or has_when or
+                       "chance" in metric or "will" in leadin or "going" in leadin)
+
         if is_forecast:
             text = self.get_forecast(event, user, loc, stime, etime, sname, metrics)
         else:
@@ -2323,41 +2336,43 @@ class MetricIntentHandler(BaseIntentHandler):
             # Normalize text
             base = Base(event)
             text = base.normalize(text)
-        
+
         return self.respond(handler_input, user, text)
 
 # Settings Intent Handlers
+
+
 class GetSettingIntentHandler(BaseIntentHandler):
     """Handler for GetSettingIntent"""
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
         return is_intent_name("GetSettingIntent")(handler_input)
-    
+
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
+        user, loc, _ = self.get_user_and_location(handler_input)
         slots = self.get_slot_values(handler_input)
-        
+
         if loc is None:
             text = "You must set a default location first."
             return self.respond(handler_input, user, text)
-        
+
         setting = slots.get("setting")
         if setting is None:
             setting = "settings"
-        
+
         words = setting.split()
         if words[0] in ["current", "default"]:
             words.remove(words[0])
         setting = words[0]
-        
+
         if setting == "settings":
             settings = ["location", "pitch", "rate", "forecast"]
         elif setting in SETTINGS:
             settings = [SETTINGS[setting]]
         else:
             return self.respond(handler_input, user, "Unrecognized setting: %s" % setting)
-        
+
         text = ""
         for setting in settings:
             if text != "":
@@ -2373,20 +2388,21 @@ class GetSettingIntentHandler(BaseIntentHandler):
             elif setting == "forecast":
                 text += "the custom forecast will include the %s." % \
                         ", ".join(list(user.metrics[:-1])) + " and " + user.metrics[-1]
-        
+
         return self.respond(handler_input, user, text)
+
 
 class SetPitchIntentHandler(BaseIntentHandler):
     """Handler for SetPitchIntent"""
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
         return is_intent_name("SetPitchIntent")(handler_input)
-    
+
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
+        user, _, _ = self.get_user_and_location(handler_input)
         slots = self.get_slot_values(handler_input)
-        
+
         percent = slots.get("percent")
         if percent and percent.isdigit():
             pitch = int(percent)
@@ -2397,20 +2413,21 @@ class SetPitchIntentHandler(BaseIntentHandler):
                 text = "The pitch must be between 70 and 130 percent"
         else:
             text = "Expected a percentage when setting the pitch"
-        
+
         return self.respond(handler_input, user, text)
+
 
 class SetRateIntentHandler(BaseIntentHandler):
     """Handler for SetRateIntent"""
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
         return is_intent_name("SetRateIntent")(handler_input)
-    
+
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
+        user, _, _ = self.get_user_and_location(handler_input)
         slots = self.get_slot_values(handler_input)
-        
+
         percent = slots.get("percent")
         if percent and percent.isdigit():
             rate = int(percent)
@@ -2421,134 +2438,141 @@ class SetRateIntentHandler(BaseIntentHandler):
                 text = "The rate must be between 50 and 150 percent"
         else:
             text = "Expected a percentage when setting the rate"
-        
+
         return self.respond(handler_input, user, text)
+
 
 class SetLocationIntentHandler(BaseIntentHandler):
     """Handler for SetLocationIntent"""
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
         return is_intent_name("SetLocationIntent")(handler_input)
-    
+
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
         user, loc, event = self.get_user_and_location(handler_input)
         slots = self.get_slot_values(handler_input)
-        
+
         location_name = slots.get("location") or slots.get("zipcode")
         if not location_name:
             text = "You must include the location"
             return self.respond(handler_input, user, text)
-        
+
         location_obj = Location(event)
         text = location_obj.set(location_name, loc)
         if text is None:
             user.location = location_obj.name
             text = "Your default location has been set to %s." % location_obj.spoken_name()
-        
+
         return self.respond(handler_input, user, text)
 
 # Custom Forecast Intent Handlers
+
+
 class GetCustomIntentHandler(BaseIntentHandler):
     """Handler for GetCustomIntent"""
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
         return is_intent_name("GetCustomIntent")(handler_input)
-    
+
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
-        
+        user, _, _ = self.get_user_and_location(handler_input)
+
         text = "The custom forecast will include the %s." % \
                ", ".join(list(user.metrics[:-1])) + " and " + user.metrics[-1]
         return self.respond(handler_input, user, text)
+
 
 class AddCustomIntentHandler(BaseIntentHandler):
     """Handler for AddCustomIntent"""
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
         return is_intent_name("AddCustomIntent")(handler_input)
-    
+
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
+        user, _, _ = self.get_user_and_location(handler_input)
         slots = self.get_slot_values(handler_input)
-        
+
         metric = slots.get("metric")
         if metric is None:
             text = "You must include a metric like temperature, humidity or wind."
             return self.respond(handler_input, user, text)
-        
+
         if metric not in METRICS:
             text = "%s is an unrecognized metric." % metric
             return self.respond(handler_input, user, text)
-        
+
         metric_info = METRICS[metric]
         if not metric_info[1]:
             text = "%s can't be used when customizing the forecast." % metric_info[0]
             return self.respond(handler_input, user, text)
-        
+
         if user.has_metric(metric_info[0]):
             text = "%s is already included in the custom forecast." % metric_info[0]
             return self.respond(handler_input, user, text)
-        
+
         user.add_metric(metric_info[0])
         text = "%s has been added to the custom forecast." % metric_info[0]
         return self.respond(handler_input, user, text)
+
 
 class RemoveCustomIntentHandler(BaseIntentHandler):
     """Handler for RemCustomIntent"""
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
         return is_intent_name("RemCustomIntent")(handler_input)
-    
+
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
+        user, _, _ = self.get_user_and_location(handler_input)
         slots = self.get_slot_values(handler_input)
-        
+
         metric = slots.get("metric")
         if metric is None:
             text = "You must include a metric like temperature, humidity or wind."
             return self.respond(handler_input, user, text)
-        
+
         if metric not in METRICS:
             text = "%s is an unrecognized metric." % metric
             return self.respond(handler_input, user, text)
-        
+
         metric_info = METRICS[metric]
         if not metric_info[1]:
             text = "%s can't be used when customizing the forecast." % metric_info[0]
             return self.respond(handler_input, user, text)
-        
+
         if not user.has_metric(metric_info[0]):
             text = "%s is already excluded from the custom forecast." % metric_info[0]
             return self.respond(handler_input, user, text)
-        
+
         user.remove_metric(metric_info[0])
         text = "%s has been removed from the custom forecast." % metric_info[0]
         return self.respond(handler_input, user, text)
+
 
 class ResetCustomIntentHandler(BaseIntentHandler):
     """Handler for RstCustomIntent"""
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
         return is_intent_name("RstCustomIntent")(handler_input)
-    
+
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
-        
+        user, _, _ = self.get_user_and_location(handler_input)
+
         user.reset_metrics()
         text = "the custom forecast has been reset to defaults."
         return self.respond(handler_input, user, text)
+
 
 class SkillExceptionHandler(AbstractExceptionHandler):
     """Handle exceptions"""
     def can_handle(self, handler_input, exception):
         # type: (HandlerInput, Exception) -> bool
         return True
-    
+
     def handle(self, handler_input, exception):
         # type: (HandlerInput, Exception) -> Response
         import traceback
@@ -2559,17 +2583,18 @@ class SkillExceptionHandler(AbstractExceptionHandler):
             }
         }
         notify(event, "ASK SDK Exception", traceback.format_exc())
-        
+
         speech_text = '<say-as interpret-as="interjection">aw man</say-as>' + \
                      '<prosody pitch="+25%">' + \
                      "Clima Cast has experienced an error. The author has been " + \
                      "notified and will address it as soon as possible. Until then " + \
                      "you might be able to rephrase your request to get around the issue." + \
                      '</prosody>'
-        
+
         return handler_input.response_builder.speak(
             f"<speak>{speech_text}</speak>"
         ).set_should_end_session(True).response
+
 
 # Build the skill
 sb = SkillBuilder()
@@ -2597,7 +2622,9 @@ sb.add_exception_handler(SkillExceptionHandler())
 # Create lambda handler from SkillBuilder
 _skill_lambda_handler = sb.lambda_handler()
 
-# Wrap the skill lambda handler to support non-Alexa events (like DataLoad)
+# Wrap the skill lambda handler to support non-Alexa events
+
+
 def lambda_handler(event, context=None):
     """
     Lambda handler that supports both Alexa skill events and custom events
@@ -2606,10 +2633,9 @@ def lambda_handler(event, context=None):
     if isinstance(event, dict) and "event-type" in event:
         if event["event-type"] == "pinger":
             return
-        else:
-            DataLoad(event).handle_event()
-            return
-    
+        # Note: DataLoad functionality has been removed during refactoring
+        return
+
     # For Alexa events, use the SkillBuilder handler
     return _skill_lambda_handler(event, context)
 
@@ -2620,6 +2646,7 @@ def test_load():
         event["resources"] = ["amzn1.ask.data.update"]
         lambda_handler(event)
 
+
 def test_one():
     with open(sys.argv[1] if len(sys.argv) > 1 else "test.json") as f:
         event = json.load(f)
@@ -2627,6 +2654,7 @@ def test_one():
         event["session"]["testing"] = True
         event["session"]["user"]["userId"] = "testuser"
         print(json.dumps(lambda_handler(event), indent=4))
+
 
 if __name__ == "__main__":
     import logging
