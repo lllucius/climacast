@@ -828,6 +828,7 @@ class Base(object):
         """
         return True if 6 <= when.hour < 18 else False
 
+
 class GridPoints(Base):
     def __init__(self, event, tz, cwa, gridpoint):
         super().__init__(event)
@@ -873,7 +874,7 @@ class GridPoints(Base):
             #print("GETV", metric, self.stime, self.etime)
             for value in self.data.get(metric, {}).get("values", {}):
                 dts, dte = self.in_range(value["validTime"], stime, self.etime)
-                if dte and dte:
+                if dts and dte:
                     v = value["value"]
                     #print("VAL", v, stime)
                     while stime < self.etime and stime < dte:
@@ -1088,7 +1089,7 @@ class GridPoints(Base):
         for t in types:
             w = ""
             lo = min(types[t])
-            hi =  max(types[t])
+            hi = max(types[t])
             if lo == hi and lo != 0:
                 w += intens[t][lo] + " "
             elif lo != 0 and hi != 0:
@@ -1109,7 +1110,7 @@ class GridPoints(Base):
             if len(attrs) > 1:
                 last = " and " + attrs[-1]
                 attrs.remove(attrs[-1])
-            d +=  ", ".join(attrs) + last
+            d += ", ".join(attrs) + last
 
         return d
 
@@ -1194,6 +1195,7 @@ class GridPoints(Base):
     @property
     def skys_final(self):
         return self.to_skys(self.get_final("skyCover"), self.is_day(self.stime))
+
 
 class Observations(Base):
     def __init__(self, event, stations, limit=3):
@@ -1309,6 +1311,7 @@ class Observations(Base):
 
         return None
 
+
 class Alerts(Base):
     class Alert(Base):
         def __init__(self, event, alert):
@@ -1358,6 +1361,7 @@ class Alerts(Base):
     @property
     def title(self):
         return self._title
+
 
 class Location(Base):
     def __init__(self, event):
@@ -1442,7 +1446,7 @@ class Location(Base):
                 return "%s %s could not be located.  Try using the zip code." % (city, state)
 
         # Get the NWS location information (limit to 4 decimal places for the API)
-        point = self.https("points/%s,%s" % \
+        point = self.https("points/%s,%s" %
                            (("%.4f" % coords[0]).rstrip("0").rstrip("."),
                             ("%.4f" % coords[1]).rstrip("0").rstrip(".")))
 
@@ -1482,7 +1486,7 @@ class Location(Base):
         rloc = self.cache_get(LOCATIONCACHE, {"location": "%s %s" % (loc["city"], loc["state"])})
         if rloc is None:
             # Have a new location, so retrieve the base info
-            rcoords, rprops = self.mapquest("%s+%s" % (loc["city"], loc["state"]))
+            rcoords, _ = self.mapquest("%s+%s" % (loc["city"], loc["state"]))
             if rcoords is not None:
                 loc["coords"] = "%s,%s" % (rcoords[0], rcoords[1])
             else:
@@ -1504,7 +1508,7 @@ class Location(Base):
             county = " ".join(list(county))
             coords, props = self.mapquest("%s+county+%s" % (county, loc["state"]))
             if coords is not None:
-                pt = self.https("points/%s,%s" % \
+                pt = self.https("points/%s,%s" %
                                 (("%.4f" % coords[0]).rstrip("0").rstrip("."),
                                  ("%.4f" % coords[1]).rstrip("0").rstrip(".")))
                 if "county" in pt:
@@ -1545,7 +1549,7 @@ class Location(Base):
         if "County" in props:
             props["County"] = props["County"].rsplit(" ", 1)[0]
 
-        return (geo["results"][0]["locations"][0]["latLng"]["lat"], \
+        return (geo["results"][0]["locations"][0]["latLng"]["lat"],
                 geo["results"][0]["locations"][0]["latLng"]["lng"]), \
                props
 
@@ -1604,6 +1608,7 @@ class Location(Base):
     @property
     def tz(self):
         return tz.gettz(self.loc["timeZone"])
+
 
 class User(Base):
     def __init__(self, event, userid):
@@ -1698,6 +1703,7 @@ class User(Base):
 # =============================================================================
 # ASK SDK Request Handlers
 # =============================================================================
+
 
 class BaseIntentHandler(AbstractRequestHandler):
     """Base class for intent handlers with common weather functionality"""
@@ -2075,7 +2081,7 @@ class BaseIntentHandler(AbstractRequestHandler):
                 if si is not None:
                     if si == sf:
                         text = "it will be %s" % si
-                    elif si == None or sf == None:
+                    elif si is None or sf is None:
                         text = "it will be %s" % (si or sf)
                     else:
                         text = "it will be %s changing to %s" % (si, sf)
@@ -2127,6 +2133,7 @@ class BaseIntentHandler(AbstractRequestHandler):
 
         return fulltext
 
+
 class LaunchRequestHandler(BaseIntentHandler):
     """Handler for Launch Request"""
     def can_handle(self, handler_input):
@@ -2135,7 +2142,7 @@ class LaunchRequestHandler(BaseIntentHandler):
 
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
+        user, loc, _ = self.get_user_and_location(handler_input)
 
         text = "Welcome to Clime a Cast. " \
                "For current conditions, use phrases like: What's the weather. "\
@@ -2147,6 +2154,8 @@ class LaunchRequestHandler(BaseIntentHandler):
         return self.respond(handler_input, user, text, end=False)
 
 # Session Ended Request Handler
+
+
 class SessionEndedRequestHandler(BaseIntentHandler):
     """Handler for Session Ended Request"""
     def can_handle(self, handler_input):
@@ -2181,6 +2190,8 @@ class SessionEndedRequestHandler(BaseIntentHandler):
         return handler_input.response_builder.response
 
 # Help Intent Handler
+
+
 class HelpIntentHandler(BaseIntentHandler):
     """Handler for Help Intent"""
     def can_handle(self, handler_input):
@@ -2189,7 +2200,7 @@ class HelpIntentHandler(BaseIntentHandler):
 
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
+        user, _, _ = self.get_user_and_location(handler_input)
 
         text = """
             For complete information, please refer to the Clima Cast skill
@@ -2226,6 +2237,8 @@ class HelpIntentHandler(BaseIntentHandler):
         return self.respond(handler_input, user, text)
 
 # Cancel and Stop Intent Handler
+
+
 class CancelAndStopIntentHandler(BaseIntentHandler):
     """Handler for Cancel and Stop Intent"""
     def can_handle(self, handler_input):
@@ -2235,12 +2248,14 @@ class CancelAndStopIntentHandler(BaseIntentHandler):
 
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
+        user, _, _ = self.get_user_and_location(handler_input)
 
         text = "Thank you for using Clime a Cast."
         return self.respond(handler_input, user, text, end=True)
 
 # Fallback, Yes, No, and StartOver Intent Handler (basic responses)
+
+
 class FallbackIntentHandler(BaseIntentHandler):
     """Handler for Fallback, Yes, No, and StartOver intents"""
     def can_handle(self, handler_input):
@@ -2252,7 +2267,7 @@ class FallbackIntentHandler(BaseIntentHandler):
 
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
+        user, _, _ = self.get_user_and_location(handler_input)
 
         # For now, these all return to help
         text = "I didn't understand that. " \
@@ -2261,6 +2276,8 @@ class FallbackIntentHandler(BaseIntentHandler):
         return self.respond(handler_input, user, text, end=False)
 
 # Metric Intent Handlers
+
+
 class MetricIntentHandler(BaseIntentHandler):
     """Handler for MetricIntent and MetricPosIntent"""
     def can_handle(self, handler_input):
@@ -2305,12 +2322,12 @@ class MetricIntentHandler(BaseIntentHandler):
         metrics = user.metrics if METRICS[metric][0] == "all" else [METRICS[metric][0]]
 
         # Parse when information
-        has_when, stime, etime, sname, quarters = self.parse_when(loc, slots)
+        has_when, stime, etime, sname, _ = self.parse_when(loc, slots)
 
         # Determine if this is a forecast or current conditions request
         leadin = slots.get("leadin") or ""
         is_forecast = (metric == "forecast" or has_when or
-                      "chance" in metric or "will" in leadin or "going" in leadin)
+                       "chance" in metric or "will" in leadin or "going" in leadin)
 
         if is_forecast:
             text = self.get_forecast(event, user, loc, stime, etime, sname, metrics)
@@ -2323,6 +2340,8 @@ class MetricIntentHandler(BaseIntentHandler):
         return self.respond(handler_input, user, text)
 
 # Settings Intent Handlers
+
+
 class GetSettingIntentHandler(BaseIntentHandler):
     """Handler for GetSettingIntent"""
     def can_handle(self, handler_input):
@@ -2331,7 +2350,7 @@ class GetSettingIntentHandler(BaseIntentHandler):
 
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
+        user, loc, _ = self.get_user_and_location(handler_input)
         slots = self.get_slot_values(handler_input)
 
         if loc is None:
@@ -2372,6 +2391,7 @@ class GetSettingIntentHandler(BaseIntentHandler):
 
         return self.respond(handler_input, user, text)
 
+
 class SetPitchIntentHandler(BaseIntentHandler):
     """Handler for SetPitchIntent"""
     def can_handle(self, handler_input):
@@ -2380,7 +2400,7 @@ class SetPitchIntentHandler(BaseIntentHandler):
 
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
+        user, _, _ = self.get_user_and_location(handler_input)
         slots = self.get_slot_values(handler_input)
 
         percent = slots.get("percent")
@@ -2396,6 +2416,7 @@ class SetPitchIntentHandler(BaseIntentHandler):
 
         return self.respond(handler_input, user, text)
 
+
 class SetRateIntentHandler(BaseIntentHandler):
     """Handler for SetRateIntent"""
     def can_handle(self, handler_input):
@@ -2404,7 +2425,7 @@ class SetRateIntentHandler(BaseIntentHandler):
 
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
+        user, _, _ = self.get_user_and_location(handler_input)
         slots = self.get_slot_values(handler_input)
 
         percent = slots.get("percent")
@@ -2419,6 +2440,7 @@ class SetRateIntentHandler(BaseIntentHandler):
             text = "Expected a percentage when setting the rate"
 
         return self.respond(handler_input, user, text)
+
 
 class SetLocationIntentHandler(BaseIntentHandler):
     """Handler for SetLocationIntent"""
@@ -2445,6 +2467,8 @@ class SetLocationIntentHandler(BaseIntentHandler):
         return self.respond(handler_input, user, text)
 
 # Custom Forecast Intent Handlers
+
+
 class GetCustomIntentHandler(BaseIntentHandler):
     """Handler for GetCustomIntent"""
     def can_handle(self, handler_input):
@@ -2453,11 +2477,12 @@ class GetCustomIntentHandler(BaseIntentHandler):
 
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
+        user, _, _ = self.get_user_and_location(handler_input)
 
         text = "The custom forecast will include the %s." % \
                ", ".join(list(user.metrics[:-1])) + " and " + user.metrics[-1]
         return self.respond(handler_input, user, text)
+
 
 class AddCustomIntentHandler(BaseIntentHandler):
     """Handler for AddCustomIntent"""
@@ -2467,7 +2492,7 @@ class AddCustomIntentHandler(BaseIntentHandler):
 
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
+        user, _, _ = self.get_user_and_location(handler_input)
         slots = self.get_slot_values(handler_input)
 
         metric = slots.get("metric")
@@ -2492,6 +2517,7 @@ class AddCustomIntentHandler(BaseIntentHandler):
         text = "%s has been added to the custom forecast." % metric_info[0]
         return self.respond(handler_input, user, text)
 
+
 class RemoveCustomIntentHandler(BaseIntentHandler):
     """Handler for RemCustomIntent"""
     def can_handle(self, handler_input):
@@ -2500,7 +2526,7 @@ class RemoveCustomIntentHandler(BaseIntentHandler):
 
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
+        user, _, _ = self.get_user_and_location(handler_input)
         slots = self.get_slot_values(handler_input)
 
         metric = slots.get("metric")
@@ -2525,6 +2551,7 @@ class RemoveCustomIntentHandler(BaseIntentHandler):
         text = "%s has been removed from the custom forecast." % metric_info[0]
         return self.respond(handler_input, user, text)
 
+
 class ResetCustomIntentHandler(BaseIntentHandler):
     """Handler for RstCustomIntent"""
     def can_handle(self, handler_input):
@@ -2533,11 +2560,12 @@ class ResetCustomIntentHandler(BaseIntentHandler):
 
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, loc, event = self.get_user_and_location(handler_input)
+        user, _, _ = self.get_user_and_location(handler_input)
 
         user.reset_metrics()
         text = "the custom forecast has been reset to defaults."
         return self.respond(handler_input, user, text)
+
 
 class SkillExceptionHandler(AbstractExceptionHandler):
     """Handle exceptions"""
@@ -2567,6 +2595,7 @@ class SkillExceptionHandler(AbstractExceptionHandler):
             f"<speak>{speech_text}</speak>"
         ).set_should_end_session(True).response
 
+
 # Build the skill
 sb = SkillBuilder()
 
@@ -2594,6 +2623,8 @@ sb.add_exception_handler(SkillExceptionHandler())
 _skill_lambda_handler = sb.lambda_handler()
 
 # Wrap the skill lambda handler to support non-Alexa events
+
+
 def lambda_handler(event, context=None):
     """
     Lambda handler that supports both Alexa skill events and custom events
@@ -2615,6 +2646,7 @@ def test_load():
         event["resources"] = ["amzn1.ask.data.update"]
         lambda_handler(event)
 
+
 def test_one():
     with open(sys.argv[1] if len(sys.argv) > 1 else "test.json") as f:
         event = json.load(f)
@@ -2622,6 +2654,7 @@ def test_one():
         event["session"]["testing"] = True
         event["session"]["user"]["userId"] = "testuser"
         print(json.dumps(lambda_handler(event), indent=4))
+
 
 if __name__ == "__main__":
     import logging
