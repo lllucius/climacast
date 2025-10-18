@@ -1,0 +1,53 @@
+{
+  "manifest": {
+    "publishingInformation": {
+      "locales": {
+        "en-US": {
+          "summary": "Get weather forecasts and current conditions from the National Weather Service",
+          "examplePhrases": [
+            "Alexa, ask Clima Cast for the weather",
+            "Alexa, ask Clima Cast for the forecast",
+            "Alexa, ask Clima Cast for alerts"
+          ],
+          "keywords": [
+            "weather",
+            "forecast",
+            "nws",
+            "national weather service",
+            "climate",
+            "temperature",
+            "conditions"
+          ],
+          "name": "Clima Cast",
+          "description": "Using information provided by the National Weather Service, Clima Cast gives you the current conditions and the 7-day forecast for your area or any other United States city.\n\nYou can ask for current conditions, forecasts, and active weather alerts.\n\nWhen first using Clima Cast, you must set a default location.\n\nFor complete information and examples, please refer to the skill description."
+        }
+      },
+      "isAvailableWorldwide": false,
+      "testingInstructions": "To test, set a location first by saying 'set location to Boulder Colorado', then ask for weather or forecasts.",
+      "category": "WEATHER",
+      "distributionCountries": ["US"]
+    },
+    "apis": {
+      "custom": {
+        "endpoint": {
+          "uri": "arn:aws:lambda:us-east-1:YOUR_ACCOUNT_ID:function:climacast"
+        },
+        "interfaces": []
+      }
+    },
+    "manifestVersion": "1.0",
+    "permissions": [],
+    "privacyAndCompliance": {
+      "allowsPurchases": false,
+      "usesPersonalInfo": false,
+      "isChildDirected": false,
+      "isExportCompliant": true,
+      "containsAds": false,
+      "locales": {
+        "en-US": {
+          "privacyPolicyUrl": "https://github.com/lllucius/climacast"
+        }
+      }
+    }
+  }
+}

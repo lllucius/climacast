@@ -1,7 +1,64 @@
 # Clima Cast
-NWS V3 API based weather Alexa skill
+NWS API based weather Alexa skill (Version 2.0)
 
 Using information provided by the National Weather Service, Clima Cast gives you the current conditions and the 7-day forecast for your area or any other United States city.
+
+## What's New in Version 2.0
+
+This is a major refactoring that modernizes the skill to use the current Alexa-hosted pattern and the latest NWS API endpoints. See [REFACTORING_SUMMARY.md](REFACTORING_SUMMARY.md) for complete details.
+
+**Key improvements:**
+- 🎯 Modern Alexa-hosted skill structure with ASK SDK support
+- 🔄 Updated to NWS API v3 JSON endpoints
+- 📦 Simplified deployment with git push for hosted skills
+- 📚 Comprehensive documentation (deployment, testing, migration)
+- 🔧 Better dependency management with requirements.txt
+- 🐛 Bug fixes and code improvements
+- 🔒 Security verified (0 vulnerabilities)
+
+For migration from v1.x, see [MIGRATION.md](MIGRATION.md).
+
+## Project Structure
+
+This project follows the Alexa-hosted skill pattern:
+
+- `lambda/` - Lambda function code and dependencies
+- `skill-package/` - Skill metadata and interaction model
+  - `skill.json` - Skill manifest
+  - `interactionModels/custom/` - Interaction models by locale
+- `skill/` - Original skill definition files (reference only)
+- `tests/` - Test files
+- `aniso8601/`, `requests/`, `aws-lambda-lxml/` - Vendored dependencies (optional, for environments without pip)
+
+## Setup and Deployment
+
+For detailed deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
+
+**Quick Start for Alexa-Hosted Skills:**
+
+1. Create an Alexa-hosted skill in the Alexa Developer Console
+2. Copy files from `lambda/` to your skill's lambda directory
+3. Copy files from `skill-package/` to your skill's skill-package directory
+4. Set up environment variables (see DEPLOYMENT.md)
+5. Create DynamoDB tables (see DEPLOYMENT.md)
+6. Push changes with git
+
+**Quick Start for Self-Hosted Lambda:**
+
+1. Run `./upload` to create and deploy the Lambda package
+2. Deploy interaction model with ASK CLI: `ask deploy`
+3. Set up environment variables and DynamoDB tables
+
+For complete instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
+
+## Requirements
+
+- Python 3.8+
+- MapQuest API key (free tier available)
+- AWS account for DynamoDB tables
+- Four DynamoDB tables: LocationCache, StationCache, UserCache, ZoneCache
+
+## Usage
 
 When asking for specific weather conditions, you may use:
 
