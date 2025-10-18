@@ -21,7 +21,6 @@ from datetime import datetime
 from dateutil import parser, tz
 from dateutil.relativedelta import *
 from xml.etree.ElementTree import *
-from lxml import html
 from time import time
 
 # ASK SDK imports
@@ -30,7 +29,6 @@ from ask_sdk_core.dispatch_components import AbstractRequestHandler, AbstractExc
 from ask_sdk_core.utils import is_request_type, is_intent_name
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model import Response
-from ask_sdk_model.ui import SimpleCard
 
 """
     Anything defined here will persist for the duration of the lambda
@@ -2633,7 +2631,7 @@ def test_one():
 if __name__ == "__main__":
     import logging
     import sys
-    from cachecontrol import CacheControl, CacheControlAdapter
+    from cachecontrol import CacheControlAdapter
     from cachecontrol.caches.file_cache import FileCache
     from cachecontrol.heuristics import ExpiresAfter
     logging.basicConfig()
