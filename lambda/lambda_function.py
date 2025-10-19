@@ -24,7 +24,7 @@ from dateutil import parser, tz
 from dateutil.relativedelta import relativedelta
 
 # ASK SDK imports
-from ask_sdk_core.skill_builder import SkillBuilder
+from ask_sdk_core.skill_builder import CustomSkillBuilder
 from ask_sdk_core.dispatch_components import AbstractRequestHandler, AbstractExceptionHandler
 from ask_sdk_core.utils import is_request_type, is_intent_name
 from ask_sdk_dynamodb.adapter import DynamoDbAdapter
@@ -549,27 +549,64 @@ class Base(object):
 
         return text
 
+    def _get_cache_attributes(self, cache_name):
+        """
+            Get the attributes for a cache, handling shared vs user-specific caches
+            
+            Shared caches (LocationCache, StationCache, ZoneCache) need to be accessible
+            across all users. We'll access them directly from DynamoDB using a special
+            partition key "SHARED_CACHE".
+            
+            User-specific caches (UserCache) use the actual user's persistent attributes.
+        """
+        if cache_name in ["LocationCache", "StationCache", "ZoneCache"]:
+            # For shared caches, read directly from DynamoDB with shared key
+            table = DDB.Table(PERSISTENCE_TABLE_NAME)
+            try:
+                response = table.get_item(Key={"id": "SHARED_CACHE"})
+                if "Item" in response:
+                    return response["Item"].get("attributes", {})
+                return {}
+            except Exception:
+                return {}
+        else:
+            # For user-specific caches, use the attributes manager
+            if hasattr(self, '_attributes_manager'):
+                return self._attributes_manager.persistent_attributes
+            return {}
+    
+    def _save_cache_attributes(self, cache_name, attrs):
+        """
+            Save the attributes for a cache, handling shared vs user-specific caches
+        """
+        if cache_name in ["LocationCache", "StationCache", "ZoneCache"]:
+            # For shared caches, write directly to DynamoDB with shared key
+            table = DDB.Table(PERSISTENCE_TABLE_NAME)
+            try:
+                table.put_item(Item={"id": "SHARED_CACHE", "attributes": attrs})
+            except Exception as e:
+                print(f"Error saving shared cache: {e}")
+        else:
+            # For user-specific caches, use the attributes manager
+            if hasattr(self, '_attributes_manager'):
+                self._attributes_manager.save_persistent_attributes()
+
     def cache_get(self, cache_name, key):
         """
             Retrieve an item from the cache using the provided cache name and key
             Now uses persistent attributes instead of DynamoDB tables
-        """
-        if not hasattr(self, '_attributes_manager'):
-            return None
             
-        # Get the appropriate attributes based on cache type
-        if cache_name == "UserCache":
-            attrs = self._attributes_manager.persistent_attributes
-        else:
-            # Shared caches (LocationCache, StationCache, ZoneCache) use global attributes
-            # We'll store them in persistent attributes with a special prefix
-            attrs = self._attributes_manager.persistent_attributes
-        
+            Shared caches (LocationCache, StationCache, ZoneCache) are stored in a 
+            single DynamoDB item with partition key "SHARED_CACHE" to be accessible
+            across all users.
+        """
         # Get the cache dict from attributes
+        attrs = self._get_cache_attributes(cache_name)
         cache_dict = attrs.get(cache_name, {})
         
         # Build a key string from the key dict
-        key_str = "_".join([str(v) for v in sorted(key.values())])
+        # Sort to ensure consistent key ordering
+        key_str = "_".join([str(key[k]) for k in sorted(key.keys())])
         
         # Check if item exists and if TTL is still valid
         item = cache_dict.get(key_str)
@@ -581,7 +618,7 @@ class Base(object):
             # Item expired, remove it
             del cache_dict[key_str]
             attrs[cache_name] = cache_dict
-            self._attributes_manager.save_persistent_attributes()
+            self._save_cache_attributes(cache_name, attrs)
             return None
             
         return item
@@ -590,22 +627,18 @@ class Base(object):
         """
             Write an item to the cache using the provided cache name, key, and time to live
             Now uses persistent attributes instead of DynamoDB tables
-        """
-        if not hasattr(self, '_attributes_manager'):
-            return
             
-        # Get the appropriate attributes based on cache type
-        if cache_name == "UserCache":
-            attrs = self._attributes_manager.persistent_attributes
-        else:
-            # Shared caches (LocationCache, StationCache, ZoneCache) use global attributes
-            attrs = self._attributes_manager.persistent_attributes
-        
+            Shared caches (LocationCache, StationCache, ZoneCache) are stored in a 
+            single DynamoDB item with partition key "SHARED_CACHE" to be accessible
+            across all users.
+        """
         # Get or create the cache dict
+        attrs = self._get_cache_attributes(cache_name)
         cache_dict = attrs.get(cache_name, {})
         
         # Build a key string from the key dict
-        key_str = "_".join([str(v) for v in sorted(key.values())])
+        # Sort to ensure consistent key ordering
+        key_str = "_".join([str(key[k]) for k in sorted(key.keys())])
         
         # Add TTL if specified
         if ttl != 0:
@@ -614,7 +647,7 @@ class Base(object):
         # Store the item
         cache_dict[key_str] = key
         attrs[cache_name] = cache_dict
-        self._attributes_manager.save_persistent_attributes()
+        self._save_cache_attributes(cache_name, attrs)
 
     def https(self, path, loc="api.weather.gov"):
         """
@@ -2656,17 +2689,23 @@ class GetDataIntentHandler(BaseIntentHandler):
 
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        user, _, _ = self.get_user_and_location(handler_input)
+        user, _, event = self.get_user_and_location(handler_input)
         
         # Load persistent attributes from DynamoDB
         attributes_manager = handler_input.attributes_manager
-        persistent_attrs = attributes_manager.persistent_attributes
         
-        # Count items in each cache
-        location_count = len(persistent_attrs.get("LocationCache", {}))
-        station_count = len(persistent_attrs.get("StationCache", {}))
-        zone_count = len(persistent_attrs.get("ZoneCache", {}))
-        user_count = len(persistent_attrs.get("UserCache", {}))
+        # Create a temporary Base object to use helper methods
+        base = Base(event, attributes_manager)
+        
+        # Get shared caches
+        shared_attrs = base._get_cache_attributes("LocationCache")
+        location_count = len(shared_attrs.get("LocationCache", {}))
+        station_count = len(shared_attrs.get("StationCache", {}))
+        zone_count = len(shared_attrs.get("ZoneCache", {}))
+        
+        # Get user cache
+        user_attrs = attributes_manager.persistent_attributes
+        user_count = len(user_attrs.get("UserCache", {}))
         
         text = f"Data has been loaded. LocationCache has {location_count} items, " \
                f"StationCache has {station_count} items, " \
@@ -2713,7 +2752,7 @@ ddb_adapter = DynamoDbAdapter(
     dynamodb_resource=DDB
 )
 
-sb = SkillBuilder(persistence_adapter=ddb_adapter)
+sb = CustomSkillBuilder(persistence_adapter=ddb_adapter)
 
 # Register individual intent handlers
 # Order matters - more specific handlers should be registered first
