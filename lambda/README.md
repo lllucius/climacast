@@ -5,7 +5,48 @@ This directory contains the Lambda function code for the Clima Cast Alexa skill.
 ## Structure
 
 - `lambda_function.py` - Main Lambda handler using ASK SDK for Python
+- `cache_adapter.py` - Cache abstraction layer for DynamoDB and JSON files
+- `processing.py` - Core weather processing logic
+- `cli.py` - Command-line interface for local testing
 - `requirements.txt` - Python dependencies
+- `CLI_README.md` - Detailed documentation for the CLI
+
+## Local Testing
+
+The skill can now be tested locally using the CLI without deploying to Lambda:
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run CLI commands
+./cli.py launch
+./cli.py help
+./cli.py set_location --location "Boulder Colorado"
+./cli.py metric --metric temperature
+
+# See CLI_README.md for more examples
+```
+
+The CLI uses JSON file caching instead of DynamoDB, allowing you to test all processing logic locally.
+
+## Architecture
+
+The code is now structured into three layers:
+
+1. **Cache Abstraction** (`cache_adapter.py`) - Provides pluggable caching backends
+   - `DynamoDBCacheAdapter` for Lambda (AWS DynamoDB)
+   - `JSONFileCacheAdapter` for CLI (local JSON files)
+
+2. **Processing Logic** (`processing.py`) - Core weather processing
+   - Independent of Lambda/Alexa infrastructure
+   - Uses cache adapter for storage
+   - Testable via CLI
+
+3. **Lambda Handler** (`lambda_function.py`) - Alexa Skill integration
+   - ASK SDK request handlers
+   - Uses cache abstraction layer
+   - Unchanged public interface
 
 ## Dependencies
 

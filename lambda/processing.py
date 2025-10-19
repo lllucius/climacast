@@ -18,87 +18,28 @@ via CLI interface.
 """
 
 import json
-import re
-from math import sqrt
-from time import time
+import os
+import sys
 
-import requests
-from aniso8601.duration import parse_duration
-from cachetools import TTLCache, cached
-from datetime import datetime
-from dateutil import parser, tz
-from dateutil.relativedelta import relativedelta
+# Add lambda directory to path if needed
+lambda_dir = os.path.dirname(os.path.abspath(__file__))
+if lambda_dir not in sys.path:
+    sys.path.insert(0, lambda_dir)
 
-from cache_adapter import CacheAdapter
-
-
-# HTTP session for API requests
-HTTPS = requests.Session()
-
-# Cache up to 100 HTTP responses for 1 hour
-HTTP_CACHE = TTLCache(maxsize=100, ttl=3600)
-
-
-@cached(HTTP_CACHE)
-def get_api_data(url):
-    """
-        Cached HTTP GET request for API data
-    """
-    headers = {"User-Agent": "ClimacastAlexaSkill/2.0 (climacast@homerow.net)",
-               "Accept": "application/ld+json"}
-    r = HTTPS.get(url, headers=headers)
-    if r.status_code != 200 or r.text is None or r.text == "":
-        return None, r.status_code, r.url, r.content
-    return json.loads(r.text), r.status_code, r.url, None
-
-
-def notify(event, sub, msg=None):
-    """
-        Send SNS message of an unusual event
-    """
-    text = ""
-    if "request" in event:
-        request = event["request"]
-        intent = request.get("intent", None) if request else None
-        slots = intent.get("slots", None) if intent else None
-
-        if intent:
-            text += "REQUEST:\n\n"
-            text += "  " + request["type"]
-            if "name" in intent:
-                text += " - " + intent["name"]
-            text += "\n\n"
-
-        # Define SLOTS locally - these were imported from globals before
-        SLOTS = ["day", "leadin", "location", "metric", "month", "percent",
-                 "quarter", "setting", "when_abs", "when_any", "when_pos",
-                 "zip_conn", "zipcode"]
-        
-        if slots:
-            text += "SLOTS:\n\n"
-            for slot in SLOTS:
-                text += "  %-15s %s\n" % (slot + ":", str(slots.get(slot, {}).get("value", None)))
-            text += "\n"
-
-    text += "EVENT:\n\n"
-    text += json.dumps(event, indent=4)
-    text += "\n\n"
-
-    if msg:
-        text += "MESSAGE:\n\n"
-        text += "  " + msg
-        text += "\n\n"
-
-    print("NOTIFY:\n\n  %s\n\n%s" % (sub, text))
+# Import the weather processing classes from lambda_function
+from lambda_function import (
+    Base, User, Location, Observations, GridPoints, Alerts,
+    METRICS, DAYS, QUARTERS, MONTH_DAYS, MONTH_NAMES
+)
 
 
 class WeatherProcessor:
     """
     Main weather processing class.
     
-    This class contains all the core weather processing logic, separated from
-    the Lambda/Alexa-specific handler code. It can be instantiated with different
-    cache adapters (DynamoDB for Lambda, JSON files for CLI).
+    This class provides a simplified interface to the weather processing logic,
+    designed for CLI testing. It wraps the existing classes from lambda_function.py
+    and uses the cache_adapter abstraction.
     """
     
     def __init__(self, cache_adapter, here_api_key):
@@ -111,22 +52,48 @@ class WeatherProcessor:
         """
         self.cache_adapter = cache_adapter
         self.here_api_key = here_api_key
-        self.event = {}  # Will be set when processing a request
+        
+        # Set the HERE API key environment variable for lambda_function
+        os.environ['here_api_key'] = here_api_key
     
-    def https(self, path, loc="api.weather.gov"):
+    def build_event(self, request_data):
         """
-            Retrieve the JSON data from the given path and location
+        Build an event dictionary from request data.
+        
+        Args:
+            request_data: Request data dictionary
+            
+        Returns:
+            Event dictionary compatible with lambda_function classes
         """
-        url = "https://%s/%s" % (loc, path.replace(" ", "+"))
-        data, status_code, url_result, content = get_api_data(url)
-
-        if data is None:
-            notify(self.event,
-                        "HTTPSTATUS: %s" % status_code,
-                        "URL: %s\n\n%s" % (url_result, content))
-            return None
-
-        return data
+        event = {
+            "session": {
+                "new": True,
+                "sessionId": "test-session",
+                "user": {
+                    "userId": request_data.get("user_id", "test-user")
+                },
+                "attributes": request_data.get("session_attributes", {})
+            },
+            "request": {
+                "type": request_data.get("request_type"),
+            }
+        }
+        
+        if "intent_name" in request_data:
+            event["request"]["intent"] = {
+                "name": request_data["intent_name"],
+                "slots": {}
+            }
+            
+            # Convert slot format
+            for slot_name, slot_value in request_data.get("slots", {}).items():
+                if isinstance(slot_value, dict):
+                    event["request"]["intent"]["slots"][slot_name] = slot_value
+                else:
+                    event["request"]["intent"]["slots"][slot_name] = {"value": slot_value}
+        
+        return event
     
     def process_request(self, request_data):
         """
@@ -134,11 +101,12 @@ class WeatherProcessor:
         
         Args:
             request_data: Dictionary containing request information:
-                - request_type: Type of request (LaunchRequest, MetricIntent, etc.)
+                - request_type: Type of request (LaunchRequest, IntentRequest)
                 - intent_name: Name of the intent (optional)
                 - slots: Dictionary of slot values (optional)
                 - user_id: User ID for profile
-                - session_data: Session attributes (optional)
+                - user_location: Default location (optional)
+                - session_attributes: Session attributes (optional)
                 
         Returns:
             Dictionary with response:
@@ -146,36 +114,33 @@ class WeatherProcessor:
                 - should_end_session: Whether to end the session
                 - session_attributes: Updated session attributes
         """
-        # Store event for notify
-        self.event = {
-            "session": {
-                "user": {"userId": request_data.get("user_id", "test-user")}
-            },
-            "request": {
-                "type": request_data.get("request_type"),
-                "intent": {
-                    "name": request_data.get("intent_name"),
-                    "slots": request_data.get("slots", {})
-                }
-            }
-        }
+        # Build event
+        event = self.build_event(request_data)
+        
+        # Get user
+        user_id = request_data.get("user_id", "test-user")
+        user = User(event, user_id, attributes_manager=None, cache_adapter=self.cache_adapter)
+        
+        # Override user location if provided in request
+        if request_data.get("user_location"):
+            user._location = request_data["user_location"]
         
         # Process based on request type
         request_type = request_data.get("request_type")
         intent_name = request_data.get("intent_name")
         
         if request_type == "LaunchRequest":
-            return self._handle_launch(request_data)
+            return self._handle_launch(event, user)
         elif intent_name == "MetricIntent" or intent_name == "MetricPosIntent":
-            return self._handle_metric(request_data)
+            return self._handle_metric(event, user, request_data)
         elif intent_name == "SetLocationIntent":
-            return self._handle_set_location(request_data)
+            return self._handle_set_location(event, user, request_data)
         elif intent_name == "GetSettingIntent":
-            return self._handle_get_setting(request_data)
+            return self._handle_get_setting(event, user, request_data)
         elif intent_name == "AMAZON.HelpIntent":
-            return self._handle_help(request_data)
+            return self._handle_help(event, user)
         elif intent_name == "AMAZON.StopIntent" or intent_name == "AMAZON.CancelIntent":
-            return self._handle_stop(request_data)
+            return self._handle_stop(event, user)
         else:
             return {
                 "speech": "I didn't understand that request.",
@@ -183,11 +148,15 @@ class WeatherProcessor:
                 "session_attributes": {}
             }
     
-    def _handle_launch(self, request_data):
+    def _handle_launch(self, event, user):
         """Handle launch request."""
         text = "Welcome to Clime a Cast. " \
-               "For current conditions, use phrases like: What's the weather. "\
+               "For current conditions, use phrases like: What's the weather. " \
                "For forecasts, try phrases like: What's the forecast."
+        
+        if not user.location:
+            text += " You must set your default location by saying something like: " \
+                    "set location to Miami Florida."
         
         return {
             "speech": text,
@@ -195,22 +164,49 @@ class WeatherProcessor:
             "session_attributes": {}
         }
     
-    def _handle_metric(self, request_data):
+    def _handle_metric(self, event, user, request_data):
         """Handle metric intent (weather queries)."""
         slots = request_data.get("slots", {})
-        user_id = request_data.get("user_id", "test-user")
         
-        # Get user profile (simplified for now)
-        user_location = request_data.get("user_location")
+        # Get location
+        location_name = None
+        if "location" in slots:
+            location_name = slots["location"].get("value") if isinstance(slots["location"], dict) else slots["location"]
+        elif "zipcode" in slots:
+            location_name = slots["zipcode"].get("value") if isinstance(slots["zipcode"], dict) else slots["zipcode"]
         
-        if not user_location:
+        if location_name:
+            location_obj = Location(event, attributes_manager=None, cache_adapter=self.cache_adapter)
+            error_text = location_obj.set(location_name)
+            if error_text:
+                return {
+                    "speech": error_text,
+                    "should_end_session": False,
+                    "session_attributes": {}
+                }
+            loc = location_obj
+        elif user.location:
+            location_obj = Location(event, attributes_manager=None, cache_adapter=self.cache_adapter)
+            error_text = location_obj.set(user.location)
+            if error_text:
+                return {
+                    "speech": error_text,
+                    "should_end_session": False,
+                    "session_attributes": {}
+                }
+            loc = location_obj
+        else:
             return {
-                "speech": "You must set a default location first.",
+                "speech": "You must set a default location first or specify a location in your query.",
                 "should_end_session": False,
                 "session_attributes": {}
             }
         
-        metric = slots.get("metric", {}).get("value")
+        # Get metric
+        metric = slots.get("metric", {})
+        if isinstance(metric, dict):
+            metric = metric.get("value")
+        
         if not metric:
             return {
                 "speech": "You must include a metric like temperature, humidity or wind",
@@ -218,9 +214,30 @@ class WeatherProcessor:
                 "session_attributes": {}
             }
         
-        # This is a simplified version - full implementation would include
-        # all the weather processing logic
-        text = f"Processing weather metric: {metric} for location {user_location}"
+        # Process metric
+        if metric == "alerts":
+            alerts = Alerts(event, loc.countyZoneId, attributes_manager=None, cache_adapter=self.cache_adapter)
+            if len(alerts) == 0:
+                text = f"No alerts in effect at this time for {loc.city}."
+            else:
+                text = alerts.title + "... "
+                for alert in alerts:
+                    text += alert.headline + "... "
+                    text += "for " + alert.area + "... "
+            
+            # Normalize
+            base = Base(event, attributes_manager=None, cache_adapter=self.cache_adapter)
+            text = base.normalize(text)
+            
+            return {
+                "speech": text,
+                "should_end_session": False,
+                "session_attributes": {}
+            }
+        
+        # For now, just return a basic message for other metrics
+        # Full implementation would include current/forecast logic
+        text = f"Processing {metric} for {loc.city}, {loc.state}"
         
         return {
             "speech": text,
@@ -228,31 +245,53 @@ class WeatherProcessor:
             "session_attributes": {}
         }
     
-    def _handle_set_location(self, request_data):
+    def _handle_set_location(self, event, user, request_data):
         """Handle set location intent."""
         slots = request_data.get("slots", {})
-        location = slots.get("location", {}).get("value") or slots.get("zipcode", {}).get("value")
+        location_name = slots.get("location", {})
+        if isinstance(location_name, dict):
+            location_name = location_name.get("value")
         
-        if not location:
+        if not location_name:
+            location_name = slots.get("zipcode", {})
+            if isinstance(location_name, dict):
+                location_name = location_name.get("value")
+        
+        if not location_name:
             return {
                 "speech": "You must include a location.",
                 "should_end_session": False,
                 "session_attributes": {}
             }
         
-        # This would normally set the user's location
-        text = f"Your default location has been set to {location}."
+        location_obj = Location(event, attributes_manager=None, cache_adapter=self.cache_adapter)
+        error_text = location_obj.set(location_name)
+        
+        if error_text:
+            text = error_text
+        else:
+            user.location = location_obj.name
+            text = f"Your default location has been set to {location_obj.spoken_name()}."
         
         return {
             "speech": text,
             "should_end_session": False,
-            "session_attributes": {"user_location": location}
+            "session_attributes": {"user_location": user.location}
         }
     
-    def _handle_get_setting(self, request_data):
+    def _handle_get_setting(self, event, user, request_data):
         """Handle get setting intent."""
-        user_location = request_data.get("user_location", "not set")
-        text = f"Your location is set to {user_location}."
+        if user.location:
+            location_obj = Location(event, attributes_manager=None, cache_adapter=self.cache_adapter)
+            error_text = location_obj.set(user.location)
+            if error_text:
+                text = "Location is set but invalid."
+            else:
+                text = f"Your location is set to {location_obj.spoken_name()}."
+        else:
+            text = "You have not set a default location."
+        
+        text += f" Voice pitch is {user.pitch} percent. Voice rate is {user.rate} percent."
         
         return {
             "speech": text,
@@ -260,7 +299,7 @@ class WeatherProcessor:
             "session_attributes": {}
         }
     
-    def _handle_help(self, request_data):
+    def _handle_help(self, event, user):
         """Handle help intent."""
         text = """
             For complete information, please refer to the Clima Cast skill
@@ -268,6 +307,11 @@ class WeatherProcessor:
             You may get the current conditions with phrases like:
                 What's the weather?
                 What's the humidity in Baton Rouge, Louisiana?
+            You may get forecasts by saying things like:
+                What's the forecast?
+                What will the temperature be tomorrow?
+            To check for active alerts:
+                Are there any alerts?
             """
         
         return {
@@ -276,7 +320,7 @@ class WeatherProcessor:
             "session_attributes": {}
         }
     
-    def _handle_stop(self, request_data):
+    def _handle_stop(self, event, user):
         """Handle stop/cancel intent."""
         return {
             "speech": "Thank you for using Clime a Cast.",
