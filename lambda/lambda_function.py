@@ -372,7 +372,6 @@ LOCATION_XLATE = {"gnome alaska": "nome alaska",
 load_dotenv()
 
 HERE_API_KEY = os.environ.get("here_api_key", "")
-print("HERE_API_KEY", HERE_API_KEY)
 
 PERSISTENCE_REGION = os.environ.get('DYNAMODB_PERSISTENCE_REGION')
 PERSISTENCE_TABLE_NAME = os.environ.get('DYNAMODB_PERSISTENCE_TABLE_NAME')
