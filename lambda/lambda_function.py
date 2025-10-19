@@ -18,6 +18,7 @@ from time import time
 import requests
 from aniso8601.duration import parse_duration
 from boto3 import resource
+from botocore.exceptions import ClientError
 from cachetools import TTLCache, cached
 from datetime import datetime
 from dateutil import parser, tz
@@ -555,7 +556,8 @@ class Base(object):
             
             Shared caches (LocationCache, StationCache, ZoneCache) are stored in a 
             single DynamoDB item with partition key "SHARED_CACHE" to be accessible
-            across all users.
+            across all users. Uses optimistic locking with version number when removing
+            expired items from shared caches.
         """
         # Build a key string from the key dict
         # Sort to ensure consistent key ordering
@@ -570,6 +572,7 @@ class Base(object):
                 if "Item" not in response:
                     return None
                 attrs = response["Item"].get("attributes", {})
+                current_version = response["Item"].get("version", 0)
             except Exception:
                 return None
         else:
@@ -577,6 +580,7 @@ class Base(object):
             if not hasattr(self, '_attributes_manager'):
                 return None
             attrs = self._attributes_manager.persistent_attributes
+            current_version = None
         
         # Get the cache dict
         cache_dict = attrs.get(cache_name, {})
@@ -594,9 +598,38 @@ class Base(object):
             
             # Save the updated cache
             if cache_name in ["LocationCache", "StationCache", "ZoneCache"]:
+                # Use optimistic locking for shared caches
                 table = DDB.Table(PERSISTENCE_TABLE_NAME)
+                new_version = current_version + 1
                 try:
-                    table.put_item(Item={"id": "SHARED_CACHE", "attributes": attrs})
+                    if current_version == 0:
+                        # First write or no version - no condition needed
+                        table.put_item(
+                            Item={
+                                "id": "SHARED_CACHE",
+                                "attributes": attrs,
+                                "version": new_version
+                            }
+                        )
+                    else:
+                        # Conditional write to ensure version hasn't changed
+                        table.put_item(
+                            Item={
+                                "id": "SHARED_CACHE",
+                                "attributes": attrs,
+                                "version": new_version
+                            },
+                            ConditionExpression="version = :current_version",
+                            ExpressionAttributeValues={
+                                ":current_version": current_version
+                            }
+                        )
+                except ClientError as e:
+                    if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+                        # Version conflict - someone else modified it, that's ok for expiry
+                        print(f"Version conflict when removing expired item, skipping")
+                    else:
+                        print(f"Error saving shared cache: {e}")
                 except Exception as e:
                     print(f"Error saving shared cache: {e}")
             else:
@@ -614,7 +647,8 @@ class Base(object):
             
             Shared caches (LocationCache, StationCache, ZoneCache) are stored in a 
             single DynamoDB item with partition key "SHARED_CACHE" to be accessible
-            across all users.
+            across all users. Uses optimistic locking with a version number to handle
+            concurrent writes safely.
         """
         # Build a key string from the key dict
         # Sort to ensure consistent key ordering
@@ -626,27 +660,77 @@ class Base(object):
         
         # Access persistent attributes directly based on cache type
         if cache_name in ["LocationCache", "StationCache", "ZoneCache"]:
-            # For shared caches, read/write directly from DynamoDB with shared key
+            # For shared caches, use optimistic locking with version number
             table = DDB.Table(PERSISTENCE_TABLE_NAME)
-            try:
-                response = table.get_item(Key={"id": "SHARED_CACHE"})
-                if "Item" in response:
-                    attrs = response["Item"].get("attributes", {})
-                else:
+            max_retries = 5
+            retry_count = 0
+            
+            while retry_count < max_retries:
+                try:
+                    # Read current version and attributes
+                    response = table.get_item(Key={"id": "SHARED_CACHE"})
+                    if "Item" in response:
+                        attrs = response["Item"].get("attributes", {})
+                        current_version = response["Item"].get("version", 0)
+                    else:
+                        attrs = {}
+                        current_version = 0
+                except Exception as e:
+                    print(f"Error reading shared cache: {e}")
                     attrs = {}
-            except Exception:
-                attrs = {}
-            
-            # Update cache dict
-            cache_dict = attrs.get(cache_name, {})
-            cache_dict[key_str] = key
-            attrs[cache_name] = cache_dict
-            
-            # Write back to DynamoDB
-            try:
-                table.put_item(Item={"id": "SHARED_CACHE", "attributes": attrs})
-            except Exception as e:
-                print(f"Error saving shared cache: {e}")
+                    current_version = 0
+                
+                # Update cache dict
+                cache_dict = attrs.get(cache_name, {})
+                cache_dict[key_str] = key
+                attrs[cache_name] = cache_dict
+                
+                # Increment version for optimistic locking
+                new_version = current_version + 1
+                
+                # Write back to DynamoDB with conditional expression
+                try:
+                    if current_version == 0:
+                        # First write or item doesn't exist - no condition needed
+                        table.put_item(
+                            Item={
+                                "id": "SHARED_CACHE",
+                                "attributes": attrs,
+                                "version": new_version
+                            }
+                        )
+                    else:
+                        # Conditional write to ensure version hasn't changed
+                        table.put_item(
+                            Item={
+                                "id": "SHARED_CACHE",
+                                "attributes": attrs,
+                                "version": new_version
+                            },
+                            ConditionExpression="version = :current_version",
+                            ExpressionAttributeValues={
+                                ":current_version": current_version
+                            }
+                        )
+                    # Success - exit retry loop
+                    break
+                except ClientError as e:
+                    if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+                        # Version mismatch - retry with exponential backoff
+                        retry_count += 1
+                        if retry_count < max_retries:
+                            print(f"Version conflict on shared cache write, retry {retry_count}/{max_retries}")
+                            # Simple exponential backoff (could be improved with jitter)
+                            import time as time_module
+                            time_module.sleep(0.1 * (2 ** retry_count))
+                        else:
+                            print(f"Failed to write shared cache after {max_retries} retries")
+                    else:
+                        print(f"Error saving shared cache: {e}")
+                        break
+                except Exception as e:
+                    print(f"Error saving shared cache: {e}")
+                    break
         else:
             # For user-specific caches, use the attributes manager
             if not hasattr(self, '_attributes_manager'):
