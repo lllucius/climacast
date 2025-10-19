@@ -67,8 +67,8 @@ For complete instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 - Python 3.8+
 - MapQuest API key (free tier available)
-- AWS account for DynamoDB tables
-- Four DynamoDB tables: LocationCache, StationCache, UserCache, ZoneCache
+- AWS account for DynamoDB table
+- Single DynamoDB table: climacast_persistence (for Alexa-hosted persistent attributes)
 
 ## Usage
 
