@@ -37,7 +37,7 @@ Alexa-hosted skills provide free hosting with AWS Lambda and S3 storage.
    - In the Alexa Developer Console, go to "Code" tab
    - Add environment variables in the Lambda configuration:
      - `app_id`: Your skill's application ID (found in skill settings)
-     - `mapquest_id`: Your MapQuest API key (get one at https://developer.mapquest.com/)
+     - `here_api_key`: Your HERE.com API key (get one at https://developer.here.com/)
      - `event_id`: (Optional) SNS topic ARN for error notifications
 
 5. **Create DynamoDB Table**
@@ -134,12 +134,12 @@ If you prefer to host the Lambda function yourself:
    ask deploy
    ```
 
-## MapQuest API Key
+## HERE.com API Key
 
-The skill requires a MapQuest API key for geocoding. Get one for free at:
-https://developer.mapquest.com/
+The skill requires a HERE.com API key for geocoding. Get one for free at:
+https://developer.here.com/
 
-Sign up and create an app to get your API key. The free tier allows 15,000 transactions per month.
+Sign up and create an app to get your API key. The free tier provides generous usage limits for geocoding.
 
 ## Updating the Skill
 
@@ -159,10 +159,10 @@ For self-hosted Lambda, repeat the deployment package creation and upload steps.
 - Check CloudWatch Logs for errors
 - Verify environment variables are set correctly
 - Ensure DynamoDB tables exist and have correct permissions
-- Verify MapQuest API key is valid
+- Verify HERE.com API key is valid
 
 ### "Location Not Found" Errors
-- Check MapQuest API key
+- Check HERE.com API key
 - Verify internet connectivity from Lambda
 - Check CloudWatch logs for API errors
 

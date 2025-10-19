@@ -323,7 +323,7 @@ Results:
 
 - ✓ **CodeQL scan**: 0 vulnerabilities found
 - ✓ **No new dependencies**: Uses same packages
-- ✓ **No new API calls**: Same NWS and MapQuest usage
+- ✓ **No new API calls**: Same NWS and HERE.com usage
 - ✓ **Same authentication**: DynamoDB and SNS unchanged
 - ✓ **Environment variables**: Same security model
 
