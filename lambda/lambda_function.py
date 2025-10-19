@@ -24,9 +24,10 @@ from dateutil import parser, tz
 from dateutil.relativedelta import relativedelta
 
 # ASK SDK imports
-from ask_sdk_core.skill_builder import SkillBuilder
+from ask_sdk_core.skill_builder import CustomSkillBuilder
 from ask_sdk_core.dispatch_components import AbstractRequestHandler, AbstractExceptionHandler
 from ask_sdk_core.utils import is_request_type, is_intent_name
+from ask_sdk_dynamodb.adapter import DynamoDbAdapter
 
 """
     Anything defined here will persist for the duration of the lambda
@@ -370,11 +371,10 @@ LOCATION_XLATE = {"gnome alaska": "nome alaska",
 
 SNS = awsclient("sns")
 DDB = awsresource("dynamodb", region_name="us-east-1")
-LOCATIONCACHE = DDB.Table("LocationCache")
-STATIONCACHE = DDB.Table("StationCache")
-USERCACHE = DDB.Table("UserCache")
-ZONECACHE = DDB.Table("ZoneCache")
 HTTPS = requests.Session()
+
+# Table name for Alexa-hosted persistent attributes
+PERSISTENCE_TABLE_NAME = "climacast_persistence"
 
 # Cache up to 100 HTTP responses for 1 hour
 HTTP_CACHE = TTLCache(maxsize=100, ttl=3600)
@@ -432,25 +432,26 @@ def get_api_data(url):
 
 
 class Base(object):
-    def __init__(self, event):
+    def __init__(self, event, attributes_manager=None):
         self.event = event
+        self._attributes_manager = attributes_manager
 
     def get_zone(self, zoneId, zoneType):
         """
             Returns the zone information for the give zone ID
         """
         zoneId = zoneId.rsplit("/")[-1]
-        zone = self.cache_get(ZONECACHE, {"id": zoneId})
+        zone = self.cache_get("ZoneCache", {"id": zoneId})
         if zone is None:
             data = self.https("zones/%s/%s" % (zoneType, zoneId))
             if data is None or data.get("status", 0) != 0:
                 notify(self.event, "Unable to get zone info for %s" % zoneId, data)
                 return {}
-            zone = self.put_zone(ZONECACHE, data)
+            zone = self.put_zone("ZoneCache", data)
 
         return zone
 
-    def put_zone(self, table, data):
+    def put_zone(self, cache_name, data):
         """
             Writes the zone information to the cache
         """
@@ -458,7 +459,7 @@ class Base(object):
                 "type": data["type"],
                 "name": data["name"]}
 
-        self.cache_put(table, zone)
+        self.cache_put(cache_name, zone)
 
         return zone
 
@@ -499,17 +500,17 @@ class Base(object):
             Returns the station information for the given station ID
         """
         stationId = stationId.rsplit("/")[-1]
-        station = self.cache_get(STATIONCACHE, {"id": stationId})
+        station = self.cache_get("StationCache", {"id": stationId})
         if station is None:
             data = self.https("stations/%s" % stationId)
             if data is None or data.get("status", 0) != 0:
                 notify(self.event, "Unable to get station %s" % stationId, data)
                 return None
-            station = self.put_station(STATIONCACHE, data)
+            station = self.put_station("StationCache", data)
 
         return station
 
-    def put_station(self, table, data):
+    def put_station(self, cache_name, data):
         """
             Save station information to the cache
         """
@@ -522,7 +523,7 @@ class Base(object):
         station = {"id": data["stationIdentifier"],
                    "name": name}
 
-        self.cache_put(table, station)
+        self.cache_put(cache_name, station)
 
         return station
 
@@ -548,22 +549,105 @@ class Base(object):
 
         return text
 
-    def cache_get(self, table, key):
+    def _get_cache_attributes(self, cache_name):
         """
-            Retrieve an item from the cache using the provided table and key
+            Get the attributes for a cache, handling shared vs user-specific caches
+            
+            Shared caches (LocationCache, StationCache, ZoneCache) need to be accessible
+            across all users. We'll access them directly from DynamoDB using a special
+            partition key "SHARED_CACHE".
+            
+            User-specific caches (UserCache) use the actual user's persistent attributes.
         """
-        item = table.get_item(Key=key)
-        if item is None or "Item" not in item:
-            return None
-        return item["Item"]
+        if cache_name in ["LocationCache", "StationCache", "ZoneCache"]:
+            # For shared caches, read directly from DynamoDB with shared key
+            table = DDB.Table(PERSISTENCE_TABLE_NAME)
+            try:
+                response = table.get_item(Key={"id": "SHARED_CACHE"})
+                if "Item" in response:
+                    return response["Item"].get("attributes", {})
+                return {}
+            except Exception:
+                return {}
+        else:
+            # For user-specific caches, use the attributes manager
+            if hasattr(self, '_attributes_manager'):
+                return self._attributes_manager.persistent_attributes
+            return {}
+    
+    def _save_cache_attributes(self, cache_name, attrs):
+        """
+            Save the attributes for a cache, handling shared vs user-specific caches
+        """
+        if cache_name in ["LocationCache", "StationCache", "ZoneCache"]:
+            # For shared caches, write directly to DynamoDB with shared key
+            table = DDB.Table(PERSISTENCE_TABLE_NAME)
+            try:
+                table.put_item(Item={"id": "SHARED_CACHE", "attributes": attrs})
+            except Exception as e:
+                print(f"Error saving shared cache: {e}")
+        else:
+            # For user-specific caches, use the attributes manager
+            if hasattr(self, '_attributes_manager'):
+                self._attributes_manager.save_persistent_attributes()
 
-    def cache_put(self, table, key, ttl=35):
+    def cache_get(self, cache_name, key):
         """
-            Write an item to the cache using the provided table, key, and time to live
+            Retrieve an item from the cache using the provided cache name and key
+            Now uses persistent attributes instead of DynamoDB tables
+            
+            Shared caches (LocationCache, StationCache, ZoneCache) are stored in a 
+            single DynamoDB item with partition key "SHARED_CACHE" to be accessible
+            across all users.
         """
+        # Get the cache dict from attributes
+        attrs = self._get_cache_attributes(cache_name)
+        cache_dict = attrs.get(cache_name, {})
+        
+        # Build a key string from the key dict
+        # Sort to ensure consistent key ordering
+        key_str = "_".join([str(key[k]) for k in sorted(key.keys())])
+        
+        # Check if item exists and if TTL is still valid
+        item = cache_dict.get(key_str)
+        if item is None:
+            return None
+            
+        # Check TTL if present
+        if "ttl" in item and item["ttl"] < int(time()):
+            # Item expired, remove it
+            del cache_dict[key_str]
+            attrs[cache_name] = cache_dict
+            self._save_cache_attributes(cache_name, attrs)
+            return None
+            
+        return item
+
+    def cache_put(self, cache_name, key, ttl=35):
+        """
+            Write an item to the cache using the provided cache name, key, and time to live
+            Now uses persistent attributes instead of DynamoDB tables
+            
+            Shared caches (LocationCache, StationCache, ZoneCache) are stored in a 
+            single DynamoDB item with partition key "SHARED_CACHE" to be accessible
+            across all users.
+        """
+        # Get or create the cache dict
+        attrs = self._get_cache_attributes(cache_name)
+        cache_dict = attrs.get(cache_name, {})
+        
+        # Build a key string from the key dict
+        # Sort to ensure consistent key ordering
+        key_str = "_".join([str(key[k]) for k in sorted(key.keys())])
+        
+        # Add TTL if specified
         if ttl != 0:
             key["ttl"] = int(time()) + (ttl * 24 * 60 * 60)
-        table.put_item(Item=key)
+        
+        # Store the item
+        cache_dict[key_str] = key
+        attrs[cache_name] = cache_dict
+        self._save_cache_attributes(cache_name, attrs)
 
     def https(self, path, loc="api.weather.gov"):
         """
@@ -830,8 +914,8 @@ class Base(object):
 
 
 class GridPoints(Base):
-    def __init__(self, event, tz, cwa, gridpoint):
-        super().__init__(event)
+    def __init__(self, event, tz, cwa, gridpoint, attributes_manager=None):
+        super().__init__(event, attributes_manager)
         self.tz = tz
         self.data = self.https("gridpoints/%s/%s" % (cwa, gridpoint))
         #print(json.dumps(self.data, indent=4))
@@ -1198,8 +1282,8 @@ class GridPoints(Base):
 
 
 class Observations(Base):
-    def __init__(self, event, stations, limit=3):
-        super().__init__(event)
+    def __init__(self, event, stations, limit=3, attributes_manager=None):
+        super().__init__(event, attributes_manager)
         self.stations = stations
         self.data = None
         self.observations = None
@@ -1314,7 +1398,8 @@ class Observations(Base):
 
 class Alerts(Base):
     class Alert(Base):
-        def __init__(self, event, alert):
+        def __init__(self, event, alert, attributes_manager=None):
+            super().__init__(event, attributes_manager)
             self.alert = alert
 
         @property
@@ -1341,8 +1426,8 @@ class Alerts(Base):
         def instruction(self):
             return self.normalize(self.alert["instruction"])
 
-    def __init__(self, event, zoneid):
-        super().__init__(event)
+    def __init__(self, event, zoneid, attributes_manager=None):
+        super().__init__(event, attributes_manager)
         self.zoneid = zoneid
         self._title = ""
         self._alerts = []
@@ -1353,7 +1438,7 @@ class Alerts(Base):
 
     def __iter__(self):
         for alert in self._alerts:
-            yield self.Alert(self.event, alert)
+            yield self.Alert(self.event, alert, self._attributes_manager)
 
     def __len__(self):
         return len(self._alerts)
@@ -1364,8 +1449,8 @@ class Alerts(Base):
 
 
 class Location(Base):
-    def __init__(self, event):
-        super().__init__(event)
+    def __init__(self, event, attributes_manager=None):
+        super().__init__(event, attributes_manager)
 
     def set(self, name, default=None):
         # Normalize name
@@ -1398,7 +1483,7 @@ class Location(Base):
                 return "%s could not be located" % self.spoken_name(name)
 
             # Retrieve the location data from the cache
-            loc = self.cache_get(LOCATIONCACHE, {"location": "%s" % name})
+            loc = self.cache_get("LocationCache", {"location": "%s" % name})
             if loc is not None:
                 self.loc = loc
                 return None
@@ -1433,7 +1518,7 @@ class Location(Base):
 
             #print("CITY", city, "STATE", state)
             # Retrieve the location data from the cache
-            loc = self.cache_get(LOCATIONCACHE, {"location": "%s %s" % (city, state)})
+            loc = self.cache_get("LocationCache", {"location": "%s %s" % (city, state)})
             #print("loc", loc)
             #if loc is not None:
             #    self.loc = loc
@@ -1483,7 +1568,7 @@ class Location(Base):
 #            return "%s %s could not be located" % (city, state)
 
         # Retrieve the location data from the cache
-        rloc = self.cache_get(LOCATIONCACHE, {"location": "%s %s" % (loc["city"], loc["state"])})
+        rloc = self.cache_get("LocationCache", {"location": "%s %s" % (loc["city"], loc["state"])})
         if rloc is None:
             # Have a new location, so retrieve the base info
             rcoords, _ = self.mapquest("%s+%s" % (loc["city"], loc["state"]))
@@ -1525,7 +1610,7 @@ class Location(Base):
 
         # Put it to the cache
         loc["location"] = "%s %s" % (city, state) if state else city
-        self.cache_put(LOCATIONCACHE, loc)
+        self.cache_put("LocationCache", loc)
 
         # And remember
         self.loc = loc
@@ -1611,8 +1696,8 @@ class Location(Base):
 
 
 class User(Base):
-    def __init__(self, event, userid):
-        super().__init__(event)
+    def __init__(self, event, userid, attributes_manager=None):
+        super().__init__(event, attributes_manager)
         self._userid = userid
         self._location = None
         self._rate = 100
@@ -1620,7 +1705,7 @@ class User(Base):
         self.get_default_metrics()
 
         # Get or create the user's profile
-        user = self.cache_get(USERCACHE, {"userid": userid})
+        user = self.cache_get("UserCache", {"userid": userid})
         if user is None:
             self.save()
         else:
@@ -1636,7 +1721,7 @@ class User(Base):
                 "rate": self._rate,
                 "pitch": self._pitch,
                 "metrics": self._metrics}
-        self.cache_put(USERCACHE, item, ttl=0)
+        self.cache_put("UserCache", item, ttl=0)
 
     def get_default_metrics(self):
         metrics = {}
@@ -1733,13 +1818,16 @@ class BaseIntentHandler(AbstractRequestHandler):
             "request": {}
         }
 
+        # Get attributes manager for persistence
+        attributes_manager = handler_input.attributes_manager
+
         # Load user profile
-        user = User(event, user_id)
+        user = User(event, user_id, attributes_manager)
 
         # Try to load default location
         loc = None
         if user.location:
-            location_obj = Location(event)
+            location_obj = Location(event, attributes_manager)
             text = location_obj.set(user.location)
             if text is None:
                 loc = location_obj
@@ -1792,12 +1880,13 @@ class BaseIntentHandler(AbstractRequestHandler):
         response_builder.set_should_end_session(end)
         return response_builder.response
 
-    def get_location_from_slots(self, event, loc, slots, req=False):
+    def get_location_from_slots(self, handler_input, event, loc, slots, req=False):
         """Process location from slot values"""
         location_name = slots.get("location") or slots.get("zipcode")
 
         if location_name:
-            location_obj = Location(event)
+            attributes_manager = handler_input.attributes_manager
+            location_obj = Location(event, attributes_manager)
             text = location_obj.set(location_name, loc)
             if text is None:
                 return location_obj, None
@@ -1910,9 +1999,10 @@ class BaseIntentHandler(AbstractRequestHandler):
 
         return has_when, stime, etime, sname, quarters
 
-    def get_alerts(self, event, loc):
+    def get_alerts(self, handler_input, event, loc):
         """Get weather alerts for location"""
-        alerts = Alerts(event, loc.countyZoneId)
+        attributes_manager = handler_input.attributes_manager
+        alerts = Alerts(event, loc.countyZoneId, attributes_manager)
         if len(alerts) == 0:
             return "No alerts in effect at this time for %s." % loc.city
 
@@ -1925,12 +2015,13 @@ class BaseIntentHandler(AbstractRequestHandler):
 
         return text
 
-    def get_current(self, event, user, loc, metrics):
+    def get_current(self, handler_input, event, user, loc, metrics):
         """Get current weather conditions"""
         text = ""
 
         # Retrieve the current observations from the nearest station
-        obs = Observations(event, loc.observationStations)
+        attributes_manager = handler_input.attributes_manager
+        obs = Observations(event, loc.observationStations, attributes_manager=attributes_manager)
         if obs.is_good:
             text += "At %s, %s reported %s, " % \
                     (obs.time_reported.astimezone(loc.tz).strftime("%I:%M%p"),
@@ -1978,10 +2069,11 @@ class BaseIntentHandler(AbstractRequestHandler):
 
         return text
 
-    def get_extended(self, event, loc):
+    def get_extended(self, handler_input, event, loc):
         """Get extended forecast"""
         # Import normalize from Base class
-        base = Base(event)
+        attributes_manager = handler_input.attributes_manager
+        base = Base(event, attributes_manager)
 
         data = base.https("points/%s/forecast" % loc.coords)
         if data is None or data.get("periods", None) is None:
@@ -2004,13 +2096,14 @@ class BaseIntentHandler(AbstractRequestHandler):
 
         return base.normalize(header + text)
 
-    def get_forecast(self, event, user, loc, stime, etime, sname, metrics):
+    def get_forecast(self, handler_input, event, user, loc, stime, etime, sname, metrics):
         """Get weather forecast"""
         # Import normalize from Base class
-        base = Base(event)
+        attributes_manager = handler_input.attributes_manager
+        base = Base(event, attributes_manager)
 
         fulltext = ""
-        gp = GridPoints(event, loc.tz, loc.cwa, loc.grid_point)
+        gp = GridPoints(event, loc.tz, loc.cwa, loc.grid_point, attributes_manager)
 
         for metric in metrics:
             metric = METRICS[metric][0]
@@ -2306,13 +2399,14 @@ class MetricIntentHandler(BaseIntentHandler):
 
         # Handle special metrics
         if metric == "alerts":
-            text = self.get_alerts(event, loc)
+            text = self.get_alerts(handler_input, event, loc)
             # Normalize text
-            base = Base(event)
+            attributes_manager = handler_input.attributes_manager
+            base = Base(event, attributes_manager)
             return self.respond(handler_input, user, base.normalize(text))
 
         if metric == "extended forecast":
-            text = self.get_extended(event, loc)
+            text = self.get_extended(handler_input, event, loc)
             return self.respond(handler_input, user, text)
 
         if metric not in METRICS:
@@ -2330,11 +2424,12 @@ class MetricIntentHandler(BaseIntentHandler):
                        "chance" in metric or "will" in leadin or "going" in leadin)
 
         if is_forecast:
-            text = self.get_forecast(event, user, loc, stime, etime, sname, metrics)
+            text = self.get_forecast(handler_input, event, user, loc, stime, etime, sname, metrics)
         else:
-            text = self.get_current(event, user, loc, metrics)
+            text = self.get_current(handler_input, event, user, loc, metrics)
             # Normalize text
-            base = Base(event)
+            attributes_manager = handler_input.attributes_manager
+            base = Base(event, attributes_manager)
             text = base.normalize(text)
 
         return self.respond(handler_input, user, text)
@@ -2458,7 +2553,8 @@ class SetLocationIntentHandler(BaseIntentHandler):
             text = "You must include the location"
             return self.respond(handler_input, user, text)
 
-        location_obj = Location(event)
+        attributes_manager = handler_input.attributes_manager
+        location_obj = Location(event, attributes_manager)
         text = location_obj.set(location_name, loc)
         if text is None:
             user.location = location_obj.name
@@ -2567,6 +2663,58 @@ class ResetCustomIntentHandler(BaseIntentHandler):
         return self.respond(handler_input, user, text)
 
 
+class StoreDataIntentHandler(BaseIntentHandler):
+    """Handler for StoreDataIntent - saves persistent attributes"""
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        return is_intent_name("StoreDataIntent")(handler_input)
+
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        user, _, _ = self.get_user_and_location(handler_input)
+        
+        # Save persistent attributes to DynamoDB
+        attributes_manager = handler_input.attributes_manager
+        attributes_manager.save_persistent_attributes()
+        
+        text = "Data has been saved successfully."
+        return self.respond(handler_input, user, text, end=True)
+
+
+class GetDataIntentHandler(BaseIntentHandler):
+    """Handler for GetDataIntent - loads persistent attributes"""
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        return is_intent_name("GetDataIntent")(handler_input)
+
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        user, _, event = self.get_user_and_location(handler_input)
+        
+        # Load persistent attributes from DynamoDB
+        attributes_manager = handler_input.attributes_manager
+        
+        # Create a temporary Base object to use helper methods
+        base = Base(event, attributes_manager)
+        
+        # Get shared caches
+        shared_attrs = base._get_cache_attributes("LocationCache")
+        location_count = len(shared_attrs.get("LocationCache", {}))
+        station_count = len(shared_attrs.get("StationCache", {}))
+        zone_count = len(shared_attrs.get("ZoneCache", {}))
+        
+        # Get user cache
+        user_attrs = attributes_manager.persistent_attributes
+        user_count = len(user_attrs.get("UserCache", {}))
+        
+        text = f"Data has been loaded. LocationCache has {location_count} items, " \
+               f"StationCache has {station_count} items, " \
+               f"ZoneCache has {zone_count} items, " \
+               f"and UserCache has {user_count} items."
+        
+        return self.respond(handler_input, user, text, end=True)
+
+
 class SkillExceptionHandler(AbstractExceptionHandler):
     """Handle exceptions"""
     def can_handle(self, handler_input, exception):
@@ -2596,8 +2744,15 @@ class SkillExceptionHandler(AbstractExceptionHandler):
         ).set_should_end_session(True).response
 
 
-# Build the skill
-sb = SkillBuilder()
+# Build the skill with DynamoDB persistence adapter
+# Create the persistence adapter for Alexa-hosted DynamoDB
+ddb_adapter = DynamoDbAdapter(
+    table_name=PERSISTENCE_TABLE_NAME,
+    create_table=False,
+    dynamodb_resource=DDB
+)
+
+sb = CustomSkillBuilder(persistence_adapter=ddb_adapter)
 
 # Register individual intent handlers
 # Order matters - more specific handlers should be registered first
@@ -2614,6 +2769,8 @@ sb.add_request_handler(GetCustomIntentHandler())
 sb.add_request_handler(AddCustomIntentHandler())
 sb.add_request_handler(RemoveCustomIntentHandler())
 sb.add_request_handler(ResetCustomIntentHandler())
+sb.add_request_handler(StoreDataIntentHandler())
+sb.add_request_handler(GetDataIntentHandler())
 sb.add_request_handler(FallbackIntentHandler())
 
 # Add exception handler
@@ -2621,4 +2778,10 @@ sb.add_exception_handler(SkillExceptionHandler())
 
 # Create lambda handler from SkillBuilder
 _skill_lambda_handler = sb.lambda_handler()
+
+
+# AWS Lambda handler entry point
+def lambda_handler(event, context):
+    """Main Lambda handler that routes requests to ASK SDK"""
+    return _skill_lambda_handler(event, context)
 

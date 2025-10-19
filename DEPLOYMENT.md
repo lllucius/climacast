@@ -40,71 +40,30 @@ Alexa-hosted skills provide free hosting with AWS Lambda and S3 storage.
      - `mapquest_id`: Your MapQuest API key (get one at https://developer.mapquest.com/)
      - `event_id`: (Optional) SNS topic ARN for error notifications
 
-5. **Create DynamoDB Tables**
+5. **Create DynamoDB Table**
    
-   The skill requires four DynamoDB tables in us-east-1:
+   The skill uses a single DynamoDB table for persistent attributes:
    
-   - **LocationCache**: Stores geocoded locations
-     - Partition key: `location` (String)
-     - TTL attribute: `ttl`
-   
-   - **StationCache**: Stores weather station information
+   - **climacast_persistence**: Stores all persistent data
      - Partition key: `id` (String)
-     - TTL attribute: `ttl`
+     - No TTL (managed by skill code)
    
-   - **UserCache**: Stores user preferences
-     - Partition key: `userid` (String)
-     - No TTL (permanent storage)
+   For Alexa-hosted skills, this table is automatically created. For self-hosted:
    
-   - **ZoneCache**: Stores NWS zone information
-     - Partition key: `id` (String)
-     - TTL attribute: `ttl`
-
-   Create these tables using the AWS CLI or Console:
    ```bash
    aws dynamodb create-table \
-     --table-name LocationCache \
-     --attribute-definitions AttributeName=location,AttributeType=S \
-     --key-schema AttributeName=location,KeyType=HASH \
-     --billing-mode PAY_PER_REQUEST \
-     --region us-east-1
-
-   aws dynamodb create-table \
-     --table-name StationCache \
-     --attribute-definitions AttributeName=id,AttributeType=S \
-     --key-schema AttributeName=id,KeyType=HASH \
-     --billing-mode PAY_PER_REQUEST \
-     --region us-east-1
-
-   aws dynamodb create-table \
-     --table-name UserCache \
-     --attribute-definitions AttributeName=userid,AttributeType=S \
-     --key-schema AttributeName=userid,KeyType=HASH \
-     --billing-mode PAY_PER_REQUEST \
-     --region us-east-1
-
-   aws dynamodb create-table \
-     --table-name ZoneCache \
+     --table-name climacast_persistence \
      --attribute-definitions AttributeName=id,AttributeType=S \
      --key-schema AttributeName=id,KeyType=HASH \
      --billing-mode PAY_PER_REQUEST \
      --region us-east-1
    ```
-
-   Enable TTL on appropriate tables:
-   ```bash
-   aws dynamodb update-time-to-live \
-     --table-name LocationCache \
-     --time-to-live-specification Enabled=true,AttributeName=ttl
-
-   aws dynamodb update-time-to-live \
-     --table-name StationCache \
-     --time-to-live-specification Enabled=true,AttributeName=ttl
-
-   aws dynamodb update-time-to-live \
-     --table-name ZoneCache \
-     --time-to-live-specification Enabled=true,AttributeName=ttl
-   ```
+   
+   **Note**: The skill stores data using two partition key patterns:
+   - `SHARED_CACHE`: For shared caches (LocationCache, StationCache, ZoneCache)
+   - `<user_id>`: For user-specific data (UserCache)
+   
+   See [PERSISTENCE_MIGRATION.md](PERSISTENCE_MIGRATION.md) for more details.
 
 6. **Update IAM Permissions**
    
@@ -122,10 +81,7 @@ Alexa-hosted skills provide free hosting with AWS Lambda and S3 storage.
            "dynamodb:BatchWriteItem"
          ],
          "Resource": [
-           "arn:aws:dynamodb:us-east-1:*:table/LocationCache",
-           "arn:aws:dynamodb:us-east-1:*:table/StationCache",
-           "arn:aws:dynamodb:us-east-1:*:table/UserCache",
-           "arn:aws:dynamodb:us-east-1:*:table/ZoneCache"
+           "arn:aws:dynamodb:us-east-1:*:table/climacast_persistence"
          ]
        },
        {
