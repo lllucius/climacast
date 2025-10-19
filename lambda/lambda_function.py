@@ -17,7 +17,7 @@ from time import time
 
 import requests
 from aniso8601.duration import parse_duration
-from boto3 import resource as awsresource, client as awsclient
+from boto3 import resource
 from cachetools import TTLCache, cached
 from datetime import datetime
 from dateutil import parser, tz
@@ -369,8 +369,7 @@ WEATHER_ATTRIBUTES = {"damaging_wind": "damaging wind",                     # go
 LOCATION_XLATE = {"gnome alaska": "nome alaska",
                   "woodberry minnesota": "woodbury minnesota"}
 
-SNS = awsclient("sns")
-DDB = awsresource("dynamodb", region_name="us-east-1")
+DDB = resource("dynamodb", region_name="us-east-1")
 HTTPS = requests.Session()
 
 # Table name for Alexa-hosted persistent attributes
