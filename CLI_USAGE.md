@@ -25,11 +25,11 @@ This separation enables:
    pip install -r requirements.txt
    ```
 
-3. **MapQuest API Key** (required for geocoding):
-   - Get a free API key from https://developer.mapquest.com/
+3. **HERE.com API Key** (required for geocoding):
+   - Get a free API key from https://developer.here.com/
    - Set the environment variable:
      ```bash
-     export mapquest_id=YOUR_MAPQUEST_API_KEY
+     export here_api_key=YOUR_HERE_API_KEY
      ```
 
 ## Basic Usage
@@ -223,7 +223,7 @@ Weather alerts for New Orleans, LA:
 
 ## Environment Variables
 
-- **`mapquest_id`** (required): MapQuest API key for geocoding
+- **`here_api_key`** (required): HERE.com API key for geocoding
 - **`app_id`** (optional): Application ID (defaults to test ID)
 - **`AWS_DEFAULT_REGION`** (optional): AWS region (defaults to us-east-1)
 - **`AWS_ACCESS_KEY_ID`** (optional): AWS access key (only needed if using DynamoDB caching)
@@ -231,11 +231,11 @@ Weather alerts for New Orleans, LA:
 
 ## Troubleshooting
 
-### "mapquest_id environment variable is required"
+### "here_api_key environment variable is required"
 
-You need to set your MapQuest API key:
+You need to set your HERE.com API key:
 ```bash
-export mapquest_id=YOUR_KEY_HERE
+export here_api_key=YOUR_KEY_HERE
 ```
 
 ### "Location could not be found"

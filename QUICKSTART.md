@@ -14,9 +14,9 @@ Get Clima Cast up and running quickly!
 5. Click "Create skill"
 ```
 
-### 2. Get MapQuest API Key (2 minutes)
+### 2. Get HERE.com API Key (2 minutes)
 ```bash
-1. Go to https://developer.mapquest.com/
+1. Go to https://developer.here.com/
 2. Sign up (free)
 3. Create an app
 4. Copy your API key
@@ -44,7 +44,7 @@ git push
 # In Alexa Developer Console > Code tab:
 # Add environment variables:
 app_id=<your-skill-application-id>  # Found in Build tab
-mapquest_id=<your-mapquest-key>
+here_api_key=<your-here-api-key>
 ```
 
 ### 5. Create DynamoDB Tables (5 minutes)
@@ -117,7 +117,7 @@ aws lambda create-function \
   --role arn:aws:iam::<account>:role/lambda-execution-role \
   --handler lambda_function.lambda_handler \
   --zip-file fileb://lambda.zip \
-  --environment Variables="{app_id=<skill-id>,mapquest_id=<mapquest-key>}"
+  --environment Variables="{app_id=<skill-id>,here_api_key=<here-api-key>}"
 ```
 
 ### 4. Deploy Code
@@ -148,8 +148,8 @@ ask dialog --locale en-US
 ## Common Issues
 
 ### "Location not found"
-- **Cause:** MapQuest API key not set or invalid
-- **Fix:** Verify `mapquest_id` environment variable
+- **Cause:** HERE.com API key not set or invalid
+- **Fix:** Verify `here_api_key` environment variable
 
 ### "Observation data unavailable"
 - **Cause:** NWS station has no recent data
@@ -248,7 +248,7 @@ aws logs tail /aws/lambda/climacast --since 10m
 aws dynamodb scan --table-name UserCache --limit 5
 
 # Test geocoding
-curl "https://www.mapquestapi.com/geocoding/v1/address?key=<KEY>&location=Boulder+Colorado"
+curl "https://geocode.search.hereapi.com/v1/geocode?q=Boulder+Colorado&apiKey=<KEY>"
 
 # Test NWS API
 curl "https://api.weather.gov/points/40.0150,-105.2705"
@@ -270,6 +270,6 @@ curl "https://api.weather.gov/points/40.0150,-105.2705"
 - [Alexa Developer Console](https://developer.amazon.com/alexa/console/ask)
 - [ASK SDK for Python Docs](https://alexa-skills-kit-python-sdk.readthedocs.io/)
 - [NWS API Documentation](https://www.weather.gov/documentation/services-web-api)
-- [MapQuest Geocoding API](https://developer.mapquest.com/documentation/geocoding-api/)
+- [HERE.com Geocoding API](https://developer.here.com/documentation/geocoding-search-api/dev_guide/index.html)
 - [AWS Lambda Documentation](https://docs.aws.amazon.com/lambda/)
 - [DynamoDB Documentation](https://docs.aws.amazon.com/dynamodb/)

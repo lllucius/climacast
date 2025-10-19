@@ -210,7 +210,7 @@ No negative impacts expected.
 
 ### External Services:
 - NWS API (api.weather.gov) - Free, no API key
-- MapQuest API - Requires free API key
+- HERE.com API - Requires free API key
 - DynamoDB - AWS service
 - SNS (optional) - For error notifications
 
@@ -252,7 +252,7 @@ No negative impacts expected.
 3. **Set Up Infrastructure**
    - Create DynamoDB tables
    - Configure IAM permissions
-   - Get MapQuest API key
+   - Get HERE.com API key
    - Set environment variables
 
 4. **Deploy**

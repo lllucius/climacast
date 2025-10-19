@@ -80,8 +80,8 @@ The new CLI allows you to test weather processing locally without deploying to A
 ```bash
 cd lambda
 
-# Set your MapQuest API key
-export mapquest_id=YOUR_KEY_HERE
+# Set your HERE.com API key
+export here_api_key=YOUR_KEY_HERE
 
 # Get current conditions
 python3 cli.py current "Boulder, Colorado"
@@ -98,7 +98,7 @@ For complete CLI documentation, see [CLI_USAGE.md](CLI_USAGE.md).
 ## Requirements
 
 - Python 3.8+
-- MapQuest API key (free tier available)
+- HERE.com API key (free tier available at https://developer.here.com/)
 - AWS account for DynamoDB table
 - Single DynamoDB table: climacast_persistence (for Alexa-hosted persistent attributes)
 
@@ -185,5 +185,5 @@ If you run into any issues or have a suggestion, send an email to: clima Cast@ho
 Source code is available at: https://github.com/lllucius/climacast
 
 Clima Cast is not affiliated with the National Weather Service.
-Location information is provided by Mapzen.
+Location information is provided by HERE Technologies.
 

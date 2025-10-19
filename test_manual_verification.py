@@ -11,7 +11,7 @@ from botocore.exceptions import ClientError
 # Set environment variables before importing lambda_function
 os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
 os.environ['app_id'] = 'test-app-id'
-os.environ['mapquest_id'] = 'test-mapquest-id'
+os.environ['here_api_key'] = 'test-here-api-key'
 
 # Add lambda directory to path
 sys.path.insert(0, '/home/runner/work/climacast/climacast/lambda')

@@ -44,5 +44,5 @@ Main endpoints used:
 
 - `event_id` - SNS topic ARN for notifications (optional)
 - `app_id` - Alexa application ID for validation
-- `mapquest_id` - MapQuest API key for geocoding (required)
+- `here_api_key` - HERE.com API key for geocoding (required)
 - `dataupdate_id` - Data update event identifier (optional)
