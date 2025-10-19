@@ -19,7 +19,7 @@ The skill requires ASK SDK for Python. For debugging business logic, you can tes
 2. Set up environment variables:
    ```bash
    export app_id="amzn1.ask.skill.test"
-   export mapquest_id="YOUR_MAPQUEST_API_KEY"
+   export here_api_key="YOUR_HERE_API_KEY"
    ```
 
 3. Configure AWS credentials for DynamoDB access:
@@ -220,7 +220,7 @@ Test error scenarios:
 
 ## Known Issues
 
-- MapQuest geocoding occasionally returns incorrect results
+- HERE.com geocoding may occasionally return unexpected results for ambiguous location names
 - Some NWS stations may have incomplete observation data
 - TTL cleanup in DynamoDB can take up to 48 hours
 - Voice recognition may mishear similar city names

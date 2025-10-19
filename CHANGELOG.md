@@ -5,6 +5,16 @@ All notable changes to the Clima Cast Alexa skill will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **BREAKING**: Replaced MapQuest geocoding API with HERE.com geocoding API
+- Environment variable `mapquest_id` changed to `here_api_key`
+- Updated all documentation to reference HERE.com instead of MapQuest
+
+### Removed
+- All references to MapQuest API
+
 ## [2.1.0] - 2025-10-18
 
 ### Added
@@ -103,7 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Customizable voice rate and pitch
 - Customizable forecast metrics
 - Support for city/state and zip code locations
-- Location geocoding via MapQuest API
+- Location geocoding via HERE.com API
 - DynamoDB caching for locations, stations, zones, and user preferences
 - Time-based forecast queries (e.g., "tomorrow afternoon")
 - Extended forecast support
@@ -171,7 +181,7 @@ See [MIGRATION.md](MIGRATION.md) for detailed migration instructions.
 ## Known Issues
 
 ### Version 2.0
-- MapQuest API occasionally returns unexpected location results for ambiguous names
+- HERE.com API may occasionally return unexpected location results for ambiguous names
 - Some NWS observation stations may have incomplete or null data fields
 - Voice recognition may confuse similar city names (e.g., "Woodberry" vs "Woodbury")
 - DynamoDB TTL cleanup can take up to 48 hours to remove expired items
@@ -225,7 +235,7 @@ This project is licensed under the GNU Affero GPL - see the LICENSE file for det
 ## Credits
 
 - Weather data provided by the National Weather Service (NWS)
-- Location geocoding provided by MapQuest
+- Location geocoding provided by HERE Technologies
 - Built with Amazon Alexa Skills Kit
 - Original author: Leland Lucius
 

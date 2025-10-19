@@ -106,7 +106,7 @@ obs = Observationsv3(event, stations)  # Uses JSON API
    ```bash
    # Set environment variables
    export app_id="your-app-id"
-   export mapquest_id="your-mapquest-key"
+   export here_api_key="your-here-api-key"
    
    # Run test
    python3 lambda_function.py ../tests/test_location
@@ -300,7 +300,7 @@ No migration needed - location and station caches use same schema.
 
 ### Configuration
 - Copy environment variables to new Lambda configuration
-- Verify MapQuest API key is set
+- Verify HERE.com API key is set
 - Update SNS topic ARN if using notifications
 
 ## Post-Migration Checklist

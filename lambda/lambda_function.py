@@ -371,8 +371,7 @@ LOCATION_XLATE = {"gnome alaska": "nome alaska",
 
 load_dotenv()
 
-MQID = os.environ.get("mapquest_id", "")
-print("MQID", MQID)
+HERE_API_KEY = os.environ.get("here_api_key", "")
 
 PERSISTENCE_REGION = os.environ.get('DYNAMODB_PERSISTENCE_REGION')
 PERSISTENCE_TABLE_NAME = os.environ.get('DYNAMODB_PERSISTENCE_TABLE_NAME')
@@ -1589,7 +1588,7 @@ class Location(Base):
                 return None
 
             # Have a new location, so retrieve the base info
-            coords, props = self.mapquest("%s" % name)
+            coords, props = self.here_geocode("%s" % name)
             if coords is None:
                 #notify(self.event, "Zip code not found: %s" % name)
                 return "%s could not be located" % self.spoken_name(name)
@@ -1625,7 +1624,7 @@ class Location(Base):
             #    return None
 
             # Have a new location, so retrieve the base info
-            coords, props = self.mapquest("%s+%s" % (city, state))
+            coords, props = self.here_geocode("%s %s" % (city, state))
             if coords is None:
                 #notify(self.event, "City '%s' State '%s' not found" % (city, state))
                 return "%s %s could not be located.  Try using the zip code." % (city, state)
@@ -1671,7 +1670,7 @@ class Location(Base):
         rloc = self.cache_get("LocationCache", {"location": "%s %s" % (loc["city"], loc["state"])})
         if rloc is None:
             # Have a new location, so retrieve the base info
-            rcoords, _ = self.mapquest("%s+%s" % (loc["city"], loc["state"]))
+            rcoords, _ = self.here_geocode("%s %s" % (loc["city"], loc["state"]))
             if rcoords is not None:
                 loc["coords"] = "%s,%s" % (rcoords[0], rcoords[1])
             else:
@@ -1685,13 +1684,13 @@ class Location(Base):
         loc["forecastZoneName"] = data["name"]
 
         # Some NWS locations are missing the county zone, so try to deduce it by getting
-        # the county coordinates from mapquest and asking NWS for that point.
+        # the county coordinates from HERE geocoding and asking NWS for that point.
         if "county" not in point and "county" in props:
             county = props["county"].lower().split()
             if county[-1] == "county":
                 county[-1] = ""
             county = " ".join(list(county))
-            coords, props = self.mapquest("%s+county+%s" % (county, loc["state"]))
+            coords, props = self.here_geocode("%s county %s" % (county, loc["state"]))
             if coords is not None:
                 pt = self.https("points/%s,%s" %
                                 (("%.4f" % coords[0]).rstrip("0").rstrip("."),
@@ -1717,26 +1716,42 @@ class Location(Base):
 
         return None
 
-    def mapquest(self, search):
-        geo = self.https("geocoding/v1/address?key=%s&inFormat=kvp&outFormat=json&location=%s&thumbMaps=false" % (MQID, search.replace(" ", "+")), loc="www.mapquestapi.com")
+    def here_geocode(self, search):
+        """
+        Use HERE.com geocoding API to geocode a location.
+        
+        Args:
+            search: Location string to geocode (city, state, zip code, etc.)
+            
+        Returns:
+            Tuple of ((lat, lng), properties_dict) or (None, None) if not found
+        """
+        # HERE.com API uses spaces, not plus signs
+        geo = self.https("v1/geocode?q=%s&apiKey=%s" % (search.replace(" ", "+"), HERE_API_KEY), loc="geocode.search.hereapi.com")
         if geo is None or \
-           len(geo["results"]) == 0 or \
-           len(geo["results"][0]["locations"]) == 0:
+           "items" not in geo or \
+           len(geo["items"]) == 0:
             return None, None
-        #print("GEO", geo)
-        loc = geo["results"][0]["locations"][0]
-
+        
+        # Get the first result
+        result = geo["items"][0]
+        
+        # Extract properties from address components
         props = {}
-        for n in loc:
-            if n.startswith("adminArea") and n.endswith("Type") and loc[n] != "":
-                props[loc[n]] = loc[n[:-4]]
-
-        if "County" in props:
-            props["County"] = props["County"].rsplit(" ", 1)[0]
-
-        return (geo["results"][0]["locations"][0]["latLng"]["lat"],
-                geo["results"][0]["locations"][0]["latLng"]["lng"]), \
-               props
+        if "address" in result:
+            address = result["address"]
+            # Map HERE.com address fields to our property names
+            if "county" in address:
+                props["County"] = address["county"]
+            if "state" in address:
+                props["State"] = address["state"]
+            if "stateCode" in address:
+                props["StateCode"] = address["stateCode"]
+            if "city" in address:
+                props["City"] = address["city"]
+        
+        # Return coordinates and properties
+        return (result["position"]["lat"], result["position"]["lng"]), props
 
     def spoken_name(self, name=None):
         loc = name or self.loc["location"]
