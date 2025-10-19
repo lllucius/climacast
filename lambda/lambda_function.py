@@ -32,7 +32,13 @@ from dotenv import load_dotenv
 from ask_sdk_core.skill_builder import CustomSkillBuilder
 from ask_sdk_core.dispatch_components import AbstractRequestHandler, AbstractExceptionHandler
 from ask_sdk_core.utils import is_request_type, is_intent_name
-from ask_sdk_dynamodb.adapter import DynamoDbAdapter
+
+# Conditionally import DynamoDB adapter only if we're in Lambda mode
+PERSISTENCE_REGION = os.environ.get('DYNAMODB_PERSISTENCE_REGION')
+PERSISTENCE_TABLE_NAME = os.environ.get('DYNAMODB_PERSISTENCE_TABLE_NAME')
+
+if PERSISTENCE_REGION and PERSISTENCE_TABLE_NAME:
+    from ask_sdk_dynamodb.adapter import DynamoDbAdapter
 
 """
     Anything defined here will persist for the duration of the lambda
@@ -373,15 +379,20 @@ load_dotenv()
 
 HERE_API_KEY = os.environ.get("here_api_key", "")
 
-PERSISTENCE_REGION = os.environ.get('DYNAMODB_PERSISTENCE_REGION')
-PERSISTENCE_TABLE_NAME = os.environ.get('DYNAMODB_PERSISTENCE_TABLE_NAME')
-print("REGION", PERSISTENCE_REGION, PERSISTENCE_TABLE_NAME)
-ddb_resource = resource('dynamodb', region_name=PERSISTENCE_REGION)
-ddb_adapter = DynamoDbAdapter(
-    table_name=PERSISTENCE_TABLE_NAME,
-    create_table=False,
-    dynamodb_resource=ddb_resource
-)
+# Only initialize DynamoDB resources if we're running in Lambda
+# (indicated by both env vars being set)
+if PERSISTENCE_REGION and PERSISTENCE_TABLE_NAME:
+    print("REGION", PERSISTENCE_REGION, PERSISTENCE_TABLE_NAME)
+    ddb_resource = resource('dynamodb', region_name=PERSISTENCE_REGION)
+    ddb_adapter = DynamoDbAdapter(
+        table_name=PERSISTENCE_TABLE_NAME,
+        create_table=False,
+        dynamodb_resource=ddb_resource
+    )
+else:
+    print("DynamoDB not configured - running in CLI mode")
+    ddb_resource = None
+    ddb_adapter = None
 
 HTTPS = requests.Session()
 
@@ -1921,6 +1932,9 @@ class BaseIntentHandler(AbstractRequestHandler):
         # Import here to avoid circular dependency
         from cache_adapter import DynamoDBCacheAdapter
         
+        if ddb_resource is None:
+            raise RuntimeError("DynamoDB not configured. Cannot create cache adapter.")
+        
         attributes_manager = handler_input.attributes_manager
         return DynamoDBCacheAdapter(ddb_resource, PERSISTENCE_TABLE_NAME, attributes_manager)
 
@@ -2888,37 +2902,48 @@ class SkillExceptionHandler(AbstractExceptionHandler):
         ).set_should_end_session(True).response
 
 
-sb = CustomSkillBuilder(persistence_adapter=ddb_adapter)
 
-# Register individual intent handlers
-# Order matters - more specific handlers should be registered first
-sb.add_request_handler(LaunchRequestHandler())
-sb.add_request_handler(SessionEndedRequestHandler())
-sb.add_request_handler(HelpIntentHandler())
-sb.add_request_handler(CancelAndStopIntentHandler())
-sb.add_request_handler(MetricIntentHandler())
-sb.add_request_handler(GetSettingIntentHandler())
-sb.add_request_handler(SetPitchIntentHandler())
-sb.add_request_handler(SetRateIntentHandler())
-sb.add_request_handler(SetLocationIntentHandler())
-sb.add_request_handler(GetCustomIntentHandler())
-sb.add_request_handler(AddCustomIntentHandler())
-sb.add_request_handler(RemoveCustomIntentHandler())
-sb.add_request_handler(ResetCustomIntentHandler())
-sb.add_request_handler(StoreDataIntentHandler())
-sb.add_request_handler(GetDataIntentHandler())
-sb.add_request_handler(FallbackIntentHandler())
+# Only create skill builder if DynamoDB is configured (Lambda mode)
+if ddb_adapter is not None:
+    sb = CustomSkillBuilder(persistence_adapter=ddb_adapter)
 
-# Add exception handler
-sb.add_exception_handler(SkillExceptionHandler())
+    # Register individual intent handlers
+    # Order matters - more specific handlers should be registered first
+    sb.add_request_handler(LaunchRequestHandler())
+    sb.add_request_handler(SessionEndedRequestHandler())
+    sb.add_request_handler(HelpIntentHandler())
+    sb.add_request_handler(CancelAndStopIntentHandler())
+    sb.add_request_handler(MetricIntentHandler())
+    sb.add_request_handler(GetSettingIntentHandler())
+    sb.add_request_handler(SetPitchIntentHandler())
+    sb.add_request_handler(SetRateIntentHandler())
+    sb.add_request_handler(SetLocationIntentHandler())
+    sb.add_request_handler(GetCustomIntentHandler())
+    sb.add_request_handler(AddCustomIntentHandler())
+    sb.add_request_handler(RemoveCustomIntentHandler())
+    sb.add_request_handler(ResetCustomIntentHandler())
+    sb.add_request_handler(StoreDataIntentHandler())
+    sb.add_request_handler(GetDataIntentHandler())
+    sb.add_request_handler(FallbackIntentHandler())
 
-# Create lambda handler from SkillBuilder
-_skill_lambda_handler = sb.lambda_handler()
+    # Add exception handler
+    sb.add_exception_handler(SkillExceptionHandler())
+
+    # Create lambda handler from SkillBuilder
+    _skill_lambda_handler = sb.lambda_handler()
 
 
-# AWS Lambda handler entry point
-def lambda_handler(event, context):
-    """Main Lambda handler that routes requests to ASK SDK"""
-    print("EVENT", event)
-    return _skill_lambda_handler(event, context)
+    # AWS Lambda handler entry point
+    def lambda_handler(event, context):
+        """Main Lambda handler that routes requests to ASK SDK"""
+        print("EVENT", event)
+        return _skill_lambda_handler(event, context)
+else:
+    # Running in CLI mode - skill builder not needed
+    sb = None
+    _skill_lambda_handler = None
+    
+    def lambda_handler(event, context):
+        """Stub lambda handler when not in Lambda mode"""
+        raise RuntimeError("Lambda handler cannot be called in CLI mode")
 
