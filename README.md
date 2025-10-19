@@ -16,6 +16,12 @@ Using information provided by the National Weather Service, Clima Cast gives you
 - 📖 All weather logic consolidated in BaseIntentHandler
 - 🔒 Security verified (0 vulnerabilities)
 
+**New in 2.1.1:**
+- 🔧 **Separated skill and processing logic** - Core weather processing extracted to `weather_processor.py`
+- 🖥️ **Command-line interface** - Test weather locally with `cli.py` (see [CLI_USAGE.md](CLI_USAGE.md))
+- 🧪 **Improved testability** - Weather logic can now be tested independently of AWS Lambda/Alexa
+- 📦 **Modular architecture** - Reusable weather processing components
+
 ## What's New in Version 2.0
 
 This was a major refactoring that modernized the skill to use the current Alexa-hosted pattern and the latest NWS API endpoints. See [REFACTORING_SUMMARY.md](REFACTORING_SUMMARY.md) for complete details.
@@ -35,6 +41,10 @@ For migration from v1.x, see [MIGRATION.md](MIGRATION.md).
 This project follows the Alexa-hosted skill pattern:
 
 - `lambda/` - Lambda function code and dependencies
+  - `lambda_function.py` - AWS Lambda handler with ASK SDK
+  - `weather_processor.py` - Core weather processing logic
+  - `cli.py` - Command-line interface for local testing
+  - `requirements.txt` - Python dependencies
 - `skill-package/` - Skill metadata and interaction model
   - `skill.json` - Skill manifest
   - `interactionModels/custom/` - Interaction models by locale
@@ -62,6 +72,28 @@ For detailed deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
 3. Set up environment variables and DynamoDB tables
 
 For complete instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
+
+## Local Testing
+
+The new CLI allows you to test weather processing locally without deploying to AWS:
+
+```bash
+cd lambda
+
+# Set your MapQuest API key
+export mapquest_id=YOUR_KEY_HERE
+
+# Get current conditions
+python3 cli.py current "Boulder, Colorado"
+
+# Get forecast
+python3 cli.py forecast "Seattle, WA" --when tomorrow
+
+# Get alerts
+python3 cli.py alerts "Miami, FL"
+```
+
+For complete CLI documentation, see [CLI_USAGE.md](CLI_USAGE.md).
 
 ## Requirements
 
