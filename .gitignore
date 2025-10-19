@@ -109,4 +109,5 @@ tests/test_one_off
 lambda.zip
 .ask/
 .vscode/
+.cache/
 
