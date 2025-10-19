@@ -32,7 +32,13 @@ from dotenv import load_dotenv
 from ask_sdk_core.skill_builder import CustomSkillBuilder
 from ask_sdk_core.dispatch_components import AbstractRequestHandler, AbstractExceptionHandler
 from ask_sdk_core.utils import is_request_type, is_intent_name
-from ask_sdk_dynamodb.adapter import DynamoDbAdapter
+
+# Conditionally import DynamoDB adapter only if we're in Lambda mode
+PERSISTENCE_REGION = os.environ.get('DYNAMODB_PERSISTENCE_REGION')
+PERSISTENCE_TABLE_NAME = os.environ.get('DYNAMODB_PERSISTENCE_TABLE_NAME')
+
+if PERSISTENCE_REGION and PERSISTENCE_TABLE_NAME:
+    from ask_sdk_dynamodb.adapter import DynamoDbAdapter
 
 """
     Anything defined here will persist for the duration of the lambda
@@ -373,15 +379,20 @@ load_dotenv()
 
 HERE_API_KEY = os.environ.get("here_api_key", "")
 
-PERSISTENCE_REGION = os.environ.get('DYNAMODB_PERSISTENCE_REGION')
-PERSISTENCE_TABLE_NAME = os.environ.get('DYNAMODB_PERSISTENCE_TABLE_NAME')
-print("REGION", PERSISTENCE_REGION, PERSISTENCE_TABLE_NAME)
-ddb_resource = resource('dynamodb', region_name=PERSISTENCE_REGION)
-ddb_adapter = DynamoDbAdapter(
-    table_name=PERSISTENCE_TABLE_NAME,
-    create_table=False,
-    dynamodb_resource=ddb_resource
-)
+# Only initialize DynamoDB resources if we're running in Lambda
+# (indicated by both env vars being set)
+if PERSISTENCE_REGION and PERSISTENCE_TABLE_NAME:
+    print("REGION", PERSISTENCE_REGION, PERSISTENCE_TABLE_NAME)
+    ddb_resource = resource('dynamodb', region_name=PERSISTENCE_REGION)
+    ddb_adapter = DynamoDbAdapter(
+        table_name=PERSISTENCE_TABLE_NAME,
+        create_table=False,
+        dynamodb_resource=ddb_resource
+    )
+else:
+    print("DynamoDB not configured - running in CLI mode")
+    ddb_resource = None
+    ddb_adapter = None
 
 HTTPS = requests.Session()
 
@@ -438,9 +449,10 @@ def get_api_data(url):
 
 
 class Base(object):
-    def __init__(self, event, attributes_manager=None):
+    def __init__(self, event, attributes_manager=None, cache_adapter=None):
         self.event = event
         self._attributes_manager = attributes_manager
+        self._cache_adapter = cache_adapter
 
     def get_zone(self, zoneId, zoneType):
         """
@@ -558,13 +570,15 @@ class Base(object):
     def cache_get(self, cache_name, key):
         """
             Retrieve an item from the cache using the provided cache name and key.
-            Uses persistent attributes directly for both shared and user-specific caches.
             
-            Shared caches (LocationCache, StationCache, ZoneCache) are stored in a 
-            single DynamoDB item with partition key "SHARED_CACHE" to be accessible
-            across all users. Uses optimistic locking with version number when removing
-            expired items from shared caches.
+            If a cache_adapter is provided, use it. Otherwise, fallback to direct
+            DynamoDB access for backward compatibility.
         """
+        # Use cache adapter if available
+        if self._cache_adapter:
+            return self._cache_adapter.get(cache_name, key)
+        
+        # Fallback to direct DynamoDB access (legacy code)
         # Build a key string from the key dict
         # Sort to ensure consistent key ordering
         key_str = "_".join([str(key[k]) for k in sorted(key.keys())])
@@ -649,13 +663,15 @@ class Base(object):
     def cache_put(self, cache_name, key, ttl=35):
         """
             Write an item to the cache using the provided cache name, key, and time to live.
-            Uses persistent attributes directly for both shared and user-specific caches.
             
-            Shared caches (LocationCache, StationCache, ZoneCache) are stored in a 
-            single DynamoDB item with partition key "SHARED_CACHE" to be accessible
-            across all users. Uses optimistic locking with a version number to handle
-            concurrent writes safely.
+            If a cache_adapter is provided, use it. Otherwise, fallback to direct
+            DynamoDB access for backward compatibility.
         """
+        # Use cache adapter if available
+        if self._cache_adapter:
+            return self._cache_adapter.put(cache_name, key, ttl)
+        
+        # Fallback to direct DynamoDB access (legacy code)
         # Build a key string from the key dict
         # Sort to ensure consistent key ordering
         key_str = "_".join([str(key[k]) for k in sorted(key.keys())])
@@ -1013,8 +1029,8 @@ class Base(object):
 
 
 class GridPoints(Base):
-    def __init__(self, event, tz, cwa, gridpoint, attributes_manager=None):
-        super().__init__(event, attributes_manager)
+    def __init__(self, event, tz, cwa, gridpoint, attributes_manager=None, cache_adapter=None):
+        super().__init__(event, attributes_manager, cache_adapter)
         self.tz = tz
         self.data = self.https("gridpoints/%s/%s" % (cwa, gridpoint))
         #print(json.dumps(self.data, indent=4))
@@ -1381,8 +1397,8 @@ class GridPoints(Base):
 
 
 class Observations(Base):
-    def __init__(self, event, stations, limit=3, attributes_manager=None):
-        super().__init__(event, attributes_manager)
+    def __init__(self, event, stations, limit=3, attributes_manager=None, cache_adapter=None):
+        super().__init__(event, attributes_manager, cache_adapter)
         self.stations = stations
         self.data = None
         self.observations = None
@@ -1497,8 +1513,8 @@ class Observations(Base):
 
 class Alerts(Base):
     class Alert(Base):
-        def __init__(self, event, alert, attributes_manager=None):
-            super().__init__(event, attributes_manager)
+        def __init__(self, event, alert, attributes_manager=None, cache_adapter=None):
+            super().__init__(event, attributes_manager, cache_adapter)
             self.alert = alert
 
         @property
@@ -1525,8 +1541,8 @@ class Alerts(Base):
         def instruction(self):
             return self.normalize(self.alert["instruction"])
 
-    def __init__(self, event, zoneid, attributes_manager=None):
-        super().__init__(event, attributes_manager)
+    def __init__(self, event, zoneid, attributes_manager=None, cache_adapter=None):
+        super().__init__(event, attributes_manager, cache_adapter)
         self.zoneid = zoneid
         self._title = ""
         self._alerts = []
@@ -1537,7 +1553,7 @@ class Alerts(Base):
 
     def __iter__(self):
         for alert in self._alerts:
-            yield self.Alert(self.event, alert, self._attributes_manager)
+            yield self.Alert(self.event, alert, self._attributes_manager, self._cache_adapter)
 
     def __len__(self):
         return len(self._alerts)
@@ -1548,8 +1564,8 @@ class Alerts(Base):
 
 
 class Location(Base):
-    def __init__(self, event, attributes_manager=None):
-        super().__init__(event, attributes_manager)
+    def __init__(self, event, attributes_manager=None, cache_adapter=None):
+        super().__init__(event, attributes_manager, cache_adapter)
 
     def set(self, name, default=None):
         # Normalize name
@@ -1811,8 +1827,8 @@ class Location(Base):
 
 
 class User(Base):
-    def __init__(self, event, userid, attributes_manager=None):
-        super().__init__(event, attributes_manager)
+    def __init__(self, event, userid, attributes_manager=None, cache_adapter=None):
+        super().__init__(event, attributes_manager, cache_adapter)
         self._userid = userid
         self._location = None
         self._rate = 100
@@ -1911,6 +1927,17 @@ class BaseIntentHandler(AbstractRequestHandler):
     def __init__(self):
         super().__init__()
 
+    def get_cache_adapter(self, handler_input):
+        """Get a cache adapter for the handler"""
+        # Import here to avoid circular dependency
+        from cache_adapter import DynamoDBCacheAdapter
+        
+        if ddb_resource is None:
+            raise RuntimeError("DynamoDB not configured. Cannot create cache adapter.")
+        
+        attributes_manager = handler_input.attributes_manager
+        return DynamoDBCacheAdapter(ddb_resource, PERSISTENCE_TABLE_NAME, attributes_manager)
+
     def get_user_and_location(self, handler_input):
         """Get user profile and location from handler_input"""
         # type: (HandlerInput) -> tuple
@@ -1935,14 +1962,15 @@ class BaseIntentHandler(AbstractRequestHandler):
 
         # Get attributes manager for persistence
         attributes_manager = handler_input.attributes_manager
+        cache_adapter = self.get_cache_adapter(handler_input)
 
         # Load user profile
-        user = User(event, user_id, attributes_manager)
+        user = User(event, user_id, attributes_manager, cache_adapter)
 
         # Try to load default location
         loc = None
         if user.location:
-            location_obj = Location(event, attributes_manager)
+            location_obj = Location(event, attributes_manager, cache_adapter)
             text = location_obj.set(user.location)
             if text is None:
                 loc = location_obj
@@ -2001,7 +2029,8 @@ class BaseIntentHandler(AbstractRequestHandler):
 
         if location_name:
             attributes_manager = handler_input.attributes_manager
-            location_obj = Location(event, attributes_manager)
+            cache_adapter = self.get_cache_adapter(handler_input)
+            location_obj = Location(event, attributes_manager, cache_adapter)
             text = location_obj.set(location_name, loc)
             if text is None:
                 return location_obj, None
@@ -2117,7 +2146,8 @@ class BaseIntentHandler(AbstractRequestHandler):
     def get_alerts(self, handler_input, event, loc):
         """Get weather alerts for location"""
         attributes_manager = handler_input.attributes_manager
-        alerts = Alerts(event, loc.countyZoneId, attributes_manager)
+        cache_adapter = self.get_cache_adapter(handler_input)
+        alerts = Alerts(event, loc.countyZoneId, attributes_manager, cache_adapter)
         if len(alerts) == 0:
             return "No alerts in effect at this time for %s." % loc.city
 
@@ -2136,7 +2166,8 @@ class BaseIntentHandler(AbstractRequestHandler):
 
         # Retrieve the current observations from the nearest station
         attributes_manager = handler_input.attributes_manager
-        obs = Observations(event, loc.observationStations, attributes_manager=attributes_manager)
+        cache_adapter = self.get_cache_adapter(handler_input)
+        obs = Observations(event, loc.observationStations, attributes_manager=attributes_manager, cache_adapter=cache_adapter)
         if obs.is_good:
             text += "At %s, %s reported %s, " % \
                     (obs.time_reported.astimezone(loc.tz).strftime("%I:%M%p"),
@@ -2188,7 +2219,8 @@ class BaseIntentHandler(AbstractRequestHandler):
         """Get extended forecast"""
         # Import normalize from Base class
         attributes_manager = handler_input.attributes_manager
-        base = Base(event, attributes_manager)
+        cache_adapter = self.get_cache_adapter(handler_input)
+        base = Base(event, attributes_manager, cache_adapter)
 
         data = base.https("points/%s/forecast" % loc.coords)
         if data is None or data.get("periods", None) is None:
@@ -2215,10 +2247,11 @@ class BaseIntentHandler(AbstractRequestHandler):
         """Get weather forecast"""
         # Import normalize from Base class
         attributes_manager = handler_input.attributes_manager
-        base = Base(event, attributes_manager)
+        cache_adapter = self.get_cache_adapter(handler_input)
+        base = Base(event, attributes_manager, cache_adapter)
 
         fulltext = ""
-        gp = GridPoints(event, loc.tz, loc.cwa, loc.grid_point, attributes_manager)
+        gp = GridPoints(event, loc.tz, loc.cwa, loc.grid_point, attributes_manager, cache_adapter)
 
         for metric in metrics:
             metric = METRICS[metric][0]
@@ -2518,7 +2551,8 @@ class MetricIntentHandler(BaseIntentHandler):
             text = self.get_alerts(handler_input, event, loc)
             # Normalize text
             attributes_manager = handler_input.attributes_manager
-            base = Base(event, attributes_manager)
+            cache_adapter = self.get_cache_adapter(handler_input)
+            base = Base(event, attributes_manager, cache_adapter)
             return self.respond(handler_input, user, base.normalize(text))
 
         if metric == "extended forecast":
@@ -2545,7 +2579,8 @@ class MetricIntentHandler(BaseIntentHandler):
             text = self.get_current(handler_input, event, user, loc, metrics)
             # Normalize text
             attributes_manager = handler_input.attributes_manager
-            base = Base(event, attributes_manager)
+            cache_adapter = self.get_cache_adapter(handler_input)
+            base = Base(event, attributes_manager, cache_adapter)
             text = base.normalize(text)
 
         return self.respond(handler_input, user, text)
@@ -2670,7 +2705,8 @@ class SetLocationIntentHandler(BaseIntentHandler):
             return self.respond(handler_input, user, text)
 
         attributes_manager = handler_input.attributes_manager
-        location_obj = Location(event, attributes_manager)
+        cache_adapter = self.get_cache_adapter(handler_input)
+        location_obj = Location(event, attributes_manager, cache_adapter)
         text = location_obj.set(location_name, loc)
         if text is None:
             user.location = location_obj.name
@@ -2866,37 +2902,48 @@ class SkillExceptionHandler(AbstractExceptionHandler):
         ).set_should_end_session(True).response
 
 
-sb = CustomSkillBuilder(persistence_adapter=ddb_adapter)
 
-# Register individual intent handlers
-# Order matters - more specific handlers should be registered first
-sb.add_request_handler(LaunchRequestHandler())
-sb.add_request_handler(SessionEndedRequestHandler())
-sb.add_request_handler(HelpIntentHandler())
-sb.add_request_handler(CancelAndStopIntentHandler())
-sb.add_request_handler(MetricIntentHandler())
-sb.add_request_handler(GetSettingIntentHandler())
-sb.add_request_handler(SetPitchIntentHandler())
-sb.add_request_handler(SetRateIntentHandler())
-sb.add_request_handler(SetLocationIntentHandler())
-sb.add_request_handler(GetCustomIntentHandler())
-sb.add_request_handler(AddCustomIntentHandler())
-sb.add_request_handler(RemoveCustomIntentHandler())
-sb.add_request_handler(ResetCustomIntentHandler())
-sb.add_request_handler(StoreDataIntentHandler())
-sb.add_request_handler(GetDataIntentHandler())
-sb.add_request_handler(FallbackIntentHandler())
+# Only create skill builder if DynamoDB is configured (Lambda mode)
+if ddb_adapter is not None:
+    sb = CustomSkillBuilder(persistence_adapter=ddb_adapter)
 
-# Add exception handler
-sb.add_exception_handler(SkillExceptionHandler())
+    # Register individual intent handlers
+    # Order matters - more specific handlers should be registered first
+    sb.add_request_handler(LaunchRequestHandler())
+    sb.add_request_handler(SessionEndedRequestHandler())
+    sb.add_request_handler(HelpIntentHandler())
+    sb.add_request_handler(CancelAndStopIntentHandler())
+    sb.add_request_handler(MetricIntentHandler())
+    sb.add_request_handler(GetSettingIntentHandler())
+    sb.add_request_handler(SetPitchIntentHandler())
+    sb.add_request_handler(SetRateIntentHandler())
+    sb.add_request_handler(SetLocationIntentHandler())
+    sb.add_request_handler(GetCustomIntentHandler())
+    sb.add_request_handler(AddCustomIntentHandler())
+    sb.add_request_handler(RemoveCustomIntentHandler())
+    sb.add_request_handler(ResetCustomIntentHandler())
+    sb.add_request_handler(StoreDataIntentHandler())
+    sb.add_request_handler(GetDataIntentHandler())
+    sb.add_request_handler(FallbackIntentHandler())
 
-# Create lambda handler from SkillBuilder
-_skill_lambda_handler = sb.lambda_handler()
+    # Add exception handler
+    sb.add_exception_handler(SkillExceptionHandler())
+
+    # Create lambda handler from SkillBuilder
+    _skill_lambda_handler = sb.lambda_handler()
 
 
-# AWS Lambda handler entry point
-def lambda_handler(event, context):
-    """Main Lambda handler that routes requests to ASK SDK"""
-    print("EVENT", event)
-    return _skill_lambda_handler(event, context)
+    # AWS Lambda handler entry point
+    def lambda_handler(event, context):
+        """Main Lambda handler that routes requests to ASK SDK"""
+        print("EVENT", event)
+        return _skill_lambda_handler(event, context)
+else:
+    # Running in CLI mode - skill builder not needed
+    sb = None
+    _skill_lambda_handler = None
+    
+    def lambda_handler(event, context):
+        """Stub lambda handler when not in Lambda mode"""
+        raise RuntimeError("Lambda handler cannot be called in CLI mode")
 
