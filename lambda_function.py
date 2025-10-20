@@ -19,6 +19,8 @@ from boto3 import resource as awsresource, client as awsclient
 from datetime import datetime
 from dateutil import parser, tz
 from dateutil.relativedelta import *
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 from xml.etree.ElementTree import *
 from lxml import html
 from time import time
@@ -369,6 +371,18 @@ LOCATIONCACHE = DDB.Table("LocationCache")
 STATIONCACHE = DDB.Table("StationCache")
 USERCACHE = DDB.Table("UserCache")
 ZONECACHE = DDB.Table("ZoneCache")
+
+retry_strategy = Retry(
+    total=3,
+    status_forcelist=[429, 500, 502, 503, 504],
+    method_whitelist=["HEAD", "GET", "OPTIONS"]
+)
+adapter = HTTPAdapter(max_retries=retry_strategy)
+
+HTTPS = requests.Session()
+HTTPS.mount("https://", adapter)
+HTTPS.mount("http://", adapter)
+
 HTTPS = requests.Session()
 
 def notify(event, sub, msg=None):
@@ -646,6 +660,12 @@ class Base(object):
             Convert the given celcius value, if any, to fahrenheit
         """
         return None if c is None else "{:.0f}".format(c * 9 / 5 + 32)
+
+    def kph_to_mph(self, kph):
+        """
+            Convert the given kilometers per hour, if any, to miles per hour
+        """
+        return None if kph is None or kph == 0 else "{:.0f}".format(kph * 0.62137119223733)
 
     def mps_to_mph(self, mps):
         """
@@ -1093,19 +1113,19 @@ class GridPoints(Base):
 
     @property
     def wind_speed_low(self):
-        return self.mps_to_mph(self.get_low("windSpeed"))
+        return self.kph_to_mph(self.get_low("windSpeed"))
 
     @property
     def wind_speed_high(self):
-        return self.mps_to_mph(self.get_high("windSpeed"))
+        return self.kph_to_mph(self.get_high("windSpeed"))
 
     @property
     def wind_speed_initial(self):
-        return self.mps_to_mph(self.get_initial("windSpeed"))
+        return self.kph_to_mph(self.get_initial("windSpeed"))
 
     @property
     def wind_speed_final(self):
-        return self.mps_to_mph(self.get_final("windSpeed"))
+        return self.kph_to_mph(self.get_final("windSpeed"))
 
     @property
     def wind_direction_initial(self):
@@ -1119,19 +1139,19 @@ class GridPoints(Base):
 
     @property
     def wind_gust_low(self):
-        return self.mps_to_mph(self.get_low("windGust"))
+        return self.kph_to_mph(self.get_low("windGust"))
 
     @property
     def wind_gust_high(self):
-        return self.mps_to_mph(self.get_high("windGust"))
+        return self.kph_to_mph(self.get_high("windGust"))
 
     @property
     def wind_gust_initial(self):
-        return self.mps_to_mph(self.get_initial("windGust"))
+        return self.kph_to_mph(self.get_initial("windGust"))
 
     @property
     def wind_gust_final(self):
-        return self.mps_to_mph(self.get_final("windGust"))
+        return self.kph_to_mph(self.get_final("windGust"))
 
     @property
     def wind_chill_low(self):
@@ -1390,7 +1410,7 @@ class Observationsv3(Base):
 
     @property
     def wind_speed(self):
-        return self.mps_to_mph(self.get_value("windSpeed"))
+        return self.kph_to_mph(self.get_value("windSpeed"))
 
     @property
     def wind_direction(self):
@@ -1398,7 +1418,7 @@ class Observationsv3(Base):
 
     @property
     def wind_gust(self):
-        return self.mps_to_mph(self.get_value("windGust"))
+        return self.kph_to_mph(self.get_value("windGust"))
 
     @property
     def temp(self):
@@ -2254,7 +2274,7 @@ class Skill(Base):
         return self.respond(text)
 
     def get_extended(self):
-        data = self.https("points/%s/forecast" % self.loc.coords)
+        data = self.https("gridpoints/%s/%s/forecast" % (self.loc.cwa, self.loc.grid_point))
         #print(json.dumps(data, indent=4))
         if data is None or data.get("periods", None) is None:
             notify(self.event, "Extended forecast missing periods", data)
