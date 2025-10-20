@@ -20,6 +20,7 @@ Lambda function (via ASK SDK handlers) and the CLI for local testing.
 import json
 import os
 import re
+from difflib import SequenceMatcher
 from math import sqrt
 from time import time
 
@@ -383,9 +384,70 @@ WEATHER_ATTRIBUTES = {"damaging_wind": "damaging wind",                     # go
                       "small_hail": "small hail",                           # good
                       "tornado": "tornado"}
 
-# TODO: Need to figure out a better way to handle misunderstood names
-LOCATION_XLATE = {"gnome alaska": "nome alaska",
-                  "woodberry minnesota": "woodbury minnesota"}
+# Known location corrections for common speech recognition errors
+# This is used as a fallback before fuzzy matching
+_KNOWN_LOCATION_CORRECTIONS = {
+    "gnome alaska": "nome alaska",
+    "woodberry minnesota": "woodbury minnesota"
+}
+
+# Common US city names for fuzzy matching when location is misheard
+_COMMON_US_CITIES = [
+    "nome alaska", "fairbanks alaska", "anchorage alaska", "juneau alaska",
+    "phoenix arizona", "tucson arizona", "mesa arizona",
+    "los angeles california", "san francisco california", "san diego california", "sacramento california",
+    "denver colorado", "colorado springs colorado", "boulder colorado",
+    "miami florida", "orlando florida", "tampa florida", "jacksonville florida",
+    "atlanta georgia", "augusta georgia", "columbus georgia", "savannah georgia",
+    "chicago illinois", "springfield illinois", "peoria illinois",
+    "indianapolis indiana", "fort wayne indiana",
+    "boston massachusetts", "worcester massachusetts", "springfield massachusetts",
+    "detroit michigan", "grand rapids michigan", "lansing michigan",
+    "minneapolis minnesota", "saint paul minnesota", "duluth minnesota", "woodbury minnesota",
+    "kansas city missouri", "saint louis missouri", "springfield missouri",
+    "las vegas nevada", "reno nevada", "henderson nevada",
+    "new york new york", "buffalo new york", "rochester new york", "albany new york",
+    "charlotte north carolina", "raleigh north carolina", "greensboro north carolina",
+    "columbus ohio", "cleveland ohio", "cincinnati ohio", "toledo ohio",
+    "portland oregon", "salem oregon", "eugene oregon",
+    "philadelphia pennsylvania", "pittsburgh pennsylvania", "harrisburg pennsylvania",
+    "nashville tennessee", "memphis tennessee", "knoxville tennessee", "chattanooga tennessee",
+    "houston texas", "dallas texas", "san antonio texas", "austin texas", "fort worth texas",
+    "seattle washington", "spokane washington", "tacoma washington",
+    "milwaukee wisconsin", "madison wisconsin", "green bay wisconsin"
+]
+
+
+def correct_location_name(name):
+    """
+    Correct commonly misheard location names using known corrections and fuzzy matching.
+    
+    This replaces the simple LOCATION_XLATE dictionary with a more robust solution
+    that can handle a wider variety of speech recognition errors.
+    
+    Args:
+        name: The location name as heard by Alexa (normalized to lowercase)
+        
+    Returns:
+        The corrected location name, or the original if no correction is needed
+    """
+    # First check known corrections for exact matches
+    if name in _KNOWN_LOCATION_CORRECTIONS:
+        return _KNOWN_LOCATION_CORRECTIONS[name]
+    
+    # Use fuzzy matching to find the closest match from common cities
+    # Only suggest corrections for high confidence matches (>0.85 similarity)
+    best_match = None
+    best_ratio = 0.85  # Threshold to avoid false corrections
+    
+    for city in _COMMON_US_CITIES:
+        ratio = SequenceMatcher(None, name, city).ratio()
+        if ratio > best_ratio:
+            best_ratio = ratio
+            best_match = city
+    
+    return best_match if best_match else name
+
 
 HERE_API_KEY = os.environ.get("here_api_key", "")
 
@@ -1229,83 +1291,165 @@ class GridPoints(Base):
     def snow_amount_final(self):
         return self.mm_to_in(self.get_final("snowfallAmount"), as_text=True)
 
+    def _extract_weather_attributes(self, weather_values):
+        """
+        Extract weather attributes from weather values.
+        
+        Args:
+            weather_values: List of weather data values
+            
+        Returns:
+            List of unique weather attribute descriptions
+        """
+        attributes = []
+        for value in weather_values:
+            for weather_item in value:
+                for attr in weather_item.get("attributes") or []:
+                    attr_text = WEATHER_ATTRIBUTES.get(attr, attr.replace("_", " "))
+                    if attr_text not in attributes:
+                        attributes.append(attr_text)
+        return attributes
+    
+    def _aggregate_weather_types(self, weather_values):
+        """
+        Aggregate weather types, intensities, and coverage from weather values.
+        
+        Args:
+            weather_values: List of weather data values
+            
+        Returns:
+            Tuple of (types, intensities, coverage) dictionaries
+            - types: Maps weather type to set of intensity levels
+            - intensities: Maps weather type to dict of intensity levels and descriptions
+            - coverage: Maps weather type to set of coverage codes (not used in final output)
+        """
+        types = {}
+        intensities = {}
+        coverage = {}
+        
+        for value in weather_values:
+            for weather_item in value:
+                # Get normalized weather type
+                weather_type = weather_item.get("weather") or ""
+                weather_type = WEATHER_WEATHER.get(weather_type, weather_type.replace("_", " "))
+                
+                if not weather_type:
+                    continue
+                
+                # Initialize tracking for this weather type
+                if weather_type not in types:
+                    types[weather_type] = set()
+                    coverage[weather_type] = set()
+                    intensities[weather_type] = {}
+                
+                # Get normalized intensity
+                intensity = weather_item.get("intensity") or ""
+                intensity_data = WEATHER_INTENSITY.get(intensity, ["", 0])
+                intensity_text, intensity_level = intensity_data[0], intensity_data[1]
+                
+                # Track intensity information
+                types[weather_type].add(intensity_level)
+                intensities[weather_type][intensity_level] = intensity_text
+                
+                # Track coverage (for potential future use)
+                cover = weather_item.get("coverage") or ""
+                if cover == "slight_chance":
+                    coverage[weather_type].add(0)
+                elif cover == "chance":
+                    coverage[weather_type].add(1)
+                else:
+                    coverage[weather_type].add(2)
+        
+        return types, intensities, coverage
+    
+    def _format_weather_description(self, types, intensities):
+        """
+        Format weather types and intensities into natural language.
+        
+        Args:
+            types: Dictionary mapping weather type to set of intensity levels
+            intensities: Dictionary mapping weather type to intensity descriptions
+            
+        Returns:
+            String describing the weather conditions
+        """
+        descriptions = []
+        
+        for weather_type in types:
+            intensity_levels = types[weather_type]
+            min_level = min(intensity_levels)
+            max_level = max(intensity_levels)
+            
+            # Build description for this weather type
+            description = ""
+            
+            # Add intensity qualifier if applicable
+            if min_level == max_level and min_level != 0:
+                # Single intensity level (not zero/none)
+                description = intensities[weather_type][min_level] + " "
+            elif min_level != 0 and max_level != 0:
+                # Range of intensities
+                description = (intensities[weather_type][min_level] + " to " +
+                             intensities[weather_type][max_level] + " ")
+            
+            description += weather_type
+            descriptions.append(description)
+        
+        # Join descriptions with proper grammar
+        if len(descriptions) == 0:
+            return ""
+        elif len(descriptions) == 1:
+            return descriptions[0]
+        elif len(descriptions) == 2:
+            return descriptions[0] + " and " + descriptions[1]
+        else:
+            return ", ".join(descriptions[:-1]) + " and " + descriptions[-1]
+    
+    def _format_severe_attributes(self, attributes):
+        """
+        Format severe weather attributes into natural language.
+        
+        Args:
+            attributes: List of severe weather attributes
+            
+        Returns:
+            String describing severe weather attributes, or empty string if none
+        """
+        if len(attributes) == 0:
+            return ""
+        
+        if len(attributes) == 1:
+            return ". Some storms could be severe with " + attributes[0]
+        else:
+            # Join all but last with commas, add "and" before last
+            return (". Some storms could be severe with " + 
+                   ", ".join(attributes[:-1]) + " and " + attributes[-1])
+
     @property
     def weather_text(self):
         """
-            Provides a description of the expected weather.
-            TODO:  Not at all happy with this.  It needs to be redone.
+        Provides a natural language description of expected weather conditions.
+        
+        This method processes weather data including weather types, intensities,
+        coverage, and severe weather attributes to generate a human-readable
+        forecast description.
+        
+        Returns:
+            String description of weather, or None if no weather data available
         """
-        values = self.get_values("weather")
-        if values is None or len(values) == 0:
+        weather_values = self.get_values("weather")
+        if weather_values is None or len(weather_values) == 0:
             return None
-
-        #for v in self.values["weather"]:
-        #    for w in v:
-        #        print("COVER", w["coverage"], "INTEN", w["intensity"], "WEATH", w["weather"])
-
-        attrs = []
-        types = {}
-        intens = {}
-        covers = {}
-        for value in values:
-            for w in value:
-                for attr in w["attributes"] or {}:
-                    attr = WEATHER_ATTRIBUTES.get(attr, attr.replace("_", " "))
-                    if attr not in attrs:
-                        attrs.append(attr)
-
-                weath = w["weather"] or ""
-                weath = WEATHER_WEATHER.get(weath, weath.replace("_", " "))
-                inten = w["intensity"] or ""
-                inten = WEATHER_INTENSITY.get(inten, "")
-                cover = w["coverage"] or ""
-                cover = WEATHER_COVERAGE.get(cover, cover.replace("_", " "))
-
-                if weath:
-                    if weath not in types:
-                        types[weath] = set()
-                        covers[weath] = set()
-                        intens[weath] = {}
-                    types[weath].add(inten[1])
-                    intens[weath][inten[1]] = inten[0]
-
-                    if cover == "slight_chance":
-                        covers[weath].add(0)
-                    elif cover == "chance":
-                        covers[weath].add(1)
-                    else:
-                        covers[weath].add(2)
-
-        d = ""
-        i = 0
-        cnt = len(types)
-        for t in types:
-            w = ""
-            lo = min(types[t])
-            hi = max(types[t])
-            if lo == hi and lo != 0:
-                w += intens[t][lo] + " "
-            elif lo != 0 and hi != 0:
-                w += intens[t][lo] + " to " + intens[t][hi] + " "
-            w += t
-
-            i = i + 1
-            if i == 1:
-                d = w
-            elif i < cnt:
-                d += ", " + w
-            else:
-                d += " and " + w
-
-        if len(attrs) > 0:
-            d += ". Some storms could be severe with "
-            last = ""
-            if len(attrs) > 1:
-                last = " and " + attrs[-1]
-                attrs.remove(attrs[-1])
-            d += ", ".join(attrs) + last
-
-        return d
+        
+        # Extract weather information
+        attributes = self._extract_weather_attributes(weather_values)
+        types, intensities, coverage = self._aggregate_weather_types(weather_values)
+        
+        # Build the description
+        description = self._format_weather_description(types, intensities)
+        description += self._format_severe_attributes(attributes)
+        
+        return description if description else None
 
     @property
     def wind_speed_low(self):
@@ -1569,9 +1713,10 @@ class Location(Base):
         words = name.split()
         name = " ".join(words)
 
-        # Correct known recognition problems
-        if name in LOCATION_XLATE:
-            name = LOCATION_XLATE[name]
+        # Correct known recognition problems using fuzzy matching
+        corrected_name = correct_location_name(name)
+        if corrected_name != name:
+            name = corrected_name
             words = name.split()
             name = " ".join(words)
 
