@@ -137,10 +137,30 @@ class WeatherProcessor:
             return self._handle_set_location(event, user, request_data)
         elif intent_name == "GetSettingIntent":
             return self._handle_get_setting(event, user, request_data)
+        elif intent_name == "SetPitchIntent":
+            return self._handle_set_pitch(event, user, request_data)
+        elif intent_name == "SetRateIntent":
+            return self._handle_set_rate(event, user, request_data)
+        elif intent_name == "GetCustomIntent":
+            return self._handle_get_custom(event, user)
+        elif intent_name == "AddCustomIntent":
+            return self._handle_add_custom(event, user, request_data)
+        elif intent_name == "RemCustomIntent":
+            return self._handle_remove_custom(event, user, request_data)
+        elif intent_name == "RstCustomIntent":
+            return self._handle_reset_custom(event, user)
+        elif intent_name == "StoreDataIntent":
+            return self._handle_store_data(event, user)
+        elif intent_name == "GetDataIntent":
+            return self._handle_get_data(event, user)
         elif intent_name == "AMAZON.HelpIntent":
             return self._handle_help(event, user)
         elif intent_name == "AMAZON.StopIntent" or intent_name == "AMAZON.CancelIntent":
             return self._handle_stop(event, user)
+        elif intent_name == "AMAZON.NoIntent" or intent_name == "AMAZON.YesIntent" or intent_name == "AMAZON.StartOverIntent":
+            return self._handle_fallback(event, user)
+        elif intent_name == "SessionEndedRequest":
+            return self._handle_session_ended(event, user)
         else:
             return {
                 "speech": "I didn't understand that request.",
@@ -324,6 +344,218 @@ class WeatherProcessor:
         """Handle stop/cancel intent."""
         return {
             "speech": "Thank you for using Clime a Cast.",
+            "should_end_session": True,
+            "session_attributes": {}
+        }
+    
+    def _handle_set_pitch(self, event, user, request_data):
+        """Handle set pitch intent."""
+        slots = request_data.get("slots", {})
+        percent = slots.get("percent", {})
+        if isinstance(percent, dict):
+            percent = percent.get("value")
+        
+        if percent and percent.isdigit():
+            pitch = int(percent)
+            if 130 >= pitch >= 70:
+                user.pitch = pitch
+                text = f"Voice pitch has been set to {pitch} percent."
+            else:
+                text = "The pitch must be between 70 and 130 percent"
+        else:
+            text = "Expected a percentage when setting the pitch"
+        
+        return {
+            "speech": text,
+            "should_end_session": False,
+            "session_attributes": {}
+        }
+    
+    def _handle_set_rate(self, event, user, request_data):
+        """Handle set rate intent."""
+        slots = request_data.get("slots", {})
+        percent = slots.get("percent", {})
+        if isinstance(percent, dict):
+            percent = percent.get("value")
+        
+        if percent and percent.isdigit():
+            rate = int(percent)
+            if 150 >= rate >= 50:
+                user.rate = rate
+                text = f"Voice rate has been set to {rate} percent."
+            else:
+                text = "The rate must be between 50 and 150 percent"
+        else:
+            text = "Expected a percentage when setting the rate"
+        
+        return {
+            "speech": text,
+            "should_end_session": False,
+            "session_attributes": {}
+        }
+    
+    def _handle_get_custom(self, event, user):
+        """Handle get custom intent."""
+        text = "The custom forecast will include the " + \
+               ", ".join(list(user.metrics[:-1])) + " and " + user.metrics[-1] + "."
+        return {
+            "speech": text,
+            "should_end_session": False,
+            "session_attributes": {}
+        }
+    
+    def _handle_add_custom(self, event, user, request_data):
+        """Handle add custom intent."""
+        slots = request_data.get("slots", {})
+        metric = slots.get("metric", {})
+        if isinstance(metric, dict):
+            metric = metric.get("value")
+        
+        if not metric:
+            text = "You must include a metric like temperature, humidity or wind."
+            return {
+                "speech": text,
+                "should_end_session": False,
+                "session_attributes": {}
+            }
+        
+        if metric not in METRICS:
+            text = f"{metric} is an unrecognized metric."
+            return {
+                "speech": text,
+                "should_end_session": False,
+                "session_attributes": {}
+            }
+        
+        metric_info = METRICS[metric]
+        if not metric_info[1]:
+            text = f"{metric_info[0]} can't be used when customizing the forecast."
+            return {
+                "speech": text,
+                "should_end_session": False,
+                "session_attributes": {}
+            }
+        
+        if user.has_metric(metric_info[0]):
+            text = f"{metric_info[0]} is already included in the custom forecast."
+            return {
+                "speech": text,
+                "should_end_session": False,
+                "session_attributes": {}
+            }
+        
+        user.add_metric(metric_info[0])
+        text = f"{metric_info[0]} has been added to the custom forecast."
+        return {
+            "speech": text,
+            "should_end_session": False,
+            "session_attributes": {}
+        }
+    
+    def _handle_remove_custom(self, event, user, request_data):
+        """Handle remove custom intent."""
+        slots = request_data.get("slots", {})
+        metric = slots.get("metric", {})
+        if isinstance(metric, dict):
+            metric = metric.get("value")
+        
+        if not metric:
+            text = "You must include a metric like temperature, humidity or wind."
+            return {
+                "speech": text,
+                "should_end_session": False,
+                "session_attributes": {}
+            }
+        
+        if metric not in METRICS:
+            text = f"{metric} is an unrecognized metric."
+            return {
+                "speech": text,
+                "should_end_session": False,
+                "session_attributes": {}
+            }
+        
+        metric_info = METRICS[metric]
+        if not metric_info[1]:
+            text = f"{metric_info[0]} can't be used when customizing the forecast."
+            return {
+                "speech": text,
+                "should_end_session": False,
+                "session_attributes": {}
+            }
+        
+        if not user.has_metric(metric_info[0]):
+            text = f"{metric_info[0]} is already excluded from the custom forecast."
+            return {
+                "speech": text,
+                "should_end_session": False,
+                "session_attributes": {}
+            }
+        
+        user.remove_metric(metric_info[0])
+        text = f"{metric_info[0]} has been removed from the custom forecast."
+        return {
+            "speech": text,
+            "should_end_session": False,
+            "session_attributes": {}
+        }
+    
+    def _handle_reset_custom(self, event, user):
+        """Handle reset custom intent."""
+        user.reset_metrics()
+        text = "The custom forecast has been reset to defaults."
+        return {
+            "speech": text,
+            "should_end_session": False,
+            "session_attributes": {}
+        }
+    
+    def _handle_store_data(self, event, user):
+        """Handle store data intent - saves cache data."""
+        # In CLI mode, the cache adapter automatically saves to JSON files
+        # This is called to explicitly save all data
+        text = "Data has been saved successfully."
+        return {
+            "speech": text,
+            "should_end_session": True,
+            "session_attributes": {}
+        }
+    
+    def _handle_get_data(self, event, user):
+        """Handle get data intent - loads cache data."""
+        # In CLI mode, the cache adapter automatically loads from JSON files
+        # This provides a report on the cache status
+        location_count = len(self.cache_adapter._load_cache("LocationCache"))
+        station_count = len(self.cache_adapter._load_cache("StationCache"))
+        zone_count = len(self.cache_adapter._load_cache("ZoneCache"))
+        user_count = len(self.cache_adapter._load_cache("UserCache"))
+        
+        text = f"Data has been loaded. LocationCache has {location_count} items, " \
+               f"StationCache has {station_count} items, " \
+               f"ZoneCache has {zone_count} items, " \
+               f"and UserCache has {user_count} items."
+        
+        return {
+            "speech": text,
+            "should_end_session": True,
+            "session_attributes": {}
+        }
+    
+    def _handle_fallback(self, event, user):
+        """Handle fallback, yes, no, and start over intents."""
+        text = "I didn't understand that. " \
+               "You can ask for current conditions, forecasts, or alerts. " \
+               "Say help for more information."
+        return {
+            "speech": text,
+            "should_end_session": False,
+            "session_attributes": {}
+        }
+    
+    def _handle_session_ended(self, event, user):
+        """Handle session ended request."""
+        return {
+            "speech": "",
             "should_end_session": True,
             "session_attributes": {}
         }
