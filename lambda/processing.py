@@ -21,6 +21,7 @@ import json
 import os
 import re
 from difflib import SequenceMatcher
+from math import sqrt
 from time import time
 
 import requests
@@ -56,6 +57,9 @@ else:
 """
     Constants and configuration
 """
+VERSION = 2
+REVISION = 0
+
 NORMALIZE = None
 NORMALIZE_RE = [r"(?P<meridian>\d+\s*(am|pm))",
                 r"(?P<deg>\s(1|-1))\s*degrees",
@@ -66,6 +70,30 @@ NORMALIZE_RE = [r"(?P<meridian>\d+\s*(am|pm))",
                 r"(?P<sub>(?<=\s|\.)(ft|mph|nws|pt\.|pt))(?=\s|\W|$)",
                 r"(?P<wind>(?<=\s|\.)(n|nne|ne|ene|e|ese|se|sse|s|ssw|sw|wsw|w|wnw|nw|nnw))(?=\s|$)",
                 r"(?P<st>(?<=\s|\.)[A-Z][A-Z])(?=\s|\W|$)"]
+
+FUNCS = {"LaunchRequest": ["launch_request", False],
+         "SessionEndRequest": ["session_end_request", False],
+         "SessionEndedRequest": ["session_ended_request", False],
+
+         "AMAZON.CancelIntent": ["cancel_intent", False],
+         "AMAZON.HelpIntent": ["help_intent", False],
+         "AMAZON.NoIntent": ["no_intent", False],
+         "AMAZON.StartOverIntent": ["start_over_intent", False],
+         "AMAZON.StopIntent": ["stop_intent", False],
+         "AMAZON.YesIntent": ["yes_intent", False],
+
+         "MetricIntent": ["metric_intent", True],
+         "MetricPosIntent": ["metric_intent", True],
+
+         "GetSettingIntent": ["get_setting_intent", True],
+         "SetPitchIntent": ["set_pitch_intent", False],
+         "SetRateIntent": ["set_rate_intent", False],
+         "SetLocationIntent": ["set_location_intent", False],
+
+         "GetCustomIntent": ["get_custom_intent", False],
+         "AddCustomIntent": ["add_custom_intent", False],
+         "RemCustomIntent": ["remove_custom_intent", False],
+         "RstCustomIntent": ["reset_custom_intent", False]}
 
 SLOTS = ["day",
          "leadin",
@@ -80,6 +108,13 @@ SLOTS = ["day",
          "when_pos",
          "zip_conn",
          "zipcode"]
+
+QUARTERS = ["morning",
+            "afternoon",
+            "evening",
+            "overnight",
+            "tonight",
+            "night"]
 
 DAYS = ["monday",
         "tuesday",
@@ -279,6 +314,28 @@ SETTINGS = {"location": "location",
             "rate": "rate",
             "forecast": "forecast"}
 
+TIME_QUARTERS = {0: ["overnight", False],
+                 1: ["morning", True],
+                 2: ["after noon", True],
+                 3: ["evening", False]}
+
+# Most of these are guesses.  "good" means observed in data
+WEATHER_COVERAGE = {"areas_of": "areas of",                         # good
+                    "brief": "brief",
+                    "chance": "a chance of",                        # good
+                    "definite": "definite",                         # good
+                    "frequent": "frequent",
+                    "intermittent": "intermittent",
+                    "isolated": "isolated",                         # good
+                    "likely": "likely",                             # good
+                    "numerous": "numerous",                         # good
+                    "occasional": "occasional",                     # good
+                    "patchy": "patchy",                             # good
+                    "periods_of": "periods of",
+                    "scattered": "scattered",                       # good
+                    "slight_chance": "a slight chance of",          # good
+                    "widespread": "widespread"}                     # good
+
 WEATHER_WEATHER = {"blowing_dust": "blowing dust",
                    "blowing_sand": "blowing sand",
                    "blowing_snow": "blowing snow",
@@ -308,6 +365,8 @@ WEATHER_INTENSITY = {"": ["", 0],                                   # good
                      "light": ["light", 2],                         # good
                      "moderate": ["moderate", 3],                   # good
                      "heavy": ["heavy", 4]}                         # good
+
+WEATHER_VISIBILITY = {"": None}
 
 WEATHER_ATTRIBUTES = {"damaging_wind": "damaging wind",                     # good
                       "dry": "dry",
@@ -490,6 +549,12 @@ class Base(object):
         """
         return self.get_zone(zoneId, "county")
 
+    def get_fire_zone(self, zoneId):
+        """
+            Returns the fire zone for the given zone ID
+        """
+        return self.get_zone(zoneId, "fire")
+
     def get_stations(self, coords):
         """
             Returns the list of stations nearest to furthest order
@@ -535,6 +600,28 @@ class Base(object):
         self.cache_put(cache_name, station)
 
         return station
+
+    def get_product(self, product):
+        """
+            Return the text for the given product
+        """
+        text = ""
+
+        # Retrieve list of features provided by the given CWA
+        data = self.https("products/types/%s/locations/%s" % (product, self.loc["cwa"]))
+        if data is None or data.get("status", 0) != 0:
+            notify(self.event, "Unable to get %s product list" % product, data)
+            return None
+
+        # Retrieve the most current feature
+        if len(data["@graph"]) > 0:
+            data = self.https("products/%s" % (data["@graph"][0]["id"]))
+            if data is None or data.get("status", 0) != 0:
+                notify(self.event, "Unable to get product %s" % product, data)
+                return None
+            text = data["productText"]
+
+        return text
 
     def cache_get(self, cache_name, key):
         """
@@ -864,6 +951,43 @@ class Base(object):
                     return item[0]
         return None
 
+    def to_wind_chill(self, F, mph):
+        if F > 50.0 or mph <= 3.0:
+            return None
+
+        return round(35.74 + .6215*F - 35.75*pow(mph, 0.16) + 0.4275*F*pow(mph, 0.16))
+
+    def to_heat_index(self, F, rh):
+        """
+            Calculate the heat index
+            Taken from: http://www.wpc.ncep.noaa.gov/html/heatindex.shtml
+        """
+        if rh > 100.0 or rh < 0.0:
+            return None
+
+        if F <= 40.0:
+            return F
+
+        hitemp = 61.0+((F-68.0)*1.2)+(rh*0.094)
+        hifinal = 0.5*(F+hitemp)
+
+        if hifinal > 79.0:
+            hi = -42.379+2.04901523*F+10.14333127*rh-0.22475541*F*rh-6.83783*(pow(10, -3))*(pow(F, 2))-5.481717*(pow(10, -2))*(pow(rh, 2))+1.22874*(pow(10, -3))*(pow(F, 2))*rh+8.5282*(pow(10, -4))*F*(pow(rh, 2))-1.99*(pow(10, -6))*(pow(F, 2))*(pow(rh, 2))
+            if (rh <= 13) and (F >= 80.0) and (F <= 112.0):
+                adj1 = (13.0-rh)/4.0
+                adj2 = sqrt((17.0-abs(F-95.0))/17.0)
+                adj = adj1 * adj2
+                hi = hi - adj
+            elif (rh > 85.0) and (F >= 80.0) and (F <= 87.0):
+                adj1 = (rh-85.0)/10.0
+                adj2 = (87.0-F)/5.0
+                adj = adj1 * adj2
+                hi = hi + adj
+        else:
+            hi = hifinal
+
+        return int(round(hi))
+
     def normalize(self, text):
         """
             Tries to identify various text patterns and replaces them
@@ -1055,16 +1179,60 @@ class GridPoints(Base):
         return self.c_to_f(self.get_high("temperature"))
 
     @property
+    def temp_initial(self):
+        return self.c_to_f(self.get_initial("temperature"))
+
+    @property
+    def temp_final(self):
+        return self.c_to_f(self.get_final("temperature"))
+
+    @property
+    def humidity_low(self):
+        return self.to_percent(self.get_low("relativeHumidity"))
+
+    @property
     def humidity_high(self):
         return self.to_percent(self.get_high("relativeHumidity"))
+
+    @property
+    def humidity_initial(self):
+        return self.to_percent(self.get_initial("relativeHumidity"))
+
+    @property
+    def humidity_final(self):
+        return self.to_percent(self.get_final("relativeHumidity"))
+
+    @property
+    def dewpoint_low(self):
+        return self.c_to_f(self.get_low("dewpoint"))
 
     @property
     def dewpoint_high(self):
         return self.c_to_f(self.get_high("dewpoint"))
 
     @property
+    def dewpoint_initial(self):
+        return self.c_to_f(self.get_initial("dewpoint"))
+
+    @property
+    def dewpoint_final(self):
+        return self.c_to_f(self.get_final("dewpoint"))
+
+    @property
     def pressure_low(self):
         return self.mb_to_in(self.get_low("pressure"))
+
+    @property
+    def pressure_high(self):
+        return self.mb_to_in(self.get_high("pressure"))
+
+    @property
+    def pressure_initial(self):
+        return self.mb_to_in(self.get_initial("pressure"))
+
+    @property
+    def pressure_final(self):
+        return self.mb_to_in(self.get_final("pressure"))
 
     @property
     def pressure_trend(self):
@@ -1076,8 +1244,20 @@ class GridPoints(Base):
         return "steady"
 
     @property
+    def precip_chance_low(self):
+        return self.to_percent(self.get_low("probabilityOfPrecipitation"))
+
+    @property
     def precip_chance_high(self):
         return self.to_percent(self.get_high("probabilityOfPrecipitation"))
+
+    @property
+    def precip_chance_initial(self):
+        return self.to_percent(self.get_initial("probabilityOfPrecipitation"))
+
+    @property
+    def precip_chance_final(self):
+        return self.to_percent(self.get_final("probabilityOfPrecipitation"))
 
     @property
     def precip_amount_low(self):
@@ -1088,12 +1268,28 @@ class GridPoints(Base):
         return self.mm_to_in(self.get_high("quantitativePrecipitation"), as_text=True)
 
     @property
+    def precip_amount_initial(self):
+        return self.mm_to_in(self.get_initial("quantitativePrecipitation"), as_text=True)
+
+    @property
+    def precip_amount_final(self):
+        return self.mm_to_in(self.get_final("quantitativePrecipitation"), as_text=True)
+
+    @property
     def snow_amount_low(self):
         return self.mm_to_in(self.get_low("snowfallAmount"), as_text=True)
 
     @property
     def snow_amount_high(self):
         return self.mm_to_in(self.get_high("snowfallAmount"), as_text=True)
+
+    @property
+    def snow_amount_initial(self):
+        return self.mm_to_in(self.get_initial("snowfallAmount"), as_text=True)
+
+    @property
+    def snow_amount_final(self):
+        return self.mm_to_in(self.get_final("snowfallAmount"), as_text=True)
 
     def _extract_weather_attributes(self, weather_values):
         """
@@ -1264,13 +1460,38 @@ class GridPoints(Base):
         return self.mps_to_mph(self.get_high("windSpeed"))
 
     @property
+    def wind_speed_initial(self):
+        return self.mps_to_mph(self.get_initial("windSpeed"))
+
+    @property
+    def wind_speed_final(self):
+        return self.mps_to_mph(self.get_final("windSpeed"))
+
+    @property
     def wind_direction_initial(self):
         values = self.get_values("windDirection")
         return self.da_to_dir(values[0]) if len(values) > 0 else None
 
     @property
+    def wind_direction_final(self):
+        values = self.get_values("windDirection")
+        return self.da_to_dir(values[-1]) if len(values) > 0 else None
+
+    @property
+    def wind_gust_low(self):
+        return self.mps_to_mph(self.get_low("windGust"))
+
+    @property
     def wind_gust_high(self):
         return self.mps_to_mph(self.get_high("windGust"))
+
+    @property
+    def wind_gust_initial(self):
+        return self.mps_to_mph(self.get_initial("windGust"))
+
+    @property
+    def wind_gust_final(self):
+        return self.mps_to_mph(self.get_final("windGust"))
 
     @property
     def wind_chill_low(self):
@@ -1281,12 +1502,28 @@ class GridPoints(Base):
         return self.c_to_f(self.get_high("windChill"))
 
     @property
+    def wind_chill_initial(self):
+        return self.c_to_f(self.get_initial("windChill"))
+
+    @property
+    def wind_chill_final(self):
+        return self.c_to_f(self.get_final("windChill"))
+
+    @property
     def heat_index_low(self):
         return self.c_to_f(self.get_low("heatIndex"))
 
     @property
     def heat_index_high(self):
         return self.c_to_f(self.get_high("heatIndex"))
+
+    @property
+    def heat_index_initial(self):
+        return self.c_to_f(self.get_initial("heatIndex"))
+
+    @property
+    def heat_index_final(self):
+        return self.c_to_f(self.get_final("heatIndex"))
 
     @property
     def skys_initial(self):
@@ -1343,6 +1580,10 @@ class Observations(Base):
         return self.observations is not None
 
     @property
+    def station_id(self):
+        return self.station["stationIdentifier"]
+
+    @property
     def station_name(self):
         return self.station["name"]
 
@@ -1379,6 +1620,10 @@ class Observations(Base):
         return self.c_to_f(self.get_value("heatIndex"))
 
     @property
+    def feels_like(self):
+        return self.wind_chill() or self.heat_index()
+
+    @property
     def dewpoint(self):
         return self.c_to_f(self.get_value("dewpoint"))
 
@@ -1409,6 +1654,10 @@ class Alerts(Base):
         def __init__(self, event, alert, attributes_manager=None, cache_adapter=None):
             super().__init__(event, attributes_manager, cache_adapter)
             self.alert = alert
+
+        @property
+        def expires(self):
+            return self.alert["expires"]
 
         @property
         def event(self):
@@ -1688,12 +1937,24 @@ class Location(Base):
         return self.loc["gridPoint"]
 
     @property
+    def timeZone(self):
+        return self.loc["timeZone"]
+
+    @property
+    def forecastZoneId(self):
+        return self.loc["forecastZoneId"]
+
+    @property
     def forecastZoneName(self):
         return self.loc["forecastZoneName"]
 
     @property
     def countyZoneId(self):
         return self.loc["countyZoneId"]
+
+    @property
+    def countyZoneName(self):
+        return self.loc["countyZoneName"]
 
     @property
     def observationStations(self):

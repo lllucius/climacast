@@ -19,6 +19,7 @@ the weather processing logic in processing.py.
 import json
 import os
 
+import os
 os.environ["AWS_REGION"] = os.getenv("AWS_REGION", "us-east-1")
 
 # ASK SDK imports
@@ -29,7 +30,7 @@ from ask_sdk_core.utils import is_request_type, is_intent_name
 # Import weather processing classes from processing.py
 from processing import (
     Base, User, Location, Observations, GridPoints, Alerts,
-    METRICS, DAYS, MONTH_DAYS, MONTH_NAMES, SETTINGS,
+    METRICS, DAYS, QUARTERS, MONTH_DAYS, MONTH_NAMES, SETTINGS,
     notify, SLOTS
 )
 
