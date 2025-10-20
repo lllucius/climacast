@@ -441,7 +441,7 @@ def get_api_data(url):
         Cached HTTP GET request for API data
     """
     headers = {"User-Agent": "ClimacastAlexaSkill/2.0 (climacast@homerow.net)",
-               "Accept": "application/ld+json"}
+               "Accept": "application/ld+json, application/json"}
     r = HTTPS.get(url, headers=headers)
     if r.status_code != 200 or r.text is None or r.text == "":
         return None, r.status_code, r.url, r.content
