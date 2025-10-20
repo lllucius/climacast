@@ -2659,13 +2659,37 @@ class BaseIntentHandler(AbstractRequestHandler):
                         "value": slot.value
                     }
         
-        # Store event in session for helper access
-        if "skill_helper" not in session_attr:
-            skill = Skill(event)
-            session_attr["skill_helper_created"] = True
-        
-        # Always create a new Skill instance with updated event
+        # Create Skill instance and initialize it properly
         skill = Skill(event)
+        
+        # Initialize skill properties that would normally be set by handle_event()
+        skill.session = event["session"]
+        skill.attrs = event["session"].get("attributes", {})
+        skill.request = event["request"]
+        skill.intent = event["request"].get("intent", {})
+        
+        # Load or create the user's profile
+        skill.user = User(event, event["session"]["user"]["userId"])
+        
+        # Verify application id
+        if event["session"]["application"]["applicationId"] != APPID:
+            raise ValueError("Invoked from unknown application.")
+        
+        # Retrieve the default location info
+        if skill.user.location:
+            loc = Location(event)
+            text = loc.set(skill.user.location)
+            if text is None:
+                skill.loc = loc
+        
+        # Load the slot values
+        skill.slots = type("slots", (), {})
+        slots = skill.intent.get("slots", {})
+        for slot in SLOTS:
+            val = slots.get(slot, {}).get("value", None)
+            setattr(skill.slots, slot, val.strip().lower() if val else None)
+            print("SLOT:", slot, getattr(skill.slots, slot))
+        
         return skill
     
     def build_response(self, skill, text, end=None):
@@ -3011,7 +3035,27 @@ def lambda_handler(event, context=None):
                 return
         
         # Handle Alexa skill requests using ASK SDK
-        return skill_instance.invoke(event, context)
+        # The SDK requires a RequestEnvelope object, not a dict
+        from ask_sdk_model import RequestEnvelope
+        
+        serializer = DefaultSerializer()
+        request_envelope = serializer.deserialize(
+            json.dumps(event), RequestEnvelope
+        )
+        
+        response_envelope = skill_instance.invoke(request_envelope, context)
+        
+        # Serialize the response back to dict for Lambda
+        if response_envelope:
+            response_dict = serializer.serialize(response_envelope)
+            # If response_dict is already a dict, return it; otherwise parse it
+            if isinstance(response_dict, dict):
+                return response_dict
+            elif isinstance(response_dict, str):
+                return json.loads(response_dict)
+            else:
+                return response_dict
+        return None
         
     except SystemExit:
         pass
