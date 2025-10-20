@@ -29,7 +29,7 @@ from ask_sdk_core.utils import is_request_type, is_intent_name
 # Import weather processing classes from processing.py
 from processing import (
     Base, User, Location, Observations, GridPoints, Alerts,
-    METRICS, DAYS, QUARTERS, MONTH_DAYS, MONTH_NAMES, SETTINGS,
+    METRICS, DAYS, MONTH_DAYS, MONTH_NAMES, SETTINGS,
     notify, SLOTS
 )
 

@@ -274,6 +274,11 @@ STATES = ["alabama", "al",
           "wisconsin", "wi",
           "wyoming", "wy"]
 
+SETTINGS = {"location": "location",
+            "pitch": "pitch",
+            "rate": "rate",
+            "forecast": "forecast"}
+
 WEATHER_WEATHER = {"blowing_dust": "blowing dust",
                    "blowing_sand": "blowing sand",
                    "blowing_snow": "blowing snow",
