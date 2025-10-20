@@ -150,8 +150,16 @@ The refactoring is complete and tested. The code is now ready for:
 
 ## Security Notes
 
-No security vulnerabilities introduced. The refactoring:
+No new security vulnerabilities introduced. The refactoring:
 - Preserves all existing security measures
 - Maintains cache isolation
 - Keeps DynamoDB access patterns
 - Preserves authentication/authorization flows
+
+### Pre-existing Security Consideration
+CodeQL flagged the `notify()` function (line 430 in processing.py) for logging event data that may contain sensitive information. This is pre-existing code that was moved from lambda_function.py during the refactoring. The notify function is used for debugging and error reporting. Consider:
+- Filtering sensitive fields before logging
+- Using structured logging with field masking
+- Implementing log sanitization for production environments
+
+This issue exists in the original codebase and was not introduced by this refactoring.
