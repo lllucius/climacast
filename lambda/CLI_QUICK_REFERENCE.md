@@ -13,6 +13,8 @@ pip install -r requirements.txt
 ```bash
 ./cli.py launch                          # Welcome message
 ./cli.py help                            # Get help information
+./cli.py simulate                        # Simulate a full skill session workflow
+./cli.py simulate --location "Boulder Colorado"  # Simulate with location
 ```
 
 ### Location Management
@@ -20,6 +22,26 @@ pip install -r requirements.txt
 ./cli.py set_location --location "Boulder Colorado"
 ./cli.py set_location --location "Seattle Washington"
 ./cli.py get_setting                     # Show current settings
+```
+
+### Voice Settings
+```bash
+./cli.py set_pitch --percent 90          # Set voice pitch (70-130)
+./cli.py set_rate --percent 120          # Set voice rate (50-150)
+```
+
+### Custom Forecast
+```bash
+./cli.py get_custom                      # Show custom forecast settings
+./cli.py add_custom --metric "temperature"  # Add metric to custom forecast
+./cli.py remove_custom --metric "wind"   # Remove metric from custom forecast
+./cli.py reset_custom                    # Reset to default metrics
+```
+
+### Data Persistence
+```bash
+./cli.py store_data                      # Save cache data
+./cli.py get_data                        # Load and report cache data
 ```
 
 ### Weather Queries
@@ -39,6 +61,16 @@ pip install -r requirements.txt
 
 # Alerts
 ./cli.py metric --metric alerts
+```
+
+### AMAZON Intents
+```bash
+./cli.py yes                             # AMAZON.YesIntent
+./cli.py no                              # AMAZON.NoIntent
+./cli.py start_over                      # AMAZON.StartOverIntent
+./cli.py cancel                          # AMAZON.CancelIntent
+./cli.py stop                            # AMAZON.StopIntent
+./cli.py session_ended                   # SessionEndedRequest
 ```
 
 ### Advanced Options

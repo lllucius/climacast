@@ -60,6 +60,12 @@ echo "here_api_key=YOUR_API_KEY_HERE" > .env
 ./cli.py set_location --location "Boulder Colorado"
 ```
 
+**Set voice settings:**
+```bash
+./cli.py set_pitch --percent 90   # Set pitch (70-130%)
+./cli.py set_rate --percent 120   # Set rate (50-150%)
+```
+
 **Query weather metric:**
 ```bash
 ./cli.py metric --metric temperature
@@ -70,6 +76,36 @@ echo "here_api_key=YOUR_API_KEY_HERE" > .env
 **Get settings:**
 ```bash
 ./cli.py get_setting
+```
+
+**Custom forecast management:**
+```bash
+./cli.py get_custom                          # View custom forecast
+./cli.py add_custom --metric "temperature"   # Add metric
+./cli.py remove_custom --metric "wind"       # Remove metric
+./cli.py reset_custom                        # Reset to defaults
+```
+
+**Data persistence:**
+```bash
+./cli.py store_data   # Save cache data
+./cli.py get_data     # Load and report cache data
+```
+
+**AMAZON intents:**
+```bash
+./cli.py yes          # AMAZON.YesIntent
+./cli.py no           # AMAZON.NoIntent
+./cli.py start_over   # AMAZON.StartOverIntent
+./cli.py cancel       # AMAZON.CancelIntent
+./cli.py stop         # AMAZON.StopIntent
+./cli.py session_ended  # SessionEndedRequest
+```
+
+**Simulate workflow:**
+```bash
+./cli.py simulate                             # Simulate complete session
+./cli.py simulate --location "Boulder Colorado"  # With location
 ```
 
 ### Advanced Options
@@ -131,7 +167,37 @@ Caches are stored in the `.climacast_cache` directory (or the directory specifie
 
 Caches are created automatically and respect TTL (time to live) settings.
 
+### Data Persistence
+
+The CLI simulates the data persistence behavior of the Alexa skill:
+
+- **Automatic saving**: User preferences (location, pitch, rate, custom forecast metrics) are automatically saved to `UserCache.json` when modified
+- **StoreDataIntent**: Explicitly saves all cache data (called at session end in `simulate` workflow)
+- **GetDataIntent**: Reports cache statistics (called at session start in `simulate` workflow)
+
+In the actual skill, these use DynamoDB for persistence. In CLI mode, JSON files are used instead to simulate the same behavior without requiring AWS infrastructure.
+
 ## Examples
+
+### Simulate a Complete Skill Session
+
+The `simulate` command runs through a typical Alexa skill session workflow:
+
+```bash
+./cli.py simulate --location "Boulder Colorado"
+```
+
+This executes the following sequence:
+1. **GetDataIntent** - Load cached data (simulates session start)
+2. **LaunchRequest** - Welcome message
+3. **SetLocationIntent** - Set user location (if provided)
+4. **MetricIntent** - Query weather
+5. **GetSettingIntent** - Check settings
+6. **StoreDataIntent** - Save cached data
+7. **AMAZON.StopIntent** - End session message
+8. **SessionEndedRequest** - Clean session termination
+
+This simulates the natural flow of intents as they would be called when running as an Alexa skill, ensuring that data persistence (StoreDataIntent/GetDataIntent) happens at the appropriate times.
 
 ### Test a complete workflow
 

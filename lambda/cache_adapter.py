@@ -80,8 +80,12 @@ class DynamoDBCacheAdapter(CacheAdapter):
         """Get item from DynamoDB cache."""
         from botocore.exceptions import ClientError
         
-        # Build a key string from the key dict
-        key_str = "_".join([str(key[k]) for k in sorted(key.keys())])
+        # For UserCache, use only userid as the key
+        if cache_name == "UserCache":
+            key_str = str(key.get("userid", ""))
+        else:
+            # Build a key string from the key dict
+            key_str = "_".join([str(key[k]) for k in sorted(key.keys())])
         
         # Access persistent attributes directly based on cache type
         if cache_name in ["LocationCache", "StationCache", "ZoneCache"]:
@@ -164,8 +168,12 @@ class DynamoDBCacheAdapter(CacheAdapter):
         """Put item into DynamoDB cache."""
         from botocore.exceptions import ClientError
         
-        # Build a key string from the key dict
-        key_str = "_".join([str(key[k]) for k in sorted(key.keys())])
+        # For UserCache, use only userid as the key
+        if cache_name == "UserCache":
+            key_str = str(key.get("userid", ""))
+        else:
+            # Build a key string from the key dict
+            key_str = "_".join([str(key[k]) for k in sorted(key.keys())])
         
         # Add TTL if specified
         if ttl != 0:
@@ -302,8 +310,12 @@ class JSONFileCacheAdapter(CacheAdapter):
     
     def get(self, cache_name, key):
         """Get item from JSON file cache."""
-        # Build a key string from the key dict
-        key_str = "_".join([str(key[k]) for k in sorted(key.keys())])
+        # For UserCache, use only userid as the key
+        if cache_name == "UserCache":
+            key_str = str(key.get("userid", ""))
+        else:
+            # Build a key string from the key dict
+            key_str = "_".join([str(key[k]) for k in sorted(key.keys())])
         
         # Load cache
         cache_dict = self._load_cache(cache_name)
@@ -324,8 +336,12 @@ class JSONFileCacheAdapter(CacheAdapter):
     
     def put(self, cache_name, key, ttl=35):
         """Put item into JSON file cache."""
-        # Build a key string from the key dict
-        key_str = "_".join([str(key[k]) for k in sorted(key.keys())])
+        # For UserCache, use only userid as the key
+        if cache_name == "UserCache":
+            key_str = str(key.get("userid", ""))
+        else:
+            # Build a key string from the key dict
+            key_str = "_".join([str(key[k]) for k in sorted(key.keys())])
         
         # Add TTL if specified
         if ttl != 0:
