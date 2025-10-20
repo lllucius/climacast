@@ -19,7 +19,6 @@ the weather processing logic in processing.py.
 import json
 import os
 
-import os
 os.environ["AWS_REGION"] = os.getenv("AWS_REGION", "us-east-1")
 
 # ASK SDK imports
