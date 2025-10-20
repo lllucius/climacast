@@ -7,7 +7,10 @@ requests.structures
 Data structures that power Requests.
 """
 
-import collections
+try:
+    from collections.abc import MutableMapping
+except ImportError:
+    from collections import MutableMapping
 import time
 
 from .compat import OrderedDict
@@ -15,7 +18,7 @@ from .compat import OrderedDict
 current_time = getattr(time, 'monotonic', time.time)
 
 
-class CaseInsensitiveDict(collections.MutableMapping):
+class CaseInsensitiveDict(MutableMapping):
     """A case-insensitive ``dict``-like object.
 
     Implements all methods and operations of
@@ -128,7 +131,7 @@ class TimedCacheManaged(object):
         return found
 
 
-class TimedCache(collections.MutableMapping):
+class TimedCache(MutableMapping):
     """
     Evicts entries after expiration_secs. If none are expired and maxlen is hit,
     will evict the oldest cached entry

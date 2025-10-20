@@ -32,6 +32,7 @@ from ask_sdk_core.utils import is_request_type, is_intent_name
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model import Response
 from ask_sdk_model.ui import SimpleCard
+from ask_sdk_core.serialize import DefaultSerializer
 
 """
     Anything defined here will persist for the duration of the lambda
@@ -380,11 +381,19 @@ STATIONCACHE = DDB.Table("StationCache")
 USERCACHE = DDB.Table("UserCache")
 ZONECACHE = DDB.Table("ZoneCache")
 
-retry_strategy = Retry(
-    total=3,
-    status_forcelist=[429, 500, 502, 503, 504],
-    method_whitelist=["HEAD", "GET", "OPTIONS"]
-)
+# Use allowed_methods for newer urllib3, fallback to method_whitelist for older versions
+try:
+    retry_strategy = Retry(
+        total=3,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["HEAD", "GET", "OPTIONS"]
+    )
+except TypeError:
+    retry_strategy = Retry(
+        total=3,
+        status_forcelist=[429, 500, 502, 503, 504],
+        method_whitelist=["HEAD", "GET", "OPTIONS"]
+    )
 adapter = HTTPAdapter(max_retries=retry_strategy)
 
 HTTPS = requests.Session()
