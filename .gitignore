@@ -111,3 +111,5 @@ lambda.zip
 .vscode/
 .climacast_cache/
 
+.climacast_cache/
+.test_cache/
