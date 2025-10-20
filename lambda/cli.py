@@ -114,6 +114,114 @@ def emulate_alexa_request(request_type, slots=None, user_id="test-user", user_lo
     return request_data
 
 
+def simulate_workflow(processor, args):
+    """
+    Simulate a typical Alexa skill session workflow.
+    
+    This simulates the order of intents as they would be called when running as a skill:
+    1. GetDataIntent - Load cached data at session start
+    2. LaunchRequest - Welcome message
+    3. User interactions (set location, query weather, etc.)
+    4. StoreDataIntent - Save cached data before session end
+    5. SessionEndedRequest - End session
+    """
+    print("\n" + "=" * 60)
+    print("SIMULATING ALEXA SKILL SESSION WORKFLOW")
+    print("=" * 60)
+    
+    user_id = args.user_id
+    location = args.location
+    
+    # Step 1: GetDataIntent - Load cached data
+    print("\n[Step 1] Loading cached data (GetDataIntent)...")
+    request_data = {
+        "request_type": "IntentRequest",
+        "intent_name": "GetDataIntent",
+        "user_id": user_id
+    }
+    response = processor.process_request(request_data)
+    print(f"Response: {response['speech']}")
+    
+    # Step 2: LaunchRequest
+    print("\n[Step 2] Launch request...")
+    request_data = {
+        "request_type": "LaunchRequest",
+        "user_id": user_id
+    }
+    response = processor.process_request(request_data)
+    print(f"Response: {response['speech']}")
+    
+    # Step 3: Set location if provided
+    if location:
+        print(f"\n[Step 3] Setting location to {location}...")
+        request_data = {
+            "request_type": "IntentRequest",
+            "intent_name": "SetLocationIntent",
+            "user_id": user_id,
+            "slots": {"location": {"value": location}}
+        }
+        response = processor.process_request(request_data)
+        print(f"Response: {response['speech']}")
+    
+    # Step 4: Query weather
+    print("\n[Step 4] Querying current weather...")
+    request_data = {
+        "request_type": "IntentRequest",
+        "intent_name": "MetricIntent",
+        "user_id": user_id,
+        "slots": {"metric": {"value": "temperature"}}
+    }
+    if location:
+        request_data["slots"]["location"] = {"value": location}
+    response = processor.process_request(request_data)
+    print(f"Response: {response['speech']}")
+    
+    # Step 5: Get settings
+    print("\n[Step 5] Getting current settings...")
+    request_data = {
+        "request_type": "IntentRequest",
+        "intent_name": "GetSettingIntent",
+        "user_id": user_id
+    }
+    response = processor.process_request(request_data)
+    print(f"Response: {response['speech']}")
+    
+    # Step 6: StoreDataIntent - Save cached data
+    print("\n[Step 6] Saving cached data (StoreDataIntent)...")
+    request_data = {
+        "request_type": "IntentRequest",
+        "intent_name": "StoreDataIntent",
+        "user_id": user_id
+    }
+    response = processor.process_request(request_data)
+    print(f"Response: {response['speech']}")
+    
+    # Step 7: Stop/Cancel
+    print("\n[Step 7] Stopping session (AMAZON.StopIntent)...")
+    request_data = {
+        "request_type": "IntentRequest",
+        "intent_name": "AMAZON.StopIntent",
+        "user_id": user_id
+    }
+    response = processor.process_request(request_data)
+    print(f"Response: {response['speech']}")
+    
+    # Step 8: SessionEndedRequest
+    print("\n[Step 8] Session ended...")
+    request_data = {
+        "request_type": "SessionEndedRequest",
+        "user_id": user_id
+    }
+    response = processor.process_request(request_data)
+    print("Session terminated.")
+    
+    print("\n" + "=" * 60)
+    print("WORKFLOW SIMULATION COMPLETE")
+    print("=" * 60 + "\n")
+    
+    return 0
+
+
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -184,14 +292,55 @@ Examples:
     location_parser = subparsers.add_parser("set_location", help="Set default location")
     location_parser.add_argument("--location", required=True, help="Location to set")
     
+    # Set pitch
+    pitch_parser = subparsers.add_parser("set_pitch", help="Set voice pitch")
+    pitch_parser.add_argument("--percent", required=True, type=int, help="Pitch percentage (70-130)")
+    
+    # Set rate
+    rate_parser = subparsers.add_parser("set_rate", help="Set voice rate")
+    rate_parser.add_argument("--percent", required=True, type=int, help="Rate percentage (50-150)")
+    
     # Get setting
     subparsers.add_parser("get_setting", help="Get current settings")
+    
+    # Get custom
+    subparsers.add_parser("get_custom", help="Get custom forecast settings")
+    
+    # Add custom
+    add_custom_parser = subparsers.add_parser("add_custom", help="Add metric to custom forecast")
+    add_custom_parser.add_argument("--metric", required=True, help="Metric to add")
+    
+    # Remove custom
+    remove_custom_parser = subparsers.add_parser("remove_custom", help="Remove metric from custom forecast")
+    remove_custom_parser.add_argument("--metric", required=True, help="Metric to remove")
+    
+    # Reset custom
+    subparsers.add_parser("reset_custom", help="Reset custom forecast to defaults")
+    
+    # Store data
+    subparsers.add_parser("store_data", help="Save cache data")
+    
+    # Get data
+    subparsers.add_parser("get_data", help="Load and report cache data")
     
     # Help
     subparsers.add_parser("help", help="Get help information")
     
+    # AMAZON intents
+    subparsers.add_parser("yes", help="AMAZON.YesIntent")
+    subparsers.add_parser("no", help="AMAZON.NoIntent")
+    subparsers.add_parser("start_over", help="AMAZON.StartOverIntent")
+    subparsers.add_parser("cancel", help="AMAZON.CancelIntent")
+    
     # Stop
     subparsers.add_parser("stop", help="Stop/cancel")
+    
+    # Session ended
+    subparsers.add_parser("session_ended", help="Session ended request")
+    
+    # Simulate workflow
+    simulate_parser = subparsers.add_parser("simulate", help="Simulate a typical skill session workflow")
+    simulate_parser.add_argument("--location", help="Location for the simulation")
     
     args = parser.parse_args()
     
@@ -232,6 +381,93 @@ Examples:
             slots = {"location": {"value": args.location}}
             request_data = emulate_alexa_request("set_location", slots=slots,
                                                  user_id=args.user_id)
+        elif args.command == "set_pitch":
+            slots = {"percent": {"value": str(args.percent)}}
+            request_data = {
+                "request_type": "IntentRequest",
+                "intent_name": "SetPitchIntent",
+                "user_id": args.user_id,
+                "slots": slots
+            }
+        elif args.command == "set_rate":
+            slots = {"percent": {"value": str(args.percent)}}
+            request_data = {
+                "request_type": "IntentRequest",
+                "intent_name": "SetRateIntent",
+                "user_id": args.user_id,
+                "slots": slots
+            }
+        elif args.command == "get_custom":
+            request_data = {
+                "request_type": "IntentRequest",
+                "intent_name": "GetCustomIntent",
+                "user_id": args.user_id
+            }
+        elif args.command == "add_custom":
+            slots = {"metric": {"value": args.metric}}
+            request_data = {
+                "request_type": "IntentRequest",
+                "intent_name": "AddCustomIntent",
+                "user_id": args.user_id,
+                "slots": slots
+            }
+        elif args.command == "remove_custom":
+            slots = {"metric": {"value": args.metric}}
+            request_data = {
+                "request_type": "IntentRequest",
+                "intent_name": "RemCustomIntent",
+                "user_id": args.user_id,
+                "slots": slots
+            }
+        elif args.command == "reset_custom":
+            request_data = {
+                "request_type": "IntentRequest",
+                "intent_name": "RstCustomIntent",
+                "user_id": args.user_id
+            }
+        elif args.command == "store_data":
+            request_data = {
+                "request_type": "IntentRequest",
+                "intent_name": "StoreDataIntent",
+                "user_id": args.user_id
+            }
+        elif args.command == "get_data":
+            request_data = {
+                "request_type": "IntentRequest",
+                "intent_name": "GetDataIntent",
+                "user_id": args.user_id
+            }
+        elif args.command == "yes":
+            request_data = {
+                "request_type": "IntentRequest",
+                "intent_name": "AMAZON.YesIntent",
+                "user_id": args.user_id
+            }
+        elif args.command == "no":
+            request_data = {
+                "request_type": "IntentRequest",
+                "intent_name": "AMAZON.NoIntent",
+                "user_id": args.user_id
+            }
+        elif args.command == "start_over":
+            request_data = {
+                "request_type": "IntentRequest",
+                "intent_name": "AMAZON.StartOverIntent",
+                "user_id": args.user_id
+            }
+        elif args.command == "cancel":
+            request_data = {
+                "request_type": "IntentRequest",
+                "intent_name": "AMAZON.CancelIntent",
+                "user_id": args.user_id
+            }
+        elif args.command == "session_ended":
+            request_data = {
+                "request_type": "SessionEndedRequest",
+                "user_id": args.user_id
+            }
+        elif args.command == "simulate":
+            return simulate_workflow(processor, args)
         else:
             request_data = emulate_alexa_request(args.command, user_id=args.user_id,
                                                  user_location=args.user_location)
