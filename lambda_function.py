@@ -34,6 +34,8 @@ from ask_sdk_model import Response
 from ask_sdk_model.ui import SimpleCard
 from ask_sdk_core.serialize import DefaultSerializer
 
+from geolocator import Geolocator
+
 """
     Anything defined here will persist for the duration of the lambda
     container, so only initialize them once to reduce initialization time.
@@ -43,7 +45,7 @@ REVISION = 0
 
 EVTID = os.environ.get("event_id", "")
 APPID = os.environ.get("app_id", "amzn1.ask.skill.test")
-MQID = os.environ.get("mapquest_id", "")
+HERE_API_KEY = os.environ.get("here_api_key", "")
 DUID = os.environ.get("dataupdate_id", "amzn1.ask.data.update")
 # Table name for cache - defaults to the Ask Python SDK default table name format
 TABLE_NAME = os.environ.get("DYNAMODB_TABLE_NAME", f"ask-{APPID.replace('amzn1.ask.skill.', '')}")
@@ -398,6 +400,9 @@ HTTPS.mount("https://", adapter)
 HTTPS.mount("http://", adapter)
 
 HTTPS = requests.Session()
+
+# Initialize global Geolocator instance
+GEOLOCATOR = Geolocator(HERE_API_KEY, HTTPS)
 
 class CacheHandler(object):
     """
@@ -2165,25 +2170,17 @@ class Location(Base):
         return None
 
     def mapquest(self, search):
-        geo = self.https("geocoding/v1/address?key=%s&inFormat=kvp&outFormat=json&location=%s&thumbMaps=false" % (MQID, search.replace(" ", "+")), loc="www.mapquestapi.com")
-        if geo is None or \
-           len(geo["results"]) == 0 or \
-           len(geo["results"][0]["locations"]) == 0:
-            return None, None
-        #print("GEO", geo)
-        loc = geo["results"][0]["locations"][0]
-
-        props = {}
-        for n in loc:
-            if n.startswith("adminArea") and n.endswith("Type") and loc[n] != "":
-                props[loc[n]] = loc[n[:-4]]
-
-        if "County" in props:
-            props["County"] = props["County"].rsplit(" ", 1)[0]
-
-        return (geo["results"][0]["locations"][0]["latLng"]["lat"], \
-                geo["results"][0]["locations"][0]["latLng"]["lng"]), \
-               props
+        """
+        Geocode a location using the Geolocator class.
+        This method is kept for backward compatibility but now uses HERE.com API.
+        
+        Args:
+            search: Location string to geocode
+            
+        Returns:
+            Tuple of (coordinates, properties) where coordinates is (lat, lng) or None
+        """
+        return GEOLOCATOR.geocode(search)
 
     def spoken_name(self, name=None):
         loc = name or self.loc["location"]

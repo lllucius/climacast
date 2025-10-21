@@ -10,7 +10,7 @@ import shutil
 
 # Set required environment variables before importing
 os.environ["app_id"] = "amzn1.ask.skill.test"
-os.environ["mapquest_id"] = "test"
+os.environ["here_api_key"] = "test"
 os.environ["event_id"] = ""
 os.environ["dataupdate_id"] = "amzn1.ask.data.update"
 os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
