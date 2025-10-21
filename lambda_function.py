@@ -504,6 +504,11 @@ class CacheHandler(object):
 # Create global cache handler instance
 CACHE_HANDLER = CacheHandler(TABLE_NAME)
 
+# Global test handlers (set by test_one() when running tests)
+TEST_MODE = False
+TEST_CACHE_HANDLER = None
+TEST_SETTINGS_HANDLER = None
+
 class SettingsHandler(object):
     """
     Base class for handling user settings operations.
@@ -633,6 +638,251 @@ class AlexaSettingsHandler(SettingsHandler):
         """Set user's custom metrics list."""
         self._metrics = metrics
         self._save_settings()
+
+
+# =============================================================================
+# Local JSON-based handlers for testing without DynamoDB
+# =============================================================================
+
+class LocalJsonCacheHandler(object):
+    """
+    Cache handler implementation using local JSON files for testing.
+    This allows testing without requiring DynamoDB access.
+    
+    Cache files are stored in a local directory with the structure:
+    - cache_dir/
+      - location/
+        - <location_id>.json
+      - station/
+        - <station_id>.json
+      - zone/
+        - <zone_id>.json
+    """
+    
+    LOCATION_PREFIX = "location#"
+    STATION_PREFIX = "station#"
+    ZONE_PREFIX = "zone#"
+    
+    def __init__(self, cache_dir=".test_cache"):
+        """
+        Initialize the cache handler with a local directory.
+        
+        Args:
+            cache_dir: Directory to store cache JSON files
+        """
+        self.cache_dir = cache_dir
+        
+        # Create cache directories if they don't exist
+        for cache_type in ['location', 'station', 'zone']:
+            os.makedirs(os.path.join(cache_dir, cache_type), exist_ok=True)
+    
+    def _get_file_path(self, cache_type, cache_id):
+        """Get the file path for a cache item."""
+        # Remove prefix from cache_type for directory name
+        cache_type_clean = cache_type.replace('#', '')
+        # Sanitize cache_id for filename (replace special chars)
+        safe_id = re.sub(r'[^\w\s-]', '_', cache_id).strip().replace(' ', '_')
+        return os.path.join(self.cache_dir, cache_type_clean, f"{safe_id}.json")
+    
+    def get(self, cache_type, cache_id):
+        """
+        Retrieve an item from the cache.
+        
+        Args:
+            cache_type: Type prefix (e.g., LOCATION_PREFIX)
+            cache_id: Unique identifier for the cache item
+            
+        Returns:
+            Dict containing the cached data, or None if not found
+        """
+        try:
+            file_path = self._get_file_path(cache_type, cache_id)
+            if not os.path.exists(file_path):
+                return None
+            
+            with open(file_path, 'r') as f:
+                data = json.load(f)
+            
+            # Check TTL if present
+            if 'ttl' in data and data['ttl'] > 0:
+                if time() > data['ttl']:
+                    # Cache expired, remove file
+                    os.remove(file_path)
+                    return None
+            
+            return data.get('cache_data', {})
+        except Exception as e:
+            print(f"Error getting cache item {cache_type}{cache_id}: {e}")
+            return None
+    
+    def put(self, cache_type, cache_id, cache_data, ttl_days=35):
+        """
+        Store an item in the cache.
+        
+        Args:
+            cache_type: Type prefix (e.g., LOCATION_PREFIX)
+            cache_id: Unique identifier for the cache item
+            cache_data: Dict containing the data to cache
+            ttl_days: Time to live in days (0 = no expiration)
+        """
+        try:
+            file_path = self._get_file_path(cache_type, cache_id)
+            
+            data = {'cache_data': cache_data}
+            if ttl_days > 0:
+                data['ttl'] = int(time()) + (ttl_days * 24 * 60 * 60)
+            
+            with open(file_path, 'w') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"Error putting cache item {cache_type}{cache_id}: {e}")
+    
+    def get_location(self, location_id):
+        """Get location cache data."""
+        return self.get(self.LOCATION_PREFIX, location_id)
+    
+    def put_location(self, location_id, location_data, ttl_days=35):
+        """Store location cache data."""
+        self.put(self.LOCATION_PREFIX, location_id, location_data, ttl_days)
+    
+    def get_station(self, station_id):
+        """Get station cache data."""
+        return self.get(self.STATION_PREFIX, station_id)
+    
+    def put_station(self, station_id, station_data, ttl_days=35):
+        """Store station cache data."""
+        self.put(self.STATION_PREFIX, station_id, station_data, ttl_days)
+    
+    def get_zone(self, zone_id):
+        """Get zone cache data."""
+        return self.get(self.ZONE_PREFIX, zone_id)
+    
+    def put_zone(self, zone_id, zone_data, ttl_days=35):
+        """Store zone cache data."""
+        self.put(self.ZONE_PREFIX, zone_id, zone_data, ttl_days)
+
+
+class LocalJsonSettingsHandler(SettingsHandler):
+    """
+    Settings handler implementation using local JSON files for testing.
+    This allows testing without requiring DynamoDB access.
+    
+    Settings are stored in a single JSON file per user.
+    """
+    
+    def __init__(self, user_id, settings_dir=".test_settings"):
+        """
+        Initialize with a user ID and local directory for settings storage.
+        
+        Args:
+            user_id: User identifier
+            settings_dir: Directory to store settings JSON files
+        """
+        super().__init__()
+        self.user_id = user_id
+        self.settings_dir = settings_dir
+        
+        # Create settings directory if it doesn't exist
+        os.makedirs(settings_dir, exist_ok=True)
+        
+        self._load_settings()
+    
+    def _get_file_path(self):
+        """Get the file path for user settings."""
+        # Sanitize user_id for filename
+        safe_id = re.sub(r'[^\w\s-]', '_', self.user_id).strip().replace(' ', '_')
+        return os.path.join(self.settings_dir, f"{safe_id}.json")
+    
+    def _get_default_metrics(self):
+        """Get default metrics list"""
+        metrics = {}
+        for name, value in METRICS.values():
+            if value and name not in metrics:
+                metrics[value] = name
+        result = []
+        for i in range(1, len(metrics) + 1):
+            result.append(metrics[i])
+        return result
+    
+    def _load_settings(self):
+        """Load settings from local JSON file"""
+        file_path = self._get_file_path()
+        
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, 'r') as f:
+                    settings = json.load(f)
+                
+                self._location = settings.get("location", None)
+                self._rate = settings.get("rate", 100)
+                self._pitch = settings.get("pitch", 100)
+                self._metrics = settings.get("metrics", self._get_default_metrics())
+            except Exception as e:
+                print(f"Error loading settings for {self.user_id}: {e}")
+                self._init_defaults()
+        else:
+            self._init_defaults()
+    
+    def _init_defaults(self):
+        """Initialize with default settings"""
+        self._location = None
+        self._rate = 100
+        self._pitch = 100
+        self._metrics = self._get_default_metrics()
+    
+    def _save_settings(self):
+        """Save settings to local JSON file"""
+        file_path = self._get_file_path()
+        
+        settings = {
+            "location": self._location,
+            "rate": self._rate,
+            "pitch": self._pitch,
+            "metrics": self._metrics
+        }
+        
+        try:
+            with open(file_path, 'w') as f:
+                json.dump(settings, f, indent=2)
+        except Exception as e:
+            print(f"Error saving settings for {self.user_id}: {e}")
+    
+    def get_location(self):
+        """Get user's default location."""
+        return self._location
+    
+    def set_location(self, location):
+        """Set user's default location."""
+        self._location = location
+        self._save_settings()
+    
+    def get_rate(self):
+        """Get user's speech rate setting."""
+        return self._rate
+    
+    def set_rate(self, rate):
+        """Set user's speech rate setting."""
+        self._rate = rate
+        self._save_settings()
+    
+    def get_pitch(self):
+        """Get user's speech pitch setting."""
+        return self._pitch
+    
+    def set_pitch(self, pitch):
+        """Set user's speech pitch setting."""
+        self._pitch = pitch
+        self._save_settings()
+    
+    def get_metrics(self):
+        """Get user's custom metrics list."""
+        return self._metrics
+    
+    def set_metrics(self, metrics):
+        """Set user's custom metrics list."""
+        self._metrics = metrics
+        self._save_settings()
+
 
 def notify(event, sub, msg=None):
     """
@@ -2821,11 +3071,21 @@ class BaseIntentHandler(AbstractRequestHandler):
     
     def get_skill_helper(self, handler_input):
         """Create and initialize Skill instance from handler_input"""
-        # Create settings handler using Alexa's attributes_manager
-        settings_handler = AlexaSettingsHandler(handler_input)
+        global TEST_MODE, TEST_CACHE_HANDLER, TEST_SETTINGS_HANDLER
         
-        # Create Skill instance with modern ASK SDK objects, cache handler, and settings handler
-        skill = Skill(handler_input, CACHE_HANDLER, settings_handler)
+        # Use test handlers if in test mode
+        if TEST_MODE and TEST_CACHE_HANDLER and TEST_SETTINGS_HANDLER:
+            cache_handler = TEST_CACHE_HANDLER
+            settings_handler = TEST_SETTINGS_HANDLER
+            # Create Skill instance with test handlers
+            skill = Skill(handler_input, cache_handler, settings_handler)
+        else:
+            # Use production handlers (DynamoDB-based)
+            # Create settings handler using Alexa's attributes_manager
+            settings_handler = AlexaSettingsHandler(handler_input)
+            
+            # Create Skill instance with modern ASK SDK objects, cache handler, and settings handler
+            skill = Skill(handler_input, CACHE_HANDLER, settings_handler)
         
         # Initialize skill (loads location, slots, etc.)
         skill.initialize()
@@ -3174,11 +3434,22 @@ def lambda_handler(event, context=None):
 
 
 def test_one():
+    global TEST_MODE, TEST_CACHE_HANDLER, TEST_SETTINGS_HANDLER
+    
+    # Enable test mode and set up local JSON handlers
+    TEST_MODE = True
+    TEST_CACHE_HANDLER = LocalJsonCacheHandler(".test_cache")
+    
     with open(sys.argv[1] if len(sys.argv) > 1 else "test.json") as f:
         event = json.load(f)
         event["session"]["application"]["applicationId"] = "amzn1.ask.skill.test"
         event["session"]["testing"] = True
-        event["session"]["user"]["userId"] = "testuser"
+        
+        # Extract user_id from the event and create settings handler
+        user_id = event.get("session", {}).get("user", {}).get("userId", "testuser")
+        event["session"]["user"]["userId"] = user_id
+        TEST_SETTINGS_HANDLER = LocalJsonSettingsHandler(user_id, ".test_settings")
+        
         print(json.dumps(lambda_handler(event), indent=4))
 
 if __name__ == "__main__":
