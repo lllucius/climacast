@@ -3173,12 +3173,6 @@ def lambda_handler(event, context=None):
                }
 
 
-def test_load():
-    with open("datarefresh.json") as f:
-        event = json.load(f)
-        event["resources"] = ["amzn1.ask.data.update"]
-        lambda_handler(event)
-
 def test_one():
     with open(sys.argv[1] if len(sys.argv) > 1 else "test.json") as f:
         event = json.load(f)
@@ -3197,7 +3191,4 @@ if __name__ == "__main__":
     HTTPS.mount('https://', CacheControlAdapter(cache=FileCache(".webcache"),
                                                 heuristic=ExpiresAfter(hours=1)))
 
-    if len(sys.argv) > 1 and sys.argv[1] == "load":
-        z = test_load()
-    else:
-        z = test_one()
+    test_one()
