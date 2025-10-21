@@ -3077,13 +3077,15 @@ class BaseIntentHandler(AbstractRequestHandler):
         if TEST_MODE and TEST_CACHE_HANDLER and TEST_SETTINGS_HANDLER:
             cache_handler = TEST_CACHE_HANDLER
             settings_handler = TEST_SETTINGS_HANDLER
+            # Create Skill instance with test handlers
+            skill = Skill(handler_input, cache_handler, settings_handler)
         else:
             # Use production handlers (DynamoDB-based)
-            cache_handler = CACHE_HANDLER
+            # Create settings handler using Alexa's attributes_manager
             settings_handler = AlexaSettingsHandler(handler_input)
-        
-        # Create Skill instance with modern ASK SDK objects, cache handler, and settings handler
-        skill = Skill(handler_input, cache_handler, settings_handler)
+            
+            # Create Skill instance with modern ASK SDK objects, cache handler, and settings handler
+            skill = Skill(handler_input, CACHE_HANDLER, settings_handler)
         
         # Initialize skill (loads location, slots, etc.)
         skill.initialize()
