@@ -1995,54 +1995,6 @@ class Location(Base):
     def tz(self):
         return tz.gettz(self.loc["timeZone"])
 
-class DataLoad(Base):
-    def __init__(self, event, cache_handler=None):
-        super().__init__(event, cache_handler)
-
-    def handle_event(self):
-        if DUID not in self.event.get("resources", []):
-            return None
-
-        for zoneType in ["forecast", "county"]:
-            print("Loading %s zones" % (zoneType))
-            self.load_zones("zones/%s" % (zoneType))
-
-        print("Loading stations")
-        self.load_stations("stations")
-
-    def load_zones(self, url):
-        """Load zone data into the cache"""
-        data = self.https(url)
-        if not data or "@graph" not in data:
-            return
-        
-        print("Items:", len(data["@graph"]))
-        for item in data["@graph"]:
-            zone_data = {"id": item["id"],
-                        "type": item["type"],
-                        "name": item["name"]}
-            if self.cache_handler:
-                self.cache_handler.put_zone(zone_data["id"], zone_data)
-
-    def load_stations(self, url):
-        """Load station data into the cache"""
-        data = self.https(url)
-        if not data or "@graph" not in data:
-            return
-        
-        print("Items:", len(data["@graph"]))
-        for item in data["@graph"]:
-            name = item["name"].split(",")[-1].strip().rstrip()
-            
-            # DC station names seem to be reversed from the rest
-            if name == "DC":
-                name = item["name"].split(",")[0].strip().rstrip()
-            
-            station_data = {"id": item["stationIdentifier"],
-                           "name": name}
-            if self.cache_handler:
-                self.cache_handler.put_station(station_data["id"], station_data)
-
 class Skill(Base):
     def __init__(self, handler_input, cache_handler=None, settings_handler=None):
         # Create minimal event dict for Base class (used for notifications)
@@ -2295,6 +2247,14 @@ class Skill(Base):
         return text
 
     def metric_intent(self):
+        # Verify the location if needed
+        text = self.get_location()
+        if text is not None:
+            return text
+        
+        # Determine the start and end times for the request
+        self.get_when()
+        
         metric = self.slots.metric
         if metric is None:
             return "You must include a metric like temperature, humidity or wind"
@@ -2327,6 +2287,11 @@ class Skill(Base):
         return text
 
     def get_setting_intent(self):
+        # Verify location first
+        text = skill.get_location()
+        if text is not None:
+            return text
+
         setting = self.slots.setting
         if setting is None:
             setting = "settings"
@@ -2938,16 +2903,6 @@ class MetricIntentHandler(BaseIntentHandler):
     
     def handle(self, handler_input):
         skill = self.get_skill_helper(handler_input)
-        
-        # Verify the location if needed
-        text = skill.get_location()
-        if text is not None:
-            return skill.respond(text, end=False)
-        
-        # Determine the start and end times for the request
-        skill.get_when()
-        
-        # Handle the metric intent
         text = skill.metric_intent()
         return skill.respond(text, end=False)
 
@@ -2960,12 +2915,6 @@ class GetSettingIntentHandler(BaseIntentHandler):
     
     def handle(self, handler_input):
         skill = self.get_skill_helper(handler_input)
-        
-        # Verify location first
-        text = skill.get_location()
-        if text is not None:
-            return skill.respond(text, end=False)
-        
         text = skill.get_setting_intent()
         return skill.respond(text, end=False)
 
