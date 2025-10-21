@@ -374,7 +374,6 @@ WEATHER_ATTRIBUTES = {"damaging_wind": "damaging wind",                     # go
 LOCATION_XLATE = {"gnome alaska": "nome alaska",
                   "woodberry minnesota": "woodbury minnesota"}
 
-SNS = awsclient("sns")
 DDB = awsresource("dynamodb", region_name="us-east-1")
 LOCATIONCACHE = DDB.Table("LocationCache")
 STATIONCACHE = DDB.Table("StationCache")
@@ -434,10 +433,7 @@ def notify(event, sub, msg=None):
         text += "  " + msg
         text += "\n\n"
 
-    if ("session" in event and "testing" in event["session"]) or EVTID == "":
-        print("NOTIFY:\n\n  %s\n\n%s" % (sub, text))
-    else:
-        SNS.publish(TopicArn=EVTID, Subject=sub, Message=text[:2**18])
+    print("NOTIFY:\n\n  %s\n\n%s" % (sub, text))
 
 class Base(object):
     def __init__(self, event):
@@ -3026,16 +3022,6 @@ def lambda_handler(event, context=None):
     """
     #print(json.dumps(event, indent=4))
     try:
-        # Check if this is a data load event (non-Alexa)
-        if "event-type" in event:
-            if event["event-type"] == "pinger":
-                return 
-            else:
-                DataLoad(event).handle_event()
-                return
-        
-        # Handle Alexa skill requests using ASK SDK
-        # The SDK requires a RequestEnvelope object, not a dict
         from ask_sdk_model import RequestEnvelope
         
         serializer = DefaultSerializer()
