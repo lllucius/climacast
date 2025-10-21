@@ -1887,23 +1887,53 @@ class DataLoad(Base):
                 putter(batch, item)
 
 class Skill(Base):
-    def __init__(self, event):
+    def __init__(self, handler_input):
+        # Create minimal event dict for Base class (used for notifications)
+        request_envelope = handler_input.request_envelope
+        event = {
+            "session": {
+                "sessionId": request_envelope.session.session_id,
+                "user": {
+                    "userId": request_envelope.session.user.user_id
+                }
+            },
+            "request": {
+                "type": request_envelope.request.object_type,
+                "requestId": request_envelope.request.request_id
+            }
+        }
+        
+        # Add intent info if present (for notifications)
+        if hasattr(request_envelope.request, 'intent'):
+            intent = request_envelope.request.intent
+            event["request"]["intent"] = {
+                "name": intent.name,
+                "slots": {}
+            }
+            if intent.slots:
+                for slot_name, slot in intent.slots.items():
+                    event["request"]["intent"]["slots"][slot_name] = {
+                        "name": slot.name,
+                        "value": slot.value
+                    }
+        
         super().__init__(event)
+        self.handler_input = handler_input
+        self.request_envelope = request_envelope
+        self.session = request_envelope.session
+        self.request = request_envelope.request
+        self.attrs = handler_input.attributes_manager.session_attributes
         self.loc = None
         self.end = True
 
-    def handle_event(self):
-        self.session = self.event["session"]
-        self.attrs = self.session.get("attributes", {})
-        self.request = self.event["request"]
-        self.intent = self.request.get("intent", {})
-
+    def initialize(self):
+        """Initialize skill state from handler_input"""
         # Load or create the user's profile
-        self.user = User(self.event, self.session["user"]["userId"])
+        self.user = User(self.event, self.session.user.user_id)
 
         # Amazon says to verify our application id
-        if self.session["application"]["applicationId"] != APPID:
-            return self.respond("Invoked from unknown application.")
+        if self.session.application.application_id != APPID:
+            raise ValueError("Invoked from unknown application.")
 
         # Retrieve the default location info
         if self.user.location:
@@ -1914,40 +1944,25 @@ class Skill(Base):
 
         # Load the slot values
         self.slots = type("slots", (), {})
-        slots = self.intent.get("slots", {})
-        for slot in SLOTS:
-            val = slots.get(slot, {}).get("value", None)
-            setattr(self.slots, slot, val.strip().lower() if val else None)
-            print("SLOT:", slot, getattr(self.slots, slot))
-
-        # Determine the request type
-        rtype = self.request["type"]
-        if rtype == "IntentRequest":
-            name = self.intent["name"]
+        if hasattr(self.request, 'intent') and self.request.intent.slots:
+            for slot_name, slot in self.request.intent.slots.items():
+                if slot_name in SLOTS:
+                    val = slot.value
+                    setattr(self.slots, slot_name, val.strip().lower() if val else None)
+                    print("SLOT:", slot_name, getattr(self.slots, slot_name))
         else:
-            name = rtype
-        print("INTENT:", name)
-
-        # Look it up and verify the location, if the intent expects one
-        if name in FUNCS:
-            # Verify the location, if this request requires it
-            if FUNCS[name][1]:
-                text = self.get_location()
-                if text is not None:
-                    return self.respond(text)
-
-                # Determine the start and end times for the request.
-                # NOTE:  Must be done after getting the requested location to
-                #        set the timezone correctly.
-                self.get_when()
-
-            # Get the associated method name
-            name = FUNCS[name][0]
-        
-        return getattr(self, name, self.default_handler)()
+            # Set all slots to None if no intent or no slots
+            for slot in SLOTS:
+                setattr(self.slots, slot, None)
+                
+        # Print intent name for debugging
+        if hasattr(self.request, 'intent'):
+            print("INTENT:", self.request.intent.name)
+        else:
+            print("REQUEST:", self.request.object_type)
 
     def respond(self, text, end=None):
-        new = self.session["new"]
+        new = self.session.new
         if end is None:
             end = new
 
@@ -1958,33 +1973,26 @@ class Skill(Base):
                      "If you are done, say stop."
             text += ". " if text.strip()[-1] != "." else " "
             text += prompt if new else "if you are done, say stop."
-        return {
-                 "version": "1.0",
-                 "sessionAttributes": self.attrs,
-                 "response":
-                 {
-                   "outputSpeech":
-                   {
-                     "type": "SSML",
-                     "ssml": '<speak><prosody rate="%d%%" pitch="%+d%%">%s</prosody></speak>' % \
-                             (self.user.rate,
-                              self.user.pitch - 100,
-                              text)
-                   },
-                   "reprompt":
-                   {
-                     "outputSpeech":
-                     {
-                       "type": "SSML",
-                        "ssml": '<speak><prosody rate="%d%%" pitch="%+d%%">%s</prosody></speak>' % \
-                                (self.user.rate,
-                                 self.user.pitch - 100,
-                                 prompt)
-                     },
-                   },
-                   "shouldEndSession": end
-                 } 
-               }
+        
+        # Build SSML speech
+        speech_ssml = '<speak><prosody rate="%d%%" pitch="%+d%%">%s</prosody></speak>' % \
+                      (self.user.rate, self.user.pitch - 100, text)
+        
+        # Use ASK SDK response builder
+        response_builder = self.handler_input.response_builder
+        response_builder.speak(speech_ssml)
+        
+        if not end and prompt:
+            reprompt_ssml = '<speak><prosody rate="%d%%" pitch="%+d%%">%s</prosody></speak>' % \
+                           (self.user.rate, self.user.pitch - 100, prompt)
+            response_builder.ask(reprompt_ssml)
+        
+        response_builder.set_should_end_session(end)
+        
+        # Update session attributes
+        self.handler_input.attributes_manager.session_attributes.update(self.attrs)
+        
+        return response_builder.response
 
     def default_handler(self):
         notify(self.event, "Unrecognized event", json.dumps(self.event, indent=4))
@@ -2616,107 +2624,14 @@ class BaseIntentHandler(AbstractRequestHandler):
     """Base handler providing common functionality for all intent handlers"""
     
     def get_skill_helper(self, handler_input):
-        """Get or create the Skill helper from session attributes"""
-        session_attr = handler_input.attributes_manager.session_attributes
-        request_envelope = handler_input.request_envelope
+        """Create and initialize Skill instance from handler_input"""
+        # Create Skill instance with modern ASK SDK objects
+        skill = Skill(handler_input)
         
-        # Convert ASK SDK request to legacy event format for compatibility
-        event = {
-            "session": {
-                "new": request_envelope.session.new,
-                "sessionId": request_envelope.session.session_id,
-                "application": {
-                    "applicationId": request_envelope.session.application.application_id
-                },
-                "attributes": session_attr,
-                "user": {
-                    "userId": request_envelope.session.user.user_id
-                }
-            },
-            "request": {
-                "type": request_envelope.request.object_type,
-                "requestId": request_envelope.request.request_id,
-                "timestamp": str(request_envelope.request.timestamp),
-                "locale": request_envelope.request.locale
-            }
-        }
-        
-        # Add intent information if present
-        if hasattr(request_envelope.request, 'intent'):
-            intent = request_envelope.request.intent
-            event["request"]["intent"] = {
-                "name": intent.name,
-                "slots": {}
-            }
-            if intent.slots:
-                for slot_name, slot in intent.slots.items():
-                    event["request"]["intent"]["slots"][slot_name] = {
-                        "name": slot.name,
-                        "value": slot.value
-                    }
-        
-        # Create Skill instance and initialize it properly
-        skill = Skill(event)
-        
-        # Initialize skill properties that would normally be set by handle_event()
-        skill.session = event["session"]
-        skill.attrs = event["session"].get("attributes", {})
-        skill.request = event["request"]
-        skill.intent = event["request"].get("intent", {})
-        
-        # Load or create the user's profile
-        skill.user = User(event, event["session"]["user"]["userId"])
-        
-        # Verify application id
-        if event["session"]["application"]["applicationId"] != APPID:
-            raise ValueError("Invoked from unknown application.")
-        
-        # Retrieve the default location info
-        if skill.user.location:
-            loc = Location(event)
-            text = loc.set(skill.user.location)
-            if text is None:
-                skill.loc = loc
-        
-        # Load the slot values
-        skill.slots = type("slots", (), {})
-        slots = skill.intent.get("slots", {})
-        for slot in SLOTS:
-            val = slots.get(slot, {}).get("value", None)
-            setattr(skill.slots, slot, val.strip().lower() if val else None)
-            print("SLOT:", slot, getattr(skill.slots, slot))
+        # Initialize skill (loads user, location, slots, etc.)
+        skill.initialize()
         
         return skill
-    
-    def build_response(self, skill, text, end=None):
-        """Build response using the Skill's respond method"""
-        response_dict = skill.respond(text, end)
-        
-        # Update session attributes
-        handler_input = getattr(self, '_handler_input', None)
-        if handler_input:
-            handler_input.attributes_manager.session_attributes.update(
-                response_dict.get("sessionAttributes", {})
-            )
-        
-        # Convert legacy response to ASK SDK Response
-        response_builder = handler_input.response_builder if handler_input else None
-        if response_builder:
-            output_speech = response_dict["response"]["outputSpeech"]
-            response_builder.speak(output_speech["ssml"])
-            
-            if "reprompt" in response_dict["response"]:
-                reprompt = response_dict["response"]["reprompt"]["outputSpeech"]
-                if reprompt.get("ssml"):
-                    response_builder.ask(reprompt["ssml"])
-            
-            response_builder.set_should_end_session(
-                response_dict["response"]["shouldEndSession"]
-            )
-            return response_builder.response
-        
-        # Fallback: return dict (shouldn't happen in normal operation)
-        return response_dict
 
 
 class LaunchRequestHandler(BaseIntentHandler):
@@ -2726,10 +2641,9 @@ class LaunchRequestHandler(BaseIntentHandler):
         return is_request_type("LaunchRequest")(handler_input)
     
     def handle(self, handler_input):
-        self._handler_input = handler_input
         skill = self.get_skill_helper(handler_input)
         text = skill.launch_request()
-        return self.build_response(skill, text, end=False)
+        return skill.respond(text, end=False)
 
 
 class SessionEndedRequestHandler(BaseIntentHandler):
@@ -2739,7 +2653,6 @@ class SessionEndedRequestHandler(BaseIntentHandler):
         return is_request_type("SessionEndedRequest")(handler_input)
     
     def handle(self, handler_input):
-        self._handler_input = handler_input
         skill = self.get_skill_helper(handler_input)
         
         # Check for errors in the request
@@ -2762,13 +2675,12 @@ class CancelAndStopIntentHandler(BaseIntentHandler):
                 is_intent_name("AMAZON.StopIntent")(handler_input))
     
     def handle(self, handler_input):
-        self._handler_input = handler_input
         skill = self.get_skill_helper(handler_input)
         
         if is_intent_name("AMAZON.CancelIntent")(handler_input):
-            return self.build_response(skill, "Canceled.", end=True)
+            return skill.respond("Canceled.", end=True)
         else:
-            return self.build_response(skill, "Thank you for using Clime a Cast.", end=True)
+            return skill.respond("Thank you for using Clime a Cast.", end=True)
 
 
 class HelpIntentHandler(BaseIntentHandler):
@@ -2778,10 +2690,9 @@ class HelpIntentHandler(BaseIntentHandler):
         return is_intent_name("AMAZON.HelpIntent")(handler_input)
     
     def handle(self, handler_input):
-        self._handler_input = handler_input
         skill = self.get_skill_helper(handler_input)
         text = skill.help_intent()
-        return self.build_response(skill, text, end=False)
+        return skill.respond(text, end=False)
 
 
 class MetricIntentHandler(BaseIntentHandler):
@@ -2792,20 +2703,19 @@ class MetricIntentHandler(BaseIntentHandler):
                 is_intent_name("MetricPosIntent")(handler_input))
     
     def handle(self, handler_input):
-        self._handler_input = handler_input
         skill = self.get_skill_helper(handler_input)
         
         # Verify the location if needed
         text = skill.get_location()
         if text is not None:
-            return self.build_response(skill, text, end=False)
+            return skill.respond(text, end=False)
         
         # Determine the start and end times for the request
         skill.get_when()
         
         # Handle the metric intent
         text = skill.metric_intent()
-        return self.build_response(skill, text, end=False)
+        return skill.respond(text, end=False)
 
 
 class GetSettingIntentHandler(BaseIntentHandler):
@@ -2815,16 +2725,15 @@ class GetSettingIntentHandler(BaseIntentHandler):
         return is_intent_name("GetSettingIntent")(handler_input)
     
     def handle(self, handler_input):
-        self._handler_input = handler_input
         skill = self.get_skill_helper(handler_input)
         
         # Verify location first
         text = skill.get_location()
         if text is not None:
-            return self.build_response(skill, text, end=False)
+            return skill.respond(text, end=False)
         
         text = skill.get_setting_intent()
-        return self.build_response(skill, text, end=False)
+        return skill.respond(text, end=False)
 
 
 class SetLocationIntentHandler(BaseIntentHandler):
@@ -2834,10 +2743,9 @@ class SetLocationIntentHandler(BaseIntentHandler):
         return is_intent_name("SetLocationIntent")(handler_input)
     
     def handle(self, handler_input):
-        self._handler_input = handler_input
         skill = self.get_skill_helper(handler_input)
         text = skill.set_location_intent()
-        return self.build_response(skill, text, end=False)
+        return skill.respond(text, end=False)
 
 
 class SetPitchIntentHandler(BaseIntentHandler):
@@ -2847,10 +2755,9 @@ class SetPitchIntentHandler(BaseIntentHandler):
         return is_intent_name("SetPitchIntent")(handler_input)
     
     def handle(self, handler_input):
-        self._handler_input = handler_input
         skill = self.get_skill_helper(handler_input)
         text = skill.set_pitch_intent()
-        return self.build_response(skill, text, end=False)
+        return skill.respond(text, end=False)
 
 
 class SetRateIntentHandler(BaseIntentHandler):
@@ -2860,10 +2767,9 @@ class SetRateIntentHandler(BaseIntentHandler):
         return is_intent_name("SetRateIntent")(handler_input)
     
     def handle(self, handler_input):
-        self._handler_input = handler_input
         skill = self.get_skill_helper(handler_input)
         text = skill.set_rate_intent()
-        return self.build_response(skill, text, end=False)
+        return skill.respond(text, end=False)
 
 
 class GetCustomIntentHandler(BaseIntentHandler):
@@ -2873,10 +2779,9 @@ class GetCustomIntentHandler(BaseIntentHandler):
         return is_intent_name("GetCustomIntent")(handler_input)
     
     def handle(self, handler_input):
-        self._handler_input = handler_input
         skill = self.get_skill_helper(handler_input)
         text = skill.get_custom_intent()
-        return self.build_response(skill, text, end=False)
+        return skill.respond(text, end=False)
 
 
 class AddCustomIntentHandler(BaseIntentHandler):
@@ -2886,10 +2791,9 @@ class AddCustomIntentHandler(BaseIntentHandler):
         return is_intent_name("AddCustomIntent")(handler_input)
     
     def handle(self, handler_input):
-        self._handler_input = handler_input
         skill = self.get_skill_helper(handler_input)
         text = skill.add_custom_intent()
-        return self.build_response(skill, text, end=False)
+        return skill.respond(text, end=False)
 
 
 class RemoveCustomIntentHandler(BaseIntentHandler):
@@ -2899,10 +2803,9 @@ class RemoveCustomIntentHandler(BaseIntentHandler):
         return is_intent_name("RemCustomIntent")(handler_input)
     
     def handle(self, handler_input):
-        self._handler_input = handler_input
         skill = self.get_skill_helper(handler_input)
         text = skill.remove_custom_intent()
-        return self.build_response(skill, text, end=False)
+        return skill.respond(text, end=False)
 
 
 class ResetCustomIntentHandler(BaseIntentHandler):
@@ -2912,10 +2815,9 @@ class ResetCustomIntentHandler(BaseIntentHandler):
         return is_intent_name("RstCustomIntent")(handler_input)
     
     def handle(self, handler_input):
-        self._handler_input = handler_input
         skill = self.get_skill_helper(handler_input)
         text = skill.reset_custom_intent()
-        return self.build_response(skill, text, end=False)
+        return skill.respond(text, end=False)
 
 
 # ============================================================================
@@ -3018,7 +2920,7 @@ skill_instance = sb.create()
 
 def lambda_handler(event, context=None):
     """
-    Lambda handler that routes to either ASK SDK or legacy DataLoad handler.
+    Lambda handler for Alexa skill using ASK SDK.
     """
     #print(json.dumps(event, indent=4))
     try:
