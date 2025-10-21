@@ -102,9 +102,31 @@ To create a new test file, copy an existing one and modify the request section. 
 ## Notes
 
 - The skill will make real API calls to NWS and MapQuest
-- DynamoDB operations will use the configured table
+- **Local Testing Mode**: When running tests via `python lambda_function.py`, the skill uses local JSON files instead of DynamoDB:
+  - Cache data is stored in `.test_cache/` directory
+  - User settings are stored in `.test_settings/` directory
+  - This allows testing without AWS credentials or DynamoDB access
 - HTTP responses are cached in `.webcache` directory to speed up repeated tests
-- User settings are stored in DynamoDB under the test user ID
+- Each test user maintains separate settings in their own JSON file
+
+### Local Storage Structure
+
+When running tests, data is stored locally as follows:
+
+```
+.test_cache/
+  location/
+    <location_name>.json
+  station/
+    <station_id>.json
+  zone/
+    <zone_id>.json
+
+.test_settings/
+  <user_id>.json
+```
+
+These directories are automatically created and are excluded from git via `.gitignore`.
 
 ## Testing Flow
 
