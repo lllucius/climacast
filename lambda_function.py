@@ -15,7 +15,7 @@ import re
 import requests
 #from aniso8601 import parse_duration
 from aniso8601.duration import parse_duration
-from boto3 import resource as awsresource, client as awsclient
+from boto3 import resource as resource
 from datetime import datetime
 from dateutil import parser, tz
 from dateutil.relativedelta import *
@@ -48,8 +48,7 @@ EVTID = os.environ.get("event_id", "")
 APPID = os.environ.get("app_id", "amzn1.ask.skill.test")
 HERE_API_KEY = os.environ.get("here_api_key", "")
 DUID = os.environ.get("dataupdate_id", "amzn1.ask.data.update")
-# Table name for cache - defaults to the Ask Python SDK default table name format
-TABLE_NAME = os.environ.get("DYNAMODB_TABLE_NAME", f"ask-{APPID.replace('amzn1.ask.skill.', '')}")
+
 
 NORMALIZE = None
 NORMALIZE_RE = [r"(?P<meridian>\d+\s*(am|pm))",
@@ -61,30 +60,6 @@ NORMALIZE_RE = [r"(?P<meridian>\d+\s*(am|pm))",
                 r"(?P<sub>(?<=\s|\.)(ft|mph|nws|pt\.|pt))(?=\s|\W|$)",
                 r"(?P<wind>(?<=\s|\.)(n|nne|ne|ene|e|ese|se|sse|s|ssw|sw|wsw|w|wnw|nw|nnw))(?=\s|$)",
                 r"(?P<st>(?<=\s|\.)[A-Z][A-Z])(?=\s|\W|$)"]
-
-FUNCS = {"LaunchRequest": ["launch_request", False],
-         "SessionEndRequest": ["session_end_request", False],
-         "SessionEndedRequest": ["session_ended_request", False],
-
-         "AMAZON.CancelIntent": ["cancel_intent", False],
-         "AMAZON.HelpIntent": ["help_intent", False],
-         "AMAZON.NoIntent": ["no_intent", False],
-         "AMAZON.StartOverIntent": ["start_over_intent", False],
-         "AMAZON.StopIntent": ["stop_intent", False],
-         "AMAZON.YesIntent": ["yes_intent", False],
-
-         "MetricIntent": ["metric_intent", True],
-         "MetricPosIntent": ["metric_intent", True],
-
-         "GetSettingIntent": ["get_setting_intent", True],
-         "SetPitchIntent": ["set_pitch_intent", False],
-         "SetRateIntent": ["set_rate_intent", False],
-         "SetLocationIntent": ["set_location_intent", False],
-
-         "GetCustomIntent": ["get_custom_intent", False],
-         "AddCustomIntent": ["add_custom_intent", False],
-         "RemCustomIntent": ["remove_custom_intent", False],
-         "RstCustomIntent": ["reset_custom_intent", False]}
 
 SLOTS = ["day",
          "leadin",
@@ -379,8 +354,6 @@ WEATHER_ATTRIBUTES = {"damaging_wind": "damaging wind",                     # go
 LOCATION_XLATE = {"gnome alaska": "nome alaska",
                   "woodberry minnesota": "woodbury minnesota"}
 
-DDB = awsresource("dynamodb", region_name="us-east-1")
-
 # Use allowed_methods for newer urllib3, fallback to method_whitelist for older versions
 try:
     retry_strategy = Retry(
@@ -428,7 +401,8 @@ class CacheHandler(object):
         Args:
             table_name: Name of the DynamoDB table to use
         """
-        self.table = DDB.Table(table_name)
+        self.ddb = resource("dynamodb", region_name=os.environ.get("DYNAMODB_PERSISTENCE_REGION"))
+        self.table = ddb.Table(os.environ.get("DYNAMODB_PERSISTENCE_TABLE_NAME")
     
     def _make_key(self, cache_type, cache_id):
         """Create a composite key for the cache item."""
