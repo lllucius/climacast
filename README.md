@@ -84,5 +84,5 @@ If you run into any issues or have a suggestion, send an email to: clima Cast@ho
 Source code is available at: https://github.com/lllucius/climacast
 
 Clima Cast is not affiliated with the National Weather Service.
-Location information is provided by Mapzen.
+Location information is provided by HERE.com.
 
