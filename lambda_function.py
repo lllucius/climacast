@@ -19,6 +19,7 @@ from boto3 import resource as awsresource, client as awsclient
 from datetime import datetime
 from dateutil import parser, tz
 from dateutil.relativedelta import *
+from dotenv import load_dotenv
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 from xml.etree.ElementTree import *
