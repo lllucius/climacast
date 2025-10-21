@@ -2920,7 +2920,7 @@ skill_instance = sb.create()
 
 def lambda_handler(event, context=None):
     """
-    Lambda handler that routes to either ASK SDK or legacy DataLoad handler.
+    Lambda handler for Alexa skill using ASK SDK.
     """
     #print(json.dumps(event, indent=4))
     try:
