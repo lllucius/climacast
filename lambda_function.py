@@ -45,6 +45,8 @@ EVTID = os.environ.get("event_id", "")
 APPID = os.environ.get("app_id", "amzn1.ask.skill.test")
 MQID = os.environ.get("mapquest_id", "")
 DUID = os.environ.get("dataupdate_id", "amzn1.ask.data.update")
+# Table name for cache - defaults to the Ask Python SDK default table name format
+TABLE_NAME = os.environ.get("DYNAMODB_TABLE_NAME", f"ask-{APPID.replace('amzn1.ask.skill.', '')}")
 
 NORMALIZE = None
 NORMALIZE_RE = [r"(?P<meridian>\d+\s*(am|pm))",
@@ -375,10 +377,6 @@ LOCATION_XLATE = {"gnome alaska": "nome alaska",
                   "woodberry minnesota": "woodbury minnesota"}
 
 DDB = awsresource("dynamodb", region_name="us-east-1")
-LOCATIONCACHE = DDB.Table("LocationCache")
-STATIONCACHE = DDB.Table("StationCache")
-USERCACHE = DDB.Table("UserCache")
-ZONECACHE = DDB.Table("ZoneCache")
 
 # Use allowed_methods for newer urllib3, fallback to method_whitelist for older versions
 try:
@@ -400,6 +398,111 @@ HTTPS.mount("https://", adapter)
 HTTPS.mount("http://", adapter)
 
 HTTPS = requests.Session()
+
+class CacheHandler(object):
+    """
+    Handles all cache operations using a single DynamoDB table.
+    The table uses a composite key structure:
+    - pk (partition key): cache type (e.g., 'location#<location>', 'station#<id>', 'zone#<id>')
+    - sk (sort key): always 'data' for cache items
+    
+    The cache data is stored as a dict in the 'cache_data' attribute.
+    Shared caches (location, station, zone) must be atomically protected.
+    """
+    
+    # Cache type prefixes
+    LOCATION_PREFIX = "location#"
+    STATION_PREFIX = "station#"
+    ZONE_PREFIX = "zone#"
+    
+    def __init__(self, table_name):
+        """
+        Initialize the cache handler with the Alexa-provided table.
+        
+        Args:
+            table_name: Name of the DynamoDB table to use
+        """
+        self.table = DDB.Table(table_name)
+    
+    def _make_key(self, cache_type, cache_id):
+        """Create a composite key for the cache item."""
+        return {
+            "pk": f"{cache_type}{cache_id}",
+            "sk": "data"
+        }
+    
+    def get(self, cache_type, cache_id):
+        """
+        Retrieve an item from the cache.
+        
+        Args:
+            cache_type: Type prefix (e.g., LOCATION_PREFIX)
+            cache_id: Unique identifier for the cache item
+            
+        Returns:
+            Dict containing the cached data, or None if not found
+        """
+        try:
+            key = self._make_key(cache_type, cache_id)
+            response = self.table.get_item(Key=key)
+            
+            if "Item" not in response:
+                return None
+            
+            item = response["Item"]
+            # Return the cache_data dict
+            return item.get("cache_data", {})
+        except Exception as e:
+            print(f"Error getting cache item {cache_type}{cache_id}: {e}")
+            return None
+    
+    def put(self, cache_type, cache_id, cache_data, ttl_days=35):
+        """
+        Store an item in the cache.
+        
+        Args:
+            cache_type: Type prefix (e.g., LOCATION_PREFIX)
+            cache_id: Unique identifier for the cache item
+            cache_data: Dict containing the data to cache
+            ttl_days: Time to live in days (0 = no expiration)
+        """
+        try:
+            key = self._make_key(cache_type, cache_id)
+            item = {**key, "cache_data": cache_data}
+            
+            if ttl_days > 0:
+                item["ttl"] = int(time()) + (ttl_days * 24 * 60 * 60)
+            
+            self.table.put_item(Item=item)
+        except Exception as e:
+            print(f"Error putting cache item {cache_type}{cache_id}: {e}")
+    
+    def get_location(self, location_id):
+        """Get location cache data."""
+        return self.get(self.LOCATION_PREFIX, location_id)
+    
+    def put_location(self, location_id, location_data, ttl_days=35):
+        """Store location cache data."""
+        self.put(self.LOCATION_PREFIX, location_id, location_data, ttl_days)
+    
+    def get_station(self, station_id):
+        """Get station cache data."""
+        return self.get(self.STATION_PREFIX, station_id)
+    
+    def put_station(self, station_id, station_data, ttl_days=35):
+        """Store station cache data."""
+        self.put(self.STATION_PREFIX, station_id, station_data, ttl_days)
+    
+    def get_zone(self, zone_id):
+        """Get zone cache data."""
+        return self.get(self.ZONE_PREFIX, zone_id)
+    
+    def put_zone(self, zone_id, zone_data, ttl_days=35):
+        """Store zone cache data."""
+        self.put(self.ZONE_PREFIX, zone_id, zone_data, ttl_days)
+
+# Create global cache handler instance
+CACHE_HANDLER = CacheHandler(TABLE_NAME)
 
 def notify(event, sub, msg=None):
     """
@@ -436,25 +539,26 @@ def notify(event, sub, msg=None):
     print("NOTIFY:\n\n  %s\n\n%s" % (sub, text))
 
 class Base(object):
-    def __init__(self, event):
+    def __init__(self, event, cache_handler=None):
         self.event = event
+        self.cache_handler = cache_handler
 
     def get_zone(self, zoneId, zoneType):
         """
             Returns the zone information for the give zone ID
         """
         zoneId = zoneId.rsplit("/")[-1]
-        zone = self.cache_get(ZONECACHE, {"id": zoneId})
+        zone = self.cache_handler.get_zone(zoneId) if self.cache_handler else None
         if zone is None:
             data = self.https("zones/%s/%s" % (zoneType, zoneId))
             if data is None or data.get("status", 0) != 0:
                 notify(self.event, "Unable to get zone info for %s" % zoneId, data)
                 return {}
-            zone = self.put_zone(ZONECACHE, data)
+            zone = self.put_zone(data)
 
         return zone
  
-    def put_zone(self, table, data):
+    def put_zone(self, data):
         """
             Writes the zone information to the cache
         """
@@ -462,7 +566,8 @@ class Base(object):
                 "type": data["type"],
                 "name": data["name"]}
 
-        self.cache_put(table, zone)
+        if self.cache_handler:
+            self.cache_handler.put_zone(zone["id"], zone)
 
         return zone
 
@@ -503,17 +608,17 @@ class Base(object):
             Returns the station information for the given station ID
         """
         stationId = stationId.rsplit("/")[-1]
-        station = self.cache_get(STATIONCACHE, {"id": stationId})
+        station = self.cache_handler.get_station(stationId) if self.cache_handler else None
         if station is None:
             data = self.https("stations/%s" % stationId)
             if data is None or data.get("status", 0) != 0:
                 notify(self.event, "Unable to get station %s" % stationId, data)
                 return None
-            station = self.put_station(STATIONCACHE, data)
+            station = self.put_station(data)
 
         return station
 
-    def put_station(self, table, data):
+    def put_station(self, data):
         """
             Save station information to the cache
         """
@@ -526,7 +631,8 @@ class Base(object):
         station = {"id": data["stationIdentifier"],
                    "name": name}
 
-        self.cache_put(table, station)
+        if self.cache_handler:
+            self.cache_handler.put_station(station["id"], station)
 
         return station
 
@@ -551,23 +657,6 @@ class Base(object):
             text = data["productText"]
 
         return text
-
-    def cache_get(self, table, key):
-        """
-            Retrieve an item from the cache using the provided table and key
-        """
-        item = table.get_item(Key=key)
-        if item is None or "Item" not in item:
-            return None
-        return item["Item"]
-
-    def cache_put(self, table, key, ttl=35):
-        """
-            Write an item to the cache using the provided table, key, and time to live
-        """
-        if ttl != 0:
-            key["ttl"] = int(time()) + (ttl * 24 * 60 * 60)
-        table.put_item(Item=key)
 
     def https(self, path, loc="api.weather.gov"):
         """
@@ -840,8 +929,8 @@ class Base(object):
         return True if 6 <= when.hour < 18 else False
 
 class GridPoints(Base):
-    def __init__(self, event, tz, cwa, gridpoint):
-        super().__init__(event)
+    def __init__(self, event, tz, cwa, gridpoint, cache_handler=None):
+        super().__init__(event, cache_handler)
         self.tz = tz
         self.data = self.https("gridpoints/%s/%s" % (cwa, gridpoint))
         #print(json.dumps(self.data, indent=4))
@@ -1207,8 +1296,8 @@ class GridPoints(Base):
         return self.to_skys(self.get_final("skyCover"), self.is_day(self.stime))
 
 class Observations(Base):
-    def __init__(self, event, stations, limit=3):
-        super().__init__(event)
+    def __init__(self, event, stations, cache_handler=None, limit=3):
+        super().__init__(event, cache_handler)
         self.stations = stations
         self.xml = None
         self.station = None
@@ -1353,8 +1442,8 @@ class Observations(Base):
         return None
 
 class Observationsv3(Base):
-    def __init__(self, event, stations, limit=3):
-        super().__init__(event)
+    def __init__(self, event, stations, cache_handler=None, limit=3):
+        super().__init__(event, cache_handler)
         self.stations = stations
         self.data = None
         self.observations = None
@@ -1476,7 +1565,8 @@ class Observationsv3(Base):
  
 class Alerts(Base):
     class Alert(Base):
-        def __init__(self, event, alert):
+        def __init__(self, event, alert, cache_handler=None):
+            super().__init__(event, cache_handler)
             self.alert = alert
 
         @property
@@ -1503,8 +1593,8 @@ class Alerts(Base):
         def instruction(self):
             return self.normalize(self.alert["instruction"])
 
-    def __init__(self, event, zoneid):
-        super().__init__(event)
+    def __init__(self, event, zoneid, cache_handler=None):
+        super().__init__(event, cache_handler)
         self.zoneid = zoneid
         self._title = ""
         self._alerts = []
@@ -1515,7 +1605,7 @@ class Alerts(Base):
 
     def __iter__(self):
         for alert in self._alerts:
-            yield self.Alert(self.event, alert)
+            yield self.Alert(self.event, alert, self.cache_handler)
 
     def __len__(self):
         return len(self._alerts)
@@ -1525,8 +1615,8 @@ class Alerts(Base):
         return self._title
 
 class Location(Base):
-    def __init__(self, event):
-        super().__init__(event)
+    def __init__(self, event, cache_handler=None):
+        super().__init__(event, cache_handler)
 
     def set(self, name, default=None):
         # Normalize name
@@ -1559,7 +1649,7 @@ class Location(Base):
                 return "%s could not be located" % self.spoken_name(name)
 
             # Retrieve the location data from the cache
-            loc = self.cache_get(LOCATIONCACHE, {"location": "%s" % name})
+            loc = self.cache_handler.get_location("%s" % name) if self.cache_handler else None
             if loc is not None:
                 self.loc = loc
                 return None
@@ -1594,7 +1684,7 @@ class Location(Base):
 
             #print("CITY", city, "STATE", state)
             # Retrieve the location data from the cache
-            loc = self.cache_get(LOCATIONCACHE, {"location": "%s %s" % (city, state)})
+            loc = self.cache_handler.get_location("%s %s" % (city, state)) if self.cache_handler else None
             #print("loc", loc)
             #if loc is not None:
             #    self.loc = loc
@@ -1644,7 +1734,7 @@ class Location(Base):
 #            return "%s %s could not be located" % (city, state)
 
         # Retrieve the location data from the cache
-        rloc = self.cache_get(LOCATIONCACHE, {"location": "%s %s" % (loc["city"], loc["state"])})
+        rloc = self.cache_handler.get_location("%s %s" % (loc["city"], loc["state"])) if self.cache_handler else None
         if rloc is None:
             # Have a new location, so retrieve the base info
             rcoords, rprops = self.mapquest("%s+%s" % (loc["city"], loc["state"]))
@@ -1686,7 +1776,8 @@ class Location(Base):
 
         # Put it to the cache
         loc["location"] = "%s %s" % (city, state) if state else city
-        self.cache_put(LOCATIONCACHE, loc)
+        if self.cache_handler:
+            self.cache_handler.put_location(loc["location"], loc)
 
         # And remember
         self.loc = loc
@@ -1774,99 +1865,9 @@ class Location(Base):
     def tz(self):
         return tz.gettz(self.loc["timeZone"])
 
-class User(Base):
-    def __init__(self, event, userid):
-        super().__init__(event)
-        self._userid = userid
-        self._location = None
-        self._rate = 100
-        self._pitch = 100
-        self.get_default_metrics()
-
-        # Get or create the user's profile
-        user = self.cache_get(USERCACHE, {"userid": userid})
-        if user is None:
-            self.save()
-        else:
-            self._userid = user.get("userid", self._userid)
-            self._location = user.get("location", self._location)
-            self._rate = user.get("rate", self._rate)
-            self._pitch = user.get("pitch", self._pitch)
-            self._metrics = user.get("metrics", self._metrics)
-
-    def save(self):
-        item = {"userid": self._userid,
-                "location": self._location,
-                "rate": self._rate,
-                "pitch": self._pitch,
-                "metrics": self._metrics}
-        self.cache_put(USERCACHE, item, ttl=0)
-
-    def get_default_metrics(self):
-        metrics = {}
-        for name, value in METRICS.values():
-            if value and name not in metrics:
-                metrics[value] = name
-        self._metrics = []
-        for i in range(1, len(metrics) + 1):
-            self._metrics.append(metrics[i])
-
-    @property
-    def location(self):
-        return self._location
-
-    @location.setter
-    def location(self, location):
-        self._location = location
-        self.save()
-
-    @property
-    def rate(self):
-        return self._rate
-
-    @rate.setter
-    def rate(self, rate):
-        self._rate = rate
-        self.save()
-
-    @property
-    def pitch(self):
-        return self._pitch
-
-    @pitch.setter
-    def pitch(self, pitch):
-        self._pitch = pitch
-        self.save()
-
-    @property
-    def metrics(self):
-        return self._metrics
-
-    @metrics.setter
-    def metrics(self, metrics):
-        self._metrics = metrics
-        self.save()
-
-    def add_metric(self, metric):
-        if metric not in self._metrics:
-            self._metrics.append(metric)
-            self.save()
-
-    def remove_metric(self, metric):
-        if metric in self._metrics:
-            self._metrics.remove(metric)
-            self.save()
-
-    def reset_metrics(self):
-        self.get_default_metrics()
-        self.save()
-
-    def has_metric(self, metric):
-        return metric in self._metrics
-
 class DataLoad(Base):
-    def __init__(self, event):
-        super().__init__(event)
+    def __init__(self, event, cache_handler=None):
+        super().__init__(event, cache_handler)
 
     def handle_event(self):
         if DUID not in self.event.get("resources", []):
@@ -1874,20 +1875,46 @@ class DataLoad(Base):
 
         for zoneType in ["forecast", "county"]:
             print("Loading %s zones" % (zoneType))
-            self.load_data("zones/%s" % (zoneType), ZONECACHE, self.put_zone)
+            self.load_zones("zones/%s" % (zoneType))
 
         print("Loading stations")
-        self.load_data("stations", STATIONCACHE, self.put_station)
+        self.load_stations("stations")
 
-    def load_data(self, url, table, putter):
+    def load_zones(self, url):
+        """Load zone data into the cache"""
         data = self.https(url)
-        with table.batch_writer() as batch:
-            print("Items:", len(data["@graph"]))
-            for item in data["@graph"]:
-                putter(batch, item)
+        if not data or "@graph" not in data:
+            return
+        
+        print("Items:", len(data["@graph"]))
+        for item in data["@graph"]:
+            zone_data = {"id": item["id"],
+                        "type": item["type"],
+                        "name": item["name"]}
+            if self.cache_handler:
+                self.cache_handler.put_zone(zone_data["id"], zone_data)
+
+    def load_stations(self, url):
+        """Load station data into the cache"""
+        data = self.https(url)
+        if not data or "@graph" not in data:
+            return
+        
+        print("Items:", len(data["@graph"]))
+        for item in data["@graph"]:
+            name = item["name"].split(",")[-1].strip().rstrip()
+            
+            # DC station names seem to be reversed from the rest
+            if name == "DC":
+                name = item["name"].split(",")[0].strip().rstrip()
+            
+            station_data = {"id": item["stationIdentifier"],
+                           "name": name}
+            if self.cache_handler:
+                self.cache_handler.put_station(station_data["id"], station_data)
 
 class Skill(Base):
-    def __init__(self, handler_input):
+    def __init__(self, handler_input, cache_handler=None):
         # Create minimal event dict for Base class (used for notifications)
         request_envelope = handler_input.request_envelope
         event = {
@@ -1917,7 +1944,7 @@ class Skill(Base):
                         "value": slot.value
                     }
         
-        super().__init__(event)
+        super().__init__(event, cache_handler)
         self.handler_input = handler_input
         self.request_envelope = request_envelope
         self.session = request_envelope.session
@@ -1926,19 +1953,107 @@ class Skill(Base):
         self.loc = None
         self.end = True
 
+    def _get_default_metrics(self):
+        """Get default metrics list"""
+        metrics = {}
+        for name, value in METRICS.values():
+            if value and name not in metrics:
+                metrics[value] = name
+        result = []
+        for i in range(1, len(metrics) + 1):
+            result.append(metrics[i])
+        return result
+
+    def _load_user_settings(self):
+        """Load user settings from persistent attributes"""
+        # Get persistent attributes (stored by Alexa skill)
+        attr_mgr = self.handler_input.attributes_manager
+        persistent_attrs = attr_mgr.persistent_attributes
+        
+        # Initialize user settings from persistent attributes or use defaults
+        self._location = persistent_attrs.get("location", None)
+        self._rate = persistent_attrs.get("rate", 100)
+        self._pitch = persistent_attrs.get("pitch", 100)
+        self._metrics = persistent_attrs.get("metrics", self._get_default_metrics())
+
+    def _save_user_settings(self):
+        """Save user settings to persistent attributes"""
+        attr_mgr = self.handler_input.attributes_manager
+        persistent_attrs = attr_mgr.persistent_attributes
+        
+        persistent_attrs["location"] = self._location
+        persistent_attrs["rate"] = self._rate
+        persistent_attrs["pitch"] = self._pitch
+        persistent_attrs["metrics"] = self._metrics
+        
+        attr_mgr.save_persistent_attributes()
+
+    @property
+    def user_location(self):
+        return self._location
+
+    @user_location.setter
+    def user_location(self, location):
+        self._location = location
+        self._save_user_settings()
+
+    @property
+    def user_rate(self):
+        return self._rate
+
+    @user_rate.setter
+    def user_rate(self, rate):
+        self._rate = rate
+        self._save_user_settings()
+
+    @property
+    def user_pitch(self):
+        return self._pitch
+
+    @user_pitch.setter
+    def user_pitch(self, pitch):
+        self._pitch = pitch
+        self._save_user_settings()
+
+    @property
+    def user_metrics(self):
+        return self._metrics
+
+    @user_metrics.setter
+    def user_metrics(self, metrics):
+        self._metrics = metrics
+        self._save_user_settings()
+
+    def add_metric(self, metric):
+        if metric not in self._metrics:
+            self._metrics.append(metric)
+            self._save_user_settings()
+
+    def remove_metric(self, metric):
+        if metric in self._metrics:
+            self._metrics.remove(metric)
+            self._save_user_settings()
+
+    def reset_metrics(self):
+        self._metrics = self._get_default_metrics()
+        self._save_user_settings()
+
+    def has_metric(self, metric):
+        return metric in self._metrics
+
     def initialize(self):
         """Initialize skill state from handler_input"""
-        # Load or create the user's profile
-        self.user = User(self.event, self.session.user.user_id)
+        # Load user settings from persistent attributes
+        self._load_user_settings()
 
         # Amazon says to verify our application id
         if self.session.application.application_id != APPID:
             raise ValueError("Invoked from unknown application.")
 
         # Retrieve the default location info
-        if self.user.location:
-            loc = Location(self.event)
-            text = loc.set(self.user.location)
+        if self._location:
+            loc = Location(self.event, self.cache_handler)
+            text = loc.set(self._location)
             if text is None:
                 self.loc = loc
 
@@ -1976,7 +2091,7 @@ class Skill(Base):
         
         # Build SSML speech
         speech_ssml = '<speak><prosody rate="%d%%" pitch="%+d%%">%s</prosody></speak>' % \
-                      (self.user.rate, self.user.pitch - 100, text)
+                      (self.user_rate, self.user_pitch - 100, text)
         
         # Use ASK SDK response builder
         response_builder = self.handler_input.response_builder
@@ -1984,7 +2099,7 @@ class Skill(Base):
         
         if not end and prompt:
             reprompt_ssml = '<speak><prosody rate="%d%%" pitch="%+d%%">%s</prosody></speak>' % \
-                           (self.user.rate, self.user.pitch - 100, prompt)
+                           (self.user_rate, self.user_pitch - 100, prompt)
             response_builder.ask(reprompt_ssml)
         
         response_builder.set_should_end_session(end)
@@ -2079,7 +2194,7 @@ class Skill(Base):
         if metric not in METRICS:
             return "%s is an unrecognized metric." % metric
 
-        metrics = self.user.metrics if METRICS[metric][0] == "all" else [METRICS[metric][0]]
+        metrics = self.user_metrics if METRICS[metric][0] == "all" else [METRICS[metric][0]]
 
         # These are absolute
         if metric == "forecast" or self.has_when:
@@ -2121,19 +2236,19 @@ class Skill(Base):
             if setting == "location":
                 text += "the location is set to %s." % self.loc.spoken_name()
             elif setting == "pitch":
-                text += "the voice pitch is set to %d percent." % self.user.pitch
+                text += "the voice pitch is set to %d percent." % self.user_pitch
             elif setting == "rate":
-                text += "the voice rate is set to %d percent." % self.user.rate
+                text += "the voice rate is set to %d percent." % self.user_rate
             elif setting == "forecast":
                 text += "the custom forecast will include the %s." % \
-                        ", ".join(list(self.user.metrics[:-1])) + " and " + self.user.metrics[-1]
+                        ", ".join(list(self.user_metrics[:-1])) + " and " + self.user_metrics[-1]
 
         return text
 
     def set_location_intent(self):
         text = self.get_location(req=True)
         if text is None:
-            self.user.location = self.loc.name
+            self.user_location = self.loc.name
             text = "Your default location has been set to %s." % self.loc.spoken_name()
 
         return text
@@ -2142,7 +2257,7 @@ class Skill(Base):
         if self.slots.percent and self.slots.percent.isdigit():
             pitch = int(self.slots.percent)
             if 130 >= pitch >= 70:
-                self.user.pitch = pitch
+                self.user_pitch = pitch
                 text = "Voice pitch has been set to %d percent." % pitch
             else:
                 text = "The pitch must be between 70 and 130 percent"
@@ -2155,7 +2270,7 @@ class Skill(Base):
         if self.slots.percent and self.slots.percent.isdigit():
             rate = int(self.slots.percent)
             if 150 >= rate >= 50:
-                self.user.rate = rate
+                self.user_rate = rate
                 text = "Voice rate has been set to %d percent." % rate
             else:
                 text = "The rate must be between 50 and 150 percent"
@@ -2166,7 +2281,7 @@ class Skill(Base):
 
     def get_custom_intent(self):
         text = "The custom forecast will include the %s." % \
-               ", ".join(list(self.user.metrics[:-1])) + " and " + self.user.metrics[-1]
+               ", ".join(list(self.user_metrics[:-1])) + " and " + self.user_metrics[-1]
         return text
 
 
@@ -2182,10 +2297,10 @@ class Skill(Base):
         if not metric[1]:
             return "%s can't be used when customizing the forecast." % metric[0]
 
-        if self.user.has_metric(metric[0]):
+        if self.has_metric(metric[0]):
             return "%s is already included in the custom forecast." % metric[0]
     
-        self.user.add_metric(metric[0])
+        self.add_metric(metric[0])
 
         return "%s has been added to the custom forecast." % metric[0]
 
@@ -2201,20 +2316,20 @@ class Skill(Base):
         if not metric[1]:
             return "%s can't be used when customizing the forecast." % metric[0]
 
-        if not self.user.has_metric(metric[0]):
+        if not self.has_metric(metric[0]):
             return "%s is already excluded from the custom forecast." % metric[0]
     
-        self.user.remove_metric(metric[0])
+        self.remove_metric(metric[0])
 
         return "%s has been removed from the custom forecast." % metric[0]
 
     def reset_custom_intent(self):
-        self.user.reset_metrics()
+        self.reset_metrics()
 
         return "the custom forecast has been reset to defaults."
 
     def get_alerts(self):
-        alerts = Alerts(self.event, self.loc.countyZoneId)
+        alerts = Alerts(self.event, self.loc.countyZoneId, self.cache_handler)
         if len(alerts) == 0:
             text = "No alerts in effect at this time for %s." % self.loc.city
         else:
@@ -2231,7 +2346,7 @@ class Skill(Base):
         text = ""
 
         if False:
-            alerts = Alerts(self.event, self.loc.countyZoneId)
+            alerts = Alerts(self.event, self.loc.countyZoneId, self.cache_handler)
             cnt = len(alerts)
             if cnt > 0:
                 text += "There's %d alert%s in effect for your area! " % \
@@ -2239,7 +2354,7 @@ class Skill(Base):
                         "s" if cnt > 1 else "")
 
         # Retrieve the current observations from the nearest station
-        obs = Observations(self.event, self.loc.observationStations)
+        obs = Observations(self.event, self.loc.observationStations, self.cache_handler)
         if obs.is_good:
             text += "At %s, %s reported %s, " % \
                     (obs.time_reported.astimezone(self.loc.tz).strftime("%I:%M%p"),
@@ -2338,7 +2453,7 @@ class Skill(Base):
         stime = self.stime
         etime = self.etime 
         fulltext = ""
-        gp = GridPoints(self.event, self.loc.tz, self.loc.cwa, self.loc.grid_point)
+        gp = GridPoints(self.event, self.loc.tz, self.loc.cwa, self.loc.grid_point, self.cache_handler)
         for metric in metrics:
             metric = METRICS[metric][0]
             #print("FORECAST METRIC", metric, "STIME", stime, "ETIME", etime)
@@ -2474,7 +2589,7 @@ class Skill(Base):
 
     def get_location(self, req=False):
         if self.slots.location or self.slots.zipcode:
-            loc = Location(self.event)
+            loc = Location(self.event, self.cache_handler)
             text = loc.set(self.slots.location or self.slots.zipcode, self.loc)
             if text is None:
                 self.loc = loc
@@ -2625,8 +2740,8 @@ class BaseIntentHandler(AbstractRequestHandler):
     
     def get_skill_helper(self, handler_input):
         """Create and initialize Skill instance from handler_input"""
-        # Create Skill instance with modern ASK SDK objects
-        skill = Skill(handler_input)
+        # Create Skill instance with modern ASK SDK objects and cache handler
+        skill = Skill(handler_input, CACHE_HANDLER)
         
         # Initialize skill (loads user, location, slots, etc.)
         skill.initialize()
@@ -2885,8 +3000,19 @@ class AllExceptionHandler(AbstractExceptionHandler):
 # Skill Builder
 # ============================================================================
 
-# Create skill builder instance
-sb = CustomSkillBuilder()
+# Import DynamoDB persistence adapter
+from ask_sdk_dynamodb.adapter import DynamoDbAdapter
+
+# Create DynamoDB persistence adapter for user settings
+persistence_adapter = DynamoDbAdapter(
+    table_name=TABLE_NAME,
+    create_table=False,  # Table should already exist or be created by Alexa
+    partition_key_name="id",
+    attribute_name="attributes"
+)
+
+# Create skill builder instance with persistence adapter
+sb = CustomSkillBuilder(persistence_adapter=persistence_adapter)
 
 # Register request handlers
 sb.add_request_handler(LaunchRequestHandler())
