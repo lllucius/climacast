@@ -504,6 +504,136 @@ class CacheHandler(object):
 # Create global cache handler instance
 CACHE_HANDLER = CacheHandler(TABLE_NAME)
 
+class SettingsHandler(object):
+    """
+    Base class for handling user settings operations.
+    This allows different backends for user settings storage.
+    """
+    
+    def __init__(self):
+        """Initialize the settings handler."""
+        pass
+    
+    def get_location(self):
+        """Get user's default location."""
+        raise NotImplementedError("Subclass must implement get_location()")
+    
+    def set_location(self, location):
+        """Set user's default location."""
+        raise NotImplementedError("Subclass must implement set_location()")
+    
+    def get_rate(self):
+        """Get user's speech rate setting."""
+        raise NotImplementedError("Subclass must implement get_rate()")
+    
+    def set_rate(self, rate):
+        """Set user's speech rate setting."""
+        raise NotImplementedError("Subclass must implement set_rate()")
+    
+    def get_pitch(self):
+        """Get user's speech pitch setting."""
+        raise NotImplementedError("Subclass must implement get_pitch()")
+    
+    def set_pitch(self, pitch):
+        """Set user's speech pitch setting."""
+        raise NotImplementedError("Subclass must implement set_pitch()")
+    
+    def get_metrics(self):
+        """Get user's custom metrics list."""
+        raise NotImplementedError("Subclass must implement get_metrics()")
+    
+    def set_metrics(self, metrics):
+        """Set user's custom metrics list."""
+        raise NotImplementedError("Subclass must implement set_metrics()")
+
+
+class AlexaSettingsHandler(SettingsHandler):
+    """
+    Settings handler implementation using Alexa's attributes_manager.
+    This is the default backend for storing user settings in DynamoDB
+    via the ASK SDK's persistent attributes.
+    """
+    
+    def __init__(self, handler_input):
+        """
+        Initialize with Alexa handler input for accessing attributes_manager.
+        
+        Args:
+            handler_input: ASK SDK HandlerInput object
+        """
+        super().__init__()
+        self.handler_input = handler_input
+        self.attr_mgr = handler_input.attributes_manager
+        self._load_settings()
+    
+    def _get_default_metrics(self):
+        """Get default metrics list"""
+        metrics = {}
+        for name, value in METRICS.values():
+            if value and name not in metrics:
+                metrics[value] = name
+        result = []
+        for i in range(1, len(metrics) + 1):
+            result.append(metrics[i])
+        return result
+    
+    def _load_settings(self):
+        """Load settings from persistent attributes"""
+        persistent_attrs = self.attr_mgr.persistent_attributes
+        
+        # Initialize settings from persistent attributes or use defaults
+        self._location = persistent_attrs.get("location", None)
+        self._rate = persistent_attrs.get("rate", 100)
+        self._pitch = persistent_attrs.get("pitch", 100)
+        self._metrics = persistent_attrs.get("metrics", self._get_default_metrics())
+    
+    def _save_settings(self):
+        """Save settings to persistent attributes"""
+        persistent_attrs = self.attr_mgr.persistent_attributes
+        
+        persistent_attrs["location"] = self._location
+        persistent_attrs["rate"] = self._rate
+        persistent_attrs["pitch"] = self._pitch
+        persistent_attrs["metrics"] = self._metrics
+        
+        self.attr_mgr.save_persistent_attributes()
+    
+    def get_location(self):
+        """Get user's default location."""
+        return self._location
+    
+    def set_location(self, location):
+        """Set user's default location."""
+        self._location = location
+        self._save_settings()
+    
+    def get_rate(self):
+        """Get user's speech rate setting."""
+        return self._rate
+    
+    def set_rate(self, rate):
+        """Set user's speech rate setting."""
+        self._rate = rate
+        self._save_settings()
+    
+    def get_pitch(self):
+        """Get user's speech pitch setting."""
+        return self._pitch
+    
+    def set_pitch(self, pitch):
+        """Set user's speech pitch setting."""
+        self._pitch = pitch
+        self._save_settings()
+    
+    def get_metrics(self):
+        """Get user's custom metrics list."""
+        return self._metrics
+    
+    def set_metrics(self, metrics):
+        """Set user's custom metrics list."""
+        self._metrics = metrics
+        self._save_settings()
+
 def notify(event, sub, msg=None):
     """
         Send SNS message of an unusual event
@@ -1914,7 +2044,7 @@ class DataLoad(Base):
                 self.cache_handler.put_station(station_data["id"], station_data)
 
 class Skill(Base):
-    def __init__(self, handler_input, cache_handler=None):
+    def __init__(self, handler_input, cache_handler=None, settings_handler=None):
         # Create minimal event dict for Base class (used for notifications)
         request_envelope = handler_input.request_envelope
         event = {
@@ -1950,11 +2080,42 @@ class Skill(Base):
         self.session = request_envelope.session
         self.request = request_envelope.request
         self.attrs = handler_input.attributes_manager.session_attributes
+        self.settings_handler = settings_handler
         self.loc = None
         self.end = True
 
-    def _get_default_metrics(self):
-        """Get default metrics list"""
+    @property
+    def user_location(self):
+        return self.settings_handler.get_location() if self.settings_handler else None
+
+    @user_location.setter
+    def user_location(self, location):
+        if self.settings_handler:
+            self.settings_handler.set_location(location)
+
+    @property
+    def user_rate(self):
+        return self.settings_handler.get_rate() if self.settings_handler else 100
+
+    @user_rate.setter
+    def user_rate(self, rate):
+        if self.settings_handler:
+            self.settings_handler.set_rate(rate)
+
+    @property
+    def user_pitch(self):
+        return self.settings_handler.get_pitch() if self.settings_handler else 100
+
+    @user_pitch.setter
+    def user_pitch(self, pitch):
+        if self.settings_handler:
+            self.settings_handler.set_pitch(pitch)
+
+    @property
+    def user_metrics(self):
+        if self.settings_handler:
+            return self.settings_handler.get_metrics()
+        # Return default metrics if no settings handler
         metrics = {}
         for name, value in METRICS.values():
             if value and name not in metrics:
@@ -1964,96 +2125,51 @@ class Skill(Base):
             result.append(metrics[i])
         return result
 
-    def _load_user_settings(self):
-        """Load user settings from persistent attributes"""
-        # Get persistent attributes (stored by Alexa skill)
-        attr_mgr = self.handler_input.attributes_manager
-        persistent_attrs = attr_mgr.persistent_attributes
-        
-        # Initialize user settings from persistent attributes or use defaults
-        self._location = persistent_attrs.get("location", None)
-        self._rate = persistent_attrs.get("rate", 100)
-        self._pitch = persistent_attrs.get("pitch", 100)
-        self._metrics = persistent_attrs.get("metrics", self._get_default_metrics())
-
-    def _save_user_settings(self):
-        """Save user settings to persistent attributes"""
-        attr_mgr = self.handler_input.attributes_manager
-        persistent_attrs = attr_mgr.persistent_attributes
-        
-        persistent_attrs["location"] = self._location
-        persistent_attrs["rate"] = self._rate
-        persistent_attrs["pitch"] = self._pitch
-        persistent_attrs["metrics"] = self._metrics
-        
-        attr_mgr.save_persistent_attributes()
-
-    @property
-    def user_location(self):
-        return self._location
-
-    @user_location.setter
-    def user_location(self, location):
-        self._location = location
-        self._save_user_settings()
-
-    @property
-    def user_rate(self):
-        return self._rate
-
-    @user_rate.setter
-    def user_rate(self, rate):
-        self._rate = rate
-        self._save_user_settings()
-
-    @property
-    def user_pitch(self):
-        return self._pitch
-
-    @user_pitch.setter
-    def user_pitch(self, pitch):
-        self._pitch = pitch
-        self._save_user_settings()
-
-    @property
-    def user_metrics(self):
-        return self._metrics
-
     @user_metrics.setter
     def user_metrics(self, metrics):
-        self._metrics = metrics
-        self._save_user_settings()
+        if self.settings_handler:
+            self.settings_handler.set_metrics(metrics)
 
     def add_metric(self, metric):
-        if metric not in self._metrics:
-            self._metrics.append(metric)
-            self._save_user_settings()
+        if self.settings_handler:
+            current_metrics = self.settings_handler.get_metrics()
+            if metric not in current_metrics:
+                current_metrics.append(metric)
+                self.settings_handler.set_metrics(current_metrics)
 
     def remove_metric(self, metric):
-        if metric in self._metrics:
-            self._metrics.remove(metric)
-            self._save_user_settings()
+        if self.settings_handler:
+            current_metrics = self.settings_handler.get_metrics()
+            if metric in current_metrics:
+                current_metrics.remove(metric)
+                self.settings_handler.set_metrics(current_metrics)
 
     def reset_metrics(self):
-        self._metrics = self._get_default_metrics()
-        self._save_user_settings()
+        if self.settings_handler:
+            # Get default metrics
+            metrics = {}
+            for name, value in METRICS.values():
+                if value and name not in metrics:
+                    metrics[value] = name
+            result = []
+            for i in range(1, len(metrics) + 1):
+                result.append(metrics[i])
+            self.settings_handler.set_metrics(result)
 
     def has_metric(self, metric):
-        return metric in self._metrics
+        return metric in self.user_metrics
 
     def initialize(self):
         """Initialize skill state from handler_input"""
-        # Load user settings from persistent attributes
-        self._load_user_settings()
-
         # Amazon says to verify our application id
         if self.session.application.application_id != APPID:
             raise ValueError("Invoked from unknown application.")
 
         # Retrieve the default location info
-        if self._location:
+        location = self.user_location
+        if location:
             loc = Location(self.event, self.cache_handler)
-            text = loc.set(self._location)
+            text = loc.set(location)
             if text is None:
                 self.loc = loc
 
@@ -2740,10 +2856,13 @@ class BaseIntentHandler(AbstractRequestHandler):
     
     def get_skill_helper(self, handler_input):
         """Create and initialize Skill instance from handler_input"""
-        # Create Skill instance with modern ASK SDK objects and cache handler
-        skill = Skill(handler_input, CACHE_HANDLER)
+        # Create settings handler using Alexa's attributes_manager
+        settings_handler = AlexaSettingsHandler(handler_input)
         
-        # Initialize skill (loads user, location, slots, etc.)
+        # Create Skill instance with modern ASK SDK objects, cache handler, and settings handler
+        skill = Skill(handler_input, CACHE_HANDLER, settings_handler)
+        
+        # Initialize skill (loads location, slots, etc.)
         skill.initialize()
         
         return skill

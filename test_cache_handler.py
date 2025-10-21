@@ -56,14 +56,13 @@ def test_cache_handler_structure():
     print("✓ User class removed")
     
     # Check that Skill class uses cache_handler
-    assert "def __init__(self, handler_input, cache_handler=None):" in content, "Skill doesn't accept cache_handler"
+    assert "def __init__(self, handler_input, cache_handler=None, settings_handler=None):" in content, "Skill doesn't accept cache_handler"
     print("✓ Skill class accepts cache_handler parameter")
     
-    # Check that Skill uses attributes_manager for user settings
-    assert "_load_user_settings" in content, "_load_user_settings method not found"
-    assert "_save_user_settings" in content, "_save_user_settings method not found"
+    # Check that settings are now in SettingsHandler, not directly in Skill
+    assert "class AlexaSettingsHandler" in content, "AlexaSettingsHandler not found"
     assert "persistent_attributes" in content, "persistent_attributes not used"
-    print("✓ Skill uses attributes_manager for user settings")
+    print("✓ Settings moved to separate SettingsHandler class")
     
     # Check that Base class accepts cache_handler
     assert "def __init__(self, event, cache_handler=None):" in content, "Base doesn't accept cache_handler"
