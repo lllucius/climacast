@@ -44,6 +44,8 @@ from geolocator import Geolocator
 VERSION = 1
 REVISION = 0
 
+load_dotenv()
+
 EVTID = os.environ.get("event_id", "")
 APPID = os.environ.get("app_id", "amzn1.ask.skill.test")
 HERE_API_KEY = os.environ.get("here_api_key", "")
@@ -2373,18 +2375,18 @@ class Skill(Base):
             if text is None:
                 self.loc = loc
 
-        # Load the slot values
+        # Set all slots to None if no intent or no slots
         self.slots = type("slots", (), {})
+        for slot in SLOTS:
+            setattr(self.slots, slot, None)
+
+        # Load the slot values
         if hasattr(self.request, 'intent') and self.request.intent.slots:
             for slot_name, slot in self.request.intent.slots.items():
                 if slot_name in SLOTS:
                     val = slot.value
                     setattr(self.slots, slot_name, val.strip().lower() if val else None)
                     print("SLOT:", slot_name, getattr(self.slots, slot_name))
-        else:
-            # Set all slots to None if no intent or no slots
-            for slot in SLOTS:
-                setattr(self.slots, slot, None)
                 
         # Print intent name for debugging
         if hasattr(self.request, 'intent'):
