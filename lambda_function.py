@@ -2136,7 +2136,7 @@ class Location(Base):
         loc["forecastZoneName"] = data["name"]
 
         # Some NWS locations are missing the county zone, so try to deduce it by getting
-        # the county coordinates from mapquest and asking NWS for that point.
+        # the county coordinates from the geolocator and asking NWS for that point.
         if "county" not in point and "county" in props:
             county = props["county"].lower().split()
             if county[-1] == "county":
