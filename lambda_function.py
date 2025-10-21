@@ -22,8 +22,6 @@ from dateutil.relativedelta import *
 from dotenv import load_dotenv
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
-from xml.etree.ElementTree import *
-from lxml import html
 from time import time
 
 from ask_sdk_core.skill_builder import CustomSkillBuilder
@@ -1687,164 +1685,10 @@ class Observations(Base):
     def __init__(self, event, stations, cache_handler=None, limit=3):
         super().__init__(event, cache_handler)
         self.stations = stations
-        self.xml = None
-        self.station = None
-
-        # Retrieve the current observations from the nearest station
-        for stationid in self.stations:
-            # Get the station info
-            station = self.get_station(stationid)
-            #print("STATION", station)
-            if station is None:
-                continue
-
-            r = HTTPS.get("https://w1.weather.gov/xml/current_obs/%s.xml" % stationid)
-            if r.status_code != 200 or r.text is None or r.text == "":
-                continue
-
-            self.station = station
-            self.xml = XML(r.text.encode("UTF-8"))
-
-            r = HTTPS.get("https://w1.weather.gov/data/obhistory/%s.html" % stationid)
-            if r.status_code == 200 and r.content:
-                tree = html.fromstring(r.content)
-
-                self.obs = []
-                try:
-                    rows = tree.find(".//th").getparent()
-                    for row in rows.itersiblings():
-                        kids = row.getchildren()
-                        if len(kids) > 0 and kids[0].tag == "td":
-                            self.obs.append({"time": kids[1].text,
-                                             "wind": kids[2].text,
-                                             "weather": kids[4].text,
-                                             "temp": kids[6].text,
-                                             "humidity": kids[10].text,
-                                             "windchill": kids[11].text,
-                                             "heatindex": kids[12].text,
-                                             "pressure": kids[13].text,
-                                             "precip1": kids[15].text,
-                                             "precip3": kids[16].text,
-                                             "precip6": kids[17].text})
-                except:
-                    pass
-            break
-
-    def get_value(self, metric):
-        e = self.xml.find(metric)
-        return e.text if e is not None else None
-
-    def get_rounded(self, metric):
-        f = self.get_value(metric)
-        return "%.0f" % float(f) if f else None
-
-    @property
-    def is_good(self):
-        return self.xml is not None
-
-    @property
-    def station_id(self):
-        return self.station["stationIdentifier"]
-
-    @property
-    def station_name(self):
-        return self.station["name"]
-
-    @property
-    def time_reported(self):
-        return parser.parse(self.get_value("observation_time_rfc822"))
-
-    @property
-    def description(self):
-        return self.get_value("weather")
-
-    @property
-    def wind_speed(self):
-        return self.get_rounded("wind_mph")
-
-    @property
-    def wind_direction(self):
-        return self.get_value("wind_dir")
-
-    @property
-    def wind_gust(self):
-        return self.get_rounded("wind_gust_mph")
-
-    @property
-    def temp(self):
-        return self.get_rounded("temp_f")
-
-    @property
-    def wind_chill(self):
-        wc = self.get_value("windchill_f")
-        if wc:
-            return wc
-
-        t = self.get_value("temp_f")
-        ws = self.get_value("wind_mph")
-        if t and ws:
-            return self.to_wind_chill(float(t), float(ws))
-
-        return None
-
-    @property
-    def heat_index(self):
-        hi = self.get_value("heat_index_f")
-        if hi:
-            return hi
-
-        t = self.get_value("temp_f")
-        rh = self.get_value("relative_humidity")
-        if t and rh:
-            return self.to_heat_index(float(t), float(rh))
-
-        return None
-
-    @property
-    def feels_like(self):
-        return self.wind_chill() or self.heat_index()
-
-    @property
-    def dewpoint(self):
-        return self.get_rounded("dewpoint_f")
-
-    @property
-    def humidity(self):
-        return self.get_value("relative_humidity")
-
-    @property
-    def pressure(self):
-        return self.get_value("pressure_in")
-
-    @property
-    def pressure_trend(self):
-        if self.obs:
-            prev = float(self.obs[1]["pressure"])
-            curr = float(self.obs[0]["pressure"])
-            if curr < prev:
-                return "falling"
-            if curr > prev:
-                return "rising"
-            return "steady"
-
-        return None
-
-class Observationsv3(Base):
-    def __init__(self, event, stations, cache_handler=None, limit=3):
-        super().__init__(event, cache_handler)
-        self.stations = stations
         self.data = None
         self.observations = None
         self.station = None
         self.index = 0
-
-        # Retrieve the current observations from the nearest station
-        for stationid in self.stations:
-            # Get the station info
-            station = self.get_station(stationid)
-            #print("STATION", station)
-            if station is None:
-                continue
 
         # Retrieve the current observations from the nearest station
         for stationid in self.stations:
