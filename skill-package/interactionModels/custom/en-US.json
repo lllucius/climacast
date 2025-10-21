@@ -1,0 +1,647 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "clima cast",
+      "intents": [
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "MetricIntent",
+          "slots": [
+            {
+              "name": "leadin",
+              "type": "TYPE_LEADIN"
+            },
+            {
+              "name": "metric",
+              "type": "TYPE_METRIC"
+            },
+            {
+              "name": "when_abs",
+              "type": "TYPE_WHEN_ABS"
+            },
+            {
+              "name": "when_any",
+              "type": "TYPE_WHEN_ANY"
+            },
+            {
+              "name": "when_pos",
+              "type": "TYPE_WHEN_POS"
+            },
+            {
+              "name": "day",
+              "type": "TYPE_DAY"
+            },
+            {
+              "name": "month",
+              "type": "TYPE_MONTH"
+            },
+            {
+              "name": "location",
+              "type": "AMAZON.AdministrativeArea"
+            },
+            {
+              "name": "zip_conn",
+              "type": "TYPE_ZIP_CONN"
+            },
+            {
+              "name": "zipcode",
+              "type": "AMAZON.NUMBER"
+            }
+          ],
+          "samples": [
+            "for the {metric}",
+            "for the {metric} in {location}",
+            "for the {metric} in {location} on the {day}",
+            "for the {metric} in {location} on {month} {day}",
+            "for the {metric} in {location} on {when_abs}",
+            "for the {metric} in {location} {month} {day}",
+            "for the {metric} in {location} {when_any}",
+            "for the {metric} for the {day}",
+            "for the {metric} for the {day} in {location}",
+            "for the {metric} for the {day} {zip_conn} {zipcode}",
+            "for the {metric} for {month} {day}",
+            "for the {metric} for {month} {day} in {location}",
+            "for the {metric} for {month} {day} {zip_conn} {zipcode}",
+            "for the {metric} for {when_abs}",
+            "for the {metric} for {when_abs} in {location}",
+            "for the {metric} for {when_abs} {zip_conn} {zipcode}",
+            "for the {metric} on the {day}",
+            "for the {metric} on the {day} in {location}",
+            "for the {metric} on the {day} {zip_conn} {zipcode}",
+            "for the {metric} on {month} {day}",
+            "for the {metric} on {month} {day} in {location}",
+            "for the {metric} on {month} {day} {zip_conn} {zipcode}",
+            "for the {metric} on {when_abs}",
+            "for the {metric} on {when_abs} in {location}",
+            "for the {metric} on {when_abs} {zip_conn} {zipcode}",
+            "for the {metric} {month} {day}",
+            "for the {metric} {month} {day} in {location}",
+            "for the {metric} {month} {day} {zip_conn} {zipcode}",
+            "for the {metric} {when_any}",
+            "for the {metric} {when_any} in {location}",
+            "for the {metric} {when_any} {zip_conn} {zipcode}",
+            "for the {metric} {zip_conn} {zipcode}",
+            "for the {metric} {zip_conn} {zipcode} on the {day}",
+            "for the {metric} {zip_conn} {zipcode} on {month} {day}",
+            "for the {metric} {zip_conn} {zipcode} on {when_abs}",
+            "for the {metric} {zip_conn} {zipcode} {month} {day}",
+            "for the {metric} {zip_conn} {zipcode} {when_any}",
+            "{leadin} {metric}",
+            "{leadin} {metric} in {location}",
+            "{leadin} {metric} in {location} on the {day}",
+            "{leadin} {metric} in {location} on {month} {day}",
+            "{leadin} {metric} in {location} on {when_abs}",
+            "{leadin} {metric} in {location} {month} {day}",
+            "{leadin} {metric} in {location} {when_any}",
+            "{leadin} {metric} for the {day}",
+            "{leadin} {metric} for the {day} in {location}",
+            "{leadin} {metric} for the {day} {zip_conn} {zipcode}",
+            "{leadin} {metric} for {month} {day}",
+            "{leadin} {metric} for {month} {day} in {location}",
+            "{leadin} {metric} for {month} {day} {zip_conn} {zipcode}",
+            "{leadin} {metric} for {when_abs}",
+            "{leadin} {metric} for {when_abs} in {location}",
+            "{leadin} {metric} for {when_abs} {zip_conn} {zipcode}",
+            "{leadin} {metric} on the {day}",
+            "{leadin} {metric} on the {day} in {location}",
+            "{leadin} {metric} on the {day} {zip_conn} {zipcode}",
+            "{leadin} {metric} on {month} {day}",
+            "{leadin} {metric} on {month} {day} in {location}",
+            "{leadin} {metric} on {month} {day} {zip_conn} {zipcode}",
+            "{leadin} {metric} on {when_abs}",
+            "{leadin} {metric} on {when_abs} in {location}",
+            "{leadin} {metric} on {when_abs} {zip_conn} {zipcode}",
+            "{leadin} {metric} {month} {day}",
+            "{leadin} {metric} {month} {day} in {location}",
+            "{leadin} {metric} {month} {day} {zip_conn} {zipcode}",
+            "{leadin} {metric} {when_any}",
+            "{leadin} {metric} {when_any} in {location}",
+            "{leadin} {metric} {when_any} {zip_conn} {zipcode}",
+            "{leadin} {metric} {zip_conn} {zipcode}",
+            "{leadin} {metric} {zip_conn} {zipcode} on the {day}",
+            "{leadin} {metric} {zip_conn} {zipcode} on {month} {day}",
+            "{leadin} {metric} {zip_conn} {zipcode} on {when_abs}",
+            "{leadin} {metric} {zip_conn} {zipcode} {month} {day}",
+            "{leadin} {metric} {zip_conn} {zipcode} {when_any}",
+            "{when_pos} {metric}",
+            "{when_pos} {metric} in {location}",
+            "{when_pos} {metric} {zip_conn} {zipcode}",
+            "what is {when_pos} {metric}",
+            "what is {when_pos} {metric} in {location}",
+            "what is {when_pos} {metric} {zip_conn} {zipcode}"
+          ]
+        },
+        {
+          "name": "GetSettingIntent",
+          "slots": [
+            {
+              "name": "setting",
+              "type": "TYPE_SETTING"
+            }
+          ],
+          "samples": [
+            "What are the settings",
+            "What is the {setting} setting",
+            "for the settings",
+            "for the {setting} setting"
+          ]
+        },
+        {
+          "name": "SetRateIntent",
+          "slots": [
+            {
+              "name": "percent",
+              "type": "AMAZON.NUMBER"
+            }
+          ],
+          "samples": [
+            "Set rate to {percent} percent"
+          ]
+        },
+        {
+          "name": "SetPitchIntent",
+          "slots": [
+            {
+              "name": "percent",
+              "type": "AMAZON.NUMBER"
+            }
+          ],
+          "samples": [
+            "Set pitch to {percent} percent"
+          ]
+        },
+        {
+          "name": "SetLocationIntent",
+          "slots": [
+            {
+              "name": "location",
+              "type": "AMAZON.AdministrativeArea"
+            },
+            {
+              "name": "zip_conn",
+              "type": "TYPE_ZIP_CONN"
+            },
+            {
+              "name": "zipcode",
+              "type": "AMAZON.NUMBER"
+            }
+          ],
+          "samples": [
+            "Set the location to zip code {zipcode}",
+            "Set the location to {location}",
+            "Set the location to {zipcode}"
+          ]
+        },
+        {
+          "name": "GetCustomIntent",
+          "slots": [],
+          "samples": [
+            "For the custom forecast setting",
+            "Get the custom forecast setting"
+          ]
+        },
+        {
+          "name": "AddCustomIntent",
+          "slots": [
+            {
+              "name": "metric",
+              "type": "TYPE_METRIC"
+            }
+          ],
+          "samples": [
+            "Add {metric} to the custom forecast setting"
+          ]
+        },
+        {
+          "name": "RemCustomIntent",
+          "slots": [
+            {
+              "name": "metric",
+              "type": "TYPE_METRIC"
+            }
+          ],
+          "samples": [
+            "Remove {metric} from the custom forecast setting"
+          ]
+        },
+        {
+          "name": "RstCustomIntent",
+          "slots": [],
+          "samples": [
+            "to reset the custom forecast setting"
+          ]
+        }
+      ],
+      "types": [
+        {
+          "name": "TYPE_DAY",
+          "values": [
+            {"name": {"value": "first"}},
+            {"name": {"value": "second"}},
+            {"name": {"value": "third"}},
+            {"name": {"value": "fourth"}},
+            {"name": {"value": "fifth"}},
+            {"name": {"value": "sixth"}},
+            {"name": {"value": "seventh"}},
+            {"name": {"value": "eighth"}},
+            {"name": {"value": "ninth"}},
+            {"name": {"value": "tenth"}},
+            {"name": {"value": "eleventh"}},
+            {"name": {"value": "twelfth"}},
+            {"name": {"value": "thirteenth"}},
+            {"name": {"value": "fourteenth"}},
+            {"name": {"value": "fifteenth"}},
+            {"name": {"value": "sixteenth"}},
+            {"name": {"value": "seventeenth"}},
+            {"name": {"value": "eighteenth"}},
+            {"name": {"value": "nineteenth"}},
+            {"name": {"value": "twentieth"}},
+            {"name": {"value": "twenty first"}},
+            {"name": {"value": "twenty second"}},
+            {"name": {"value": "twenty third"}},
+            {"name": {"value": "twenty fourth"}},
+            {"name": {"value": "twenty fifth"}},
+            {"name": {"value": "twenty sixth"}},
+            {"name": {"value": "twenty seventh"}},
+            {"name": {"value": "twenty eighth"}},
+            {"name": {"value": "twenty ninth"}},
+            {"name": {"value": "thirtieth"}},
+            {"name": {"value": "thirty first"}},
+            {"name": {"value": "1st"}},
+            {"name": {"value": "2nd"}},
+            {"name": {"value": "3rd"}},
+            {"name": {"value": "4th"}},
+            {"name": {"value": "5th"}},
+            {"name": {"value": "6th"}},
+            {"name": {"value": "7th"}},
+            {"name": {"value": "8th"}},
+            {"name": {"value": "9th"}},
+            {"name": {"value": "10th"}},
+            {"name": {"value": "11th"}},
+            {"name": {"value": "12th"}},
+            {"name": {"value": "13th"}},
+            {"name": {"value": "14th"}},
+            {"name": {"value": "15th"}},
+            {"name": {"value": "16th"}},
+            {"name": {"value": "17th"}},
+            {"name": {"value": "18th"}},
+            {"name": {"value": "19th"}},
+            {"name": {"value": "20th"}},
+            {"name": {"value": "21st"}},
+            {"name": {"value": "22nd"}},
+            {"name": {"value": "23rd"}},
+            {"name": {"value": "24th"}},
+            {"name": {"value": "25th"}},
+            {"name": {"value": "26th"}},
+            {"name": {"value": "27th"}},
+            {"name": {"value": "28th"}},
+            {"name": {"value": "29th"}},
+            {"name": {"value": "30th"}},
+            {"name": {"value": "31st"}}
+          ]
+        },
+        {
+          "name": "TYPE_LEADIN",
+          "values": [
+            {"name": {"value": "what is the"}},
+            {"name": {"value": "what is the current"}},
+            {"name": {"value": "what's the"}},
+            {"name": {"value": "what's the current"}},
+            {"name": {"value": "if it will"}},
+            {"name": {"value": "if it will be"}},
+            {"name": {"value": "is it going to"}},
+            {"name": {"value": "is it going to be"}},
+            {"name": {"value": "will it be"}},
+            {"name": {"value": "will it"}}
+          ]
+        },
+        {
+          "name": "TYPE_METRIC",
+          "values": [
+            {"name": {"value": "temp"}},
+            {"name": {"value": "temperature"}},
+            {"name": {"value": "wind chill"}},
+            {"name": {"value": "heat index"}},
+            {"name": {"value": "dewpoint"}},
+            {"name": {"value": "dew point"}},
+            {"name": {"value": "wind"}},
+            {"name": {"value": "barometric pressure"}},
+            {"name": {"value": "pressure"}},
+            {"name": {"value": "precipitation"}},
+            {"name": {"value": "relative humidity"}},
+            {"name": {"value": "humidity"}},
+            {"name": {"value": "weather"}},
+            {"name": {"value": "conditions"}},
+            {"name": {"value": "summary"}},
+            {"name": {"value": "forecast"}},
+            {"name": {"value": "rain chance"}},
+            {"name": {"value": "snow chance"}},
+            {"name": {"value": "chance of rain"}},
+            {"name": {"value": "chance of snow"}},
+            {"name": {"value": "rainy"}},
+            {"name": {"value": "raining"}},
+            {"name": {"value": "snowy"}},
+            {"name": {"value": "snowing"}},
+            {"name": {"value": "windy"}},
+            {"name": {"value": "cloudy"}},
+            {"name": {"value": "overcast"}},
+            {"name": {"value": "clear"}},
+            {"name": {"value": "sunny"}},
+            {"name": {"value": "rain"}},
+            {"name": {"value": "snow"}},
+            {"name": {"value": "alerts"}},
+            {"name": {"value": "extended forecast"}}
+          ]
+        },
+        {
+          "name": "TYPE_MONTH",
+          "values": [
+            {"name": {"value": "january"}},
+            {"name": {"value": "february"}},
+            {"name": {"value": "march"}},
+            {"name": {"value": "april"}},
+            {"name": {"value": "may"}},
+            {"name": {"value": "june"}},
+            {"name": {"value": "july"}},
+            {"name": {"value": "august"}},
+            {"name": {"value": "september"}},
+            {"name": {"value": "october"}},
+            {"name": {"value": "november"}},
+            {"name": {"value": "december"}}
+          ]
+        },
+        {
+          "name": "TYPE_SETTING",
+          "values": [
+            {"name": {"value": "location"}},
+            {"name": {"value": "pitch"}},
+            {"name": {"value": "rate"}},
+            {"name": {"value": "current location"}},
+            {"name": {"value": "current pitch"}},
+            {"name": {"value": "current rate"}},
+            {"name": {"value": "default location"}},
+            {"name": {"value": "default pitch"}},
+            {"name": {"value": "default rate"}}
+          ]
+        },
+        {
+          "name": "TYPE_WHEN_ABS",
+          "values": [
+            {"name": {"value": "sunday"}},
+            {"name": {"value": "sunday night"}},
+            {"name": {"value": "sunday morning"}},
+            {"name": {"value": "sunday afternoon"}},
+            {"name": {"value": "sunday evening"}},
+            {"name": {"value": "sunday overnight"}},
+            {"name": {"value": "sunday over night"}},
+            {"name": {"value": "overnight sunday"}},
+            {"name": {"value": "over night sunday"}},
+            {"name": {"value": "monday"}},
+            {"name": {"value": "monday night"}},
+            {"name": {"value": "monday morning"}},
+            {"name": {"value": "monday afternoon"}},
+            {"name": {"value": "monday evening"}},
+            {"name": {"value": "monday overnight"}},
+            {"name": {"value": "monday over night"}},
+            {"name": {"value": "overnight monday"}},
+            {"name": {"value": "over night monday"}},
+            {"name": {"value": "tuesday"}},
+            {"name": {"value": "tuesday morning"}},
+            {"name": {"value": "tuesday afternoon"}},
+            {"name": {"value": "tuesday evening"}},
+            {"name": {"value": "tuesday night"}},
+            {"name": {"value": "tuesday overnight"}},
+            {"name": {"value": "tuesday over night"}},
+            {"name": {"value": "overnight tuesday"}},
+            {"name": {"value": "over night tuesday"}},
+            {"name": {"value": "wednesday"}},
+            {"name": {"value": "wednesday morning"}},
+            {"name": {"value": "wednesday afternoon"}},
+            {"name": {"value": "wednesday evening"}},
+            {"name": {"value": "wednesday night"}},
+            {"name": {"value": "wednesday overnight"}},
+            {"name": {"value": "wednesday over night"}},
+            {"name": {"value": "overnight wednesday"}},
+            {"name": {"value": "over night wednesday"}},
+            {"name": {"value": "thursday"}},
+            {"name": {"value": "thursday morning"}},
+            {"name": {"value": "thursday afternoon"}},
+            {"name": {"value": "thursday evening"}},
+            {"name": {"value": "thursday night"}},
+            {"name": {"value": "thursday overnight"}},
+            {"name": {"value": "thursday over night"}},
+            {"name": {"value": "overnight thursday"}},
+            {"name": {"value": "over night thursday"}},
+            {"name": {"value": "friday"}},
+            {"name": {"value": "friday morning"}},
+            {"name": {"value": "friday afternoon"}},
+            {"name": {"value": "friday evening"}},
+            {"name": {"value": "friday night"}},
+            {"name": {"value": "friday overnight"}},
+            {"name": {"value": "friday over night"}},
+            {"name": {"value": "overnight friday"}},
+            {"name": {"value": "over night friday"}},
+            {"name": {"value": "saturday"}},
+            {"name": {"value": "saturday morning"}},
+            {"name": {"value": "saturday afternoon"}},
+            {"name": {"value": "saturday evening"}},
+            {"name": {"value": "saturday night"}},
+            {"name": {"value": "saturday overnight"}},
+            {"name": {"value": "saturday over night"}},
+            {"name": {"value": "overnight saturday"}},
+            {"name": {"value": "over night saturday"}}
+          ]
+        },
+        {
+          "name": "TYPE_WHEN_ANY",
+          "values": [
+            {"name": {"value": "sunday"}},
+            {"name": {"value": "sunday night"}},
+            {"name": {"value": "sunday morning"}},
+            {"name": {"value": "sunday afternoon"}},
+            {"name": {"value": "sunday evening"}},
+            {"name": {"value": "sunday overnight"}},
+            {"name": {"value": "sunday over night"}},
+            {"name": {"value": "overnight sunday"}},
+            {"name": {"value": "over night sunday"}},
+            {"name": {"value": "monday"}},
+            {"name": {"value": "monday night"}},
+            {"name": {"value": "monday morning"}},
+            {"name": {"value": "monday afternoon"}},
+            {"name": {"value": "monday evening"}},
+            {"name": {"value": "monday overnight"}},
+            {"name": {"value": "monday over night"}},
+            {"name": {"value": "overnight monday"}},
+            {"name": {"value": "over night monday"}},
+            {"name": {"value": "tuesday"}},
+            {"name": {"value": "tuesday morning"}},
+            {"name": {"value": "tuesday afternoon"}},
+            {"name": {"value": "tuesday evening"}},
+            {"name": {"value": "tuesday night"}},
+            {"name": {"value": "tuesday overnight"}},
+            {"name": {"value": "tuesday over night"}},
+            {"name": {"value": "overnight tuesday"}},
+            {"name": {"value": "over night tuesday"}},
+            {"name": {"value": "wednesday"}},
+            {"name": {"value": "wednesday morning"}},
+            {"name": {"value": "wednesday afternoon"}},
+            {"name": {"value": "wednesday evening"}},
+            {"name": {"value": "wednesday night"}},
+            {"name": {"value": "wednesday overnight"}},
+            {"name": {"value": "wednesday over night"}},
+            {"name": {"value": "overnight wednesday"}},
+            {"name": {"value": "over night wednesday"}},
+            {"name": {"value": "thursday"}},
+            {"name": {"value": "thursday morning"}},
+            {"name": {"value": "thursday afternoon"}},
+            {"name": {"value": "thursday evening"}},
+            {"name": {"value": "thursday night"}},
+            {"name": {"value": "thursday overnight"}},
+            {"name": {"value": "thursday over night"}},
+            {"name": {"value": "overnight thursday"}},
+            {"name": {"value": "over night thursday"}},
+            {"name": {"value": "friday"}},
+            {"name": {"value": "friday morning"}},
+            {"name": {"value": "friday afternoon"}},
+            {"name": {"value": "friday evening"}},
+            {"name": {"value": "friday night"}},
+            {"name": {"value": "friday overnight"}},
+            {"name": {"value": "friday over night"}},
+            {"name": {"value": "overnight friday"}},
+            {"name": {"value": "over night friday"}},
+            {"name": {"value": "saturday"}},
+            {"name": {"value": "saturday morning"}},
+            {"name": {"value": "saturday afternoon"}},
+            {"name": {"value": "saturday evening"}},
+            {"name": {"value": "saturday night"}},
+            {"name": {"value": "saturday overnight"}},
+            {"name": {"value": "saturday over night"}},
+            {"name": {"value": "overnight saturday"}},
+            {"name": {"value": "over night saturday"}},
+            {"name": {"value": "tomorrow"}},
+            {"name": {"value": "tomorrow morning"}},
+            {"name": {"value": "tomorrow afternoon"}},
+            {"name": {"value": "tomorrow evening"}},
+            {"name": {"value": "tomorrow night"}},
+            {"name": {"value": "tomorrow overnight"}},
+            {"name": {"value": "tomorrow over night"}},
+            {"name": {"value": "overnight tomorrow"}},
+            {"name": {"value": "over night tomorrow"}},
+            {"name": {"value": "today"}},
+            {"name": {"value": "this morning"}},
+            {"name": {"value": "this afternoon"}},
+            {"name": {"value": "this evening"}},
+            {"name": {"value": "tonight"}},
+            {"name": {"value": "overnight"}},
+            {"name": {"value": "over night"}}
+          ]
+        },
+        {
+          "name": "TYPE_WHEN_POS",
+          "values": [
+            {"name": {"value": "sunday's"}},
+            {"name": {"value": "sunday morning"}},
+            {"name": {"value": "sunday mornings"}},
+            {"name": {"value": "sunday afternoon"}},
+            {"name": {"value": "sunday afternoons"}},
+            {"name": {"value": "sunday evening"}},
+            {"name": {"value": "sunday evenings"}},
+            {"name": {"value": "sunday night"}},
+            {"name": {"value": "sunday nights"}},
+            {"name": {"value": "monday's"}},
+            {"name": {"value": "monday morning"}},
+            {"name": {"value": "monday mornings"}},
+            {"name": {"value": "monday afternoon"}},
+            {"name": {"value": "monday afternoons"}},
+            {"name": {"value": "monday evening"}},
+            {"name": {"value": "monday evenings"}},
+            {"name": {"value": "monday night"}},
+            {"name": {"value": "monday nights"}},
+            {"name": {"value": "tuesday'"}},
+            {"name": {"value": "tuesday morning"}},
+            {"name": {"value": "tuesday mornings"}},
+            {"name": {"value": "tuesday afternoon"}},
+            {"name": {"value": "tuesday afternoons"}},
+            {"name": {"value": "tuesday evening"}},
+            {"name": {"value": "tuesday evenings"}},
+            {"name": {"value": "tuesday night"}},
+            {"name": {"value": "tuesday nights"}},
+            {"name": {"value": "wednesday's"}},
+            {"name": {"value": "wednesday morning"}},
+            {"name": {"value": "wednesday mornings"}},
+            {"name": {"value": "wednesday afternoon"}},
+            {"name": {"value": "wednesday afternoons"}},
+            {"name": {"value": "wednesday evening"}},
+            {"name": {"value": "wednesday evenings"}},
+            {"name": {"value": "wednesday night"}},
+            {"name": {"value": "wednesday nights"}},
+            {"name": {"value": "thursday's"}},
+            {"name": {"value": "thursday morning"}},
+            {"name": {"value": "thursday mornings"}},
+            {"name": {"value": "thursday afternoon"}},
+            {"name": {"value": "thursday afternoons"}},
+            {"name": {"value": "thursday evening"}},
+            {"name": {"value": "thursday evenings"}},
+            {"name": {"value": "thursday night"}},
+            {"name": {"value": "thursday nights"}},
+            {"name": {"value": "friday's"}},
+            {"name": {"value": "friday morning"}},
+            {"name": {"value": "friday mornings"}},
+            {"name": {"value": "friday afternoon"}},
+            {"name": {"value": "friday afternoons"}},
+            {"name": {"value": "friday evening"}},
+            {"name": {"value": "friday evenings"}},
+            {"name": {"value": "friday night"}},
+            {"name": {"value": "friday nights"}},
+            {"name": {"value": "saturday's"}},
+            {"name": {"value": "saturday morning"}},
+            {"name": {"value": "saturday mornings"}},
+            {"name": {"value": "saturday afternoon"}},
+            {"name": {"value": "saturday afternoons"}},
+            {"name": {"value": "saturday evening"}},
+            {"name": {"value": "saturday evenings"}},
+            {"name": {"value": "saturday night"}},
+            {"name": {"value": "saturday nights"}},
+            {"name": {"value": "tomorrow's"}},
+            {"name": {"value": "tomorrow morning"}},
+            {"name": {"value": "tomorrow mornings"}},
+            {"name": {"value": "tomorrow afternoon"}},
+            {"name": {"value": "tomorrow afternoons"}},
+            {"name": {"value": "tomorrow evening"}},
+            {"name": {"value": "tomorrow evenings"}},
+            {"name": {"value": "tomorrow night"}},
+            {"name": {"value": "tomorrow nights"}},
+            {"name": {"value": "today's"}},
+            {"name": {"value": "this morning"}},
+            {"name": {"value": "this mornings"}},
+            {"name": {"value": "this afternoon"}},
+            {"name": {"value": "this afternoons"}},
+            {"name": {"value": "this evening"}},
+            {"name": {"value": "this evenings"}},
+            {"name": {"value": "tonight's"}}
+          ]
+        },
+        {
+          "name": "TYPE_ZIP_CONN",
+          "values": [
+            {"name": {"value": "in zip code"}},
+            {"name": {"value": "in"}},
+            {"name": {"value": "for zip code"}},
+            {"name": {"value": "for"}}
+          ]
+        }
+      ]
+    }
+  }
+}

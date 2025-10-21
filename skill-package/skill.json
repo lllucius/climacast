@@ -1,0 +1,52 @@
+{
+  "manifest": {
+    "publishingInformation": {
+      "locales": {
+        "en-US": {
+          "summary": "Get weather forecasts from the National Weather Service",
+          "examplePhrases": [
+            "Alexa, ask Clima Cast for the weather",
+            "Alexa, ask Clima Cast for the forecast",
+            "Alexa, ask Clima Cast what the temperature is"
+          ],
+          "keywords": [
+            "weather",
+            "forecast",
+            "temperature",
+            "NWS",
+            "National Weather Service",
+            "conditions"
+          ],
+          "name": "Clima Cast",
+          "description": "Using information provided by the National Weather Service, Clima Cast gives you the current conditions and the 7-day forecast for your area or any other United States city.\n\nWhen asking for specific weather conditions, you may use:\n- temperature or temp\n- wind chill\n- heat index\n- dew point\n- barometric pressure or pressure\n- relative humidity or humidity\n- precipitation, rain chance, snow chance, chance of rain or chance of snow\n- wind\n\nYou may ask for different periods of the day by using phrases like:\n- tomorrow morning (6am to 12pm)\n- Friday afternoon (12pm to 6pm)\n- Wednesday evening (6pm to 12am)\n- overnight Monday (12am to 6am on Tuesday)\n- Thursday (6am to 6pm)\n- Sunday night (6pm to 6am)"
+        }
+      },
+      "isAvailableWorldwide": false,
+      "testingInstructions": "Ask for the weather in various US locations.",
+      "category": "WEATHER",
+      "distributionCountries": [
+        "US"
+      ]
+    },
+    "apis": {
+      "custom": {
+        "endpoint": {
+          "uri": "arn:aws:lambda:us-east-1:123456789012:function:climacast"
+        }
+      }
+    },
+    "manifestVersion": "1.0",
+    "privacyAndCompliance": {
+      "allowsPurchases": false,
+      "usesPersonalInfo": false,
+      "isChildDirected": false,
+      "isExportCompliant": true,
+      "containsAds": false,
+      "locales": {
+        "en-US": {
+          "privacyPolicyUrl": "https://example.com/privacy.html"
+        }
+      }
+    }
+  }
+}
