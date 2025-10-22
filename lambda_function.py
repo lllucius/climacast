@@ -35,8 +35,12 @@ from ask_sdk_model import Response
 from ask_sdk_model.ui import SimpleCard
 from ask_sdk_core.serialize import DefaultSerializer
 
-from geolocator import Geolocator
-from constants import *
+from utils.geolocator import Geolocator
+from utils.constants import *
+from utils import converters
+from storage.cache_handler import CacheHandler
+from storage.settings_handler import SettingsHandler, AlexaSettingsHandler
+from storage.local_handlers import LocalJsonCacheHandler, LocalJsonSettingsHandler
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -56,6 +60,23 @@ class Config:
     """
     Configuration class for managing environment variables and application settings.
     Provides a centralized location for all configuration values.
+    
+    Environment Variables:
+        event_id: Event identifier for notifications
+        app_id: Alexa skill application ID (default: amzn1.ask.skill.test)
+        dataupdate_id: Data update identifier (default: amzn1.ask.data.update)
+        here_api_key: HERE.com API key for geocoding
+        DYNAMODB_PERSISTENCE_TABLE_NAME: DynamoDB table name (default: ask-{app_id})
+        DYNAMODB_PERSISTENCE_REGION: AWS region (default: us-east-1)
+    
+    Example:
+        Access configuration values:
+            app_id = Config.APP_ID
+            table_name = Config.DYNAMODB_TABLE_NAME
+            
+        For backward compatibility, global variables are maintained:
+            APPID = Config.APP_ID
+            TABLE_NAME = Config.DYNAMODB_TABLE_NAME
     """
     
     # Application identifiers
@@ -111,491 +132,18 @@ HTTPS.mount("http://", adapter)
 # Initialize global Geolocator instance
 GEOLOCATOR = Geolocator(HERE_API_KEY, HTTPS)
 
-class CacheHandler(object):
-    """
-    Handles all cache operations using a single DynamoDB table.
-    The table uses a composite key structure:
-    - pk (partition key): cache type (e.g., 'location#<location>', 'station#<id>', 'zone#<id>')
-    - sk (sort key): always 'data' for cache items
-    
-    The cache data is stored as a dict in the 'cache_data' attribute.
-    Shared caches (location, station, zone) must be atomically protected.
-    """
-    
-    # Cache type prefixes
-    LOCATION_PREFIX = "location#"
-    STATION_PREFIX = "station#"
-    ZONE_PREFIX = "zone#"
-    
-    def __init__(self, table_name: str) -> None:
-        """
-        Initialize the cache handler with the Alexa-provided table.
-        
-        Args:
-            table_name: Name of the DynamoDB table to use
-        """
-        self.ddb = resource("dynamodb", region_name=Config.DYNAMODB_REGION)
-        self.table = self.ddb.Table(Config.DYNAMODB_TABLE_NAME)
-    
-    def _make_key(self, cache_type: str, cache_id: str) -> Dict[str, str]:
-        """Create a composite key for the cache item."""
-        return {
-            "pk": f"{cache_type}{cache_id}",
-            "sk": "data"
-        }
-    
-    def get(self, cache_type: str, cache_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Retrieve an item from the cache.
-        
-        Args:
-            cache_type: Type prefix (e.g., LOCATION_PREFIX)
-            cache_id: Unique identifier for the cache item
-            
-        Returns:
-            Dict containing the cached data, or None if not found
-        """
-        try:
-            key = self._make_key(cache_type, cache_id)
-            response = self.table.get_item(Key=key)
-            
-            if "Item" not in response:
-                return None
-            
-            item = response["Item"]
-            # Return the cache_data dict
-            return item.get("cache_data", {})
-        except Exception as e:
-            logger.error(f"Error getting cache item {cache_type}{cache_id}: {e}")
-            return None
-    
-    def put(self, cache_type: str, cache_id: str, cache_data: Dict[str, Any], ttl_days: int = 35) -> None:
-        """
-        Store an item in the cache.
-        
-        Args:
-            cache_type: Type prefix (e.g., LOCATION_PREFIX)
-            cache_id: Unique identifier for the cache item
-            cache_data: Dict containing the data to cache
-            ttl_days: Time to live in days (0 = no expiration)
-        """
-        try:
-            key = self._make_key(cache_type, cache_id)
-            item = {**key, "cache_data": cache_data}
-            
-            if ttl_days > 0:
-                item["ttl"] = int(time()) + (ttl_days * 24 * 60 * 60)
-            
-            self.table.put_item(Item=item)
-        except Exception as e:
-            logger.error(f"Error putting cache item {cache_type}{cache_id}: {e}")
-    
-    def get_location(self, location_id: str) -> Optional[Dict[str, Any]]:
-        """Get location cache data."""
-        return self.get(self.LOCATION_PREFIX, location_id)
-    
-    def put_location(self, location_id: str, location_data: Dict[str, Any], ttl_days: int = 35) -> None:
-        """Store location cache data."""
-        self.put(self.LOCATION_PREFIX, location_id, location_data, ttl_days)
-    
-    def get_station(self, station_id: str) -> Optional[Dict[str, Any]]:
-        """Get station cache data."""
-        return self.get(self.STATION_PREFIX, station_id)
-    
-    def put_station(self, station_id: str, station_data: Dict[str, Any], ttl_days: int = 35) -> None:
-        """Store station cache data."""
-        self.put(self.STATION_PREFIX, station_id, station_data, ttl_days)
-    
-    def get_zone(self, zone_id: str) -> Optional[Dict[str, Any]]:
-        """Get zone cache data."""
-        return self.get(self.ZONE_PREFIX, zone_id)
-    
-    def put_zone(self, zone_id, zone_data, ttl_days=35):
-        """Store zone cache data."""
-        self.put(self.ZONE_PREFIX, zone_id, zone_data, ttl_days)
-
 # Create global cache handler instance
-CACHE_HANDLER = CacheHandler(TABLE_NAME)
+CACHE_HANDLER = CacheHandler(TABLE_NAME, Config.DYNAMODB_REGION)
 
 # Global test handlers (set by test_one() when running tests)
 TEST_MODE = False
 TEST_CACHE_HANDLER = None
 TEST_SETTINGS_HANDLER = None
 
-class SettingsHandler(object):
-    """
-    Base class for handling user settings operations.
-    This allows different backends for user settings storage.
-    """
-    
-    def __init__(self) -> None:
-        """Initialize the settings handler."""
-        pass
-    
-    def get_location(self) -> Optional[str]:
-        """Get user's default location."""
-        raise NotImplementedError("Subclass must implement get_location()")
-    
-    def set_location(self, location: str) -> None:
-        """Set user's default location."""
-        raise NotImplementedError("Subclass must implement set_location()")
-    
-    def get_rate(self) -> int:
-        """Get user's speech rate setting."""
-        raise NotImplementedError("Subclass must implement get_rate()")
-    
-    def set_rate(self, rate: int) -> None:
-        """Set user's speech rate setting."""
-        raise NotImplementedError("Subclass must implement set_rate()")
-    
-    def get_pitch(self) -> int:
-        """Get user's speech pitch setting."""
-        raise NotImplementedError("Subclass must implement get_pitch()")
-    
-    def set_pitch(self, pitch: int) -> None:
-        """Set user's speech pitch setting."""
-        raise NotImplementedError("Subclass must implement set_pitch()")
-    
-    def get_metrics(self) -> List[str]:
-        """Get user's custom metrics list."""
-        raise NotImplementedError("Subclass must implement get_metrics()")
-    
-    def set_metrics(self, metrics: List[str]) -> None:
-        """Set user's custom metrics list."""
-        raise NotImplementedError("Subclass must implement set_metrics()")
-
-
-class AlexaSettingsHandler(SettingsHandler):
-    """
-    Settings handler implementation using Alexa's attributes_manager.
-    This is the default backend for storing user settings in DynamoDB
-    via the ASK SDK's persistent attributes.
-    """
-    
-    def __init__(self, handler_input: HandlerInput) -> None:
-        """
-        Initialize with Alexa handler input for accessing attributes_manager.
-        
-        Args:
-            handler_input: ASK SDK HandlerInput object
-        """
-        super().__init__()
-        self.handler_input = handler_input
-        self.attr_mgr = handler_input.attributes_manager
-        self._load_settings()
-    
-    def _get_default_metrics(self) -> List[str]:
-        """Get default metrics list"""
-        metrics = {}
-        for name, value in METRICS.values():
-            if value and name not in metrics:
-                metrics[value] = name
-        result = []
-        for i in range(1, len(metrics) + 1):
-            result.append(metrics[i])
-        return result
-    
-    def _load_settings(self) -> None:
-        """Load settings from persistent attributes"""
-        persistent_attrs = self.attr_mgr.persistent_attributes
-        
-        # Initialize settings from persistent attributes or use defaults
-        self._location = persistent_attrs.get("location", None)
-        self._rate = persistent_attrs.get("rate", 100)
-        self._pitch = persistent_attrs.get("pitch", 100)
-        self._metrics = persistent_attrs.get("metrics", self._get_default_metrics())
-    
-    def _save_settings(self) -> None:
-        """Save settings to persistent attributes"""
-        persistent_attrs = self.attr_mgr.persistent_attributes
-        
-        persistent_attrs["location"] = self._location
-        persistent_attrs["rate"] = self._rate
-        persistent_attrs["pitch"] = self._pitch
-        persistent_attrs["metrics"] = self._metrics
-        
-        self.attr_mgr.save_persistent_attributes()
-    
-    def get_location(self) -> Optional[str]:
-        """Get user's default location."""
-        return self._location
-    
-    def set_location(self, location: str) -> None:
-        """Set user's default location."""
-        self._location = location
-        self._save_settings()
-    
-    def get_rate(self) -> int:
-        """Get user's speech rate setting."""
-        return self._rate
-    
-    def set_rate(self, rate: int) -> None:
-        """Set user's speech rate setting."""
-        self._rate = rate
-        self._save_settings()
-    
-    def get_pitch(self) -> int:
-        """Get user's speech pitch setting."""
-        return self._pitch
-    
-    def set_pitch(self, pitch: int) -> None:
-        """Set user's speech pitch setting."""
-        self._pitch = pitch
-        self._save_settings()
-    
-    def get_metrics(self) -> List[str]:
-        """Get user's custom metrics list."""
-        return self._metrics
-    
-    def set_metrics(self, metrics: List[str]) -> None:
-        """Set user's custom metrics list."""
-        self._metrics = metrics
-        self._save_settings()
-
 
 # =============================================================================
-# Local JSON-based handlers for testing without DynamoDB
+# Notification function
 # =============================================================================
-
-class LocalJsonCacheHandler(object):
-    """
-    Cache handler implementation using local JSON files for testing.
-    This allows testing without requiring DynamoDB access.
-    
-    Cache files are stored in a local directory with the structure:
-    - cache_dir/
-      - location/
-        - <location_id>.json
-      - station/
-        - <station_id>.json
-      - zone/
-        - <zone_id>.json
-    """
-    
-    LOCATION_PREFIX = "location#"
-    STATION_PREFIX = "station#"
-    ZONE_PREFIX = "zone#"
-    
-    def __init__(self, cache_dir=".test_cache"):
-        """
-        Initialize the cache handler with a local directory.
-        
-        Args:
-            cache_dir: Directory to store cache JSON files
-        """
-        self.cache_dir = cache_dir
-        
-        # Create cache directories if they don't exist
-        for cache_type in ['location', 'station', 'zone']:
-            os.makedirs(os.path.join(cache_dir, cache_type), exist_ok=True)
-    
-    def _get_file_path(self, cache_type, cache_id):
-        """Get the file path for a cache item."""
-        # Remove prefix from cache_type for directory name
-        cache_type_clean = cache_type.replace('#', '')
-        # Sanitize cache_id for filename (replace special chars)
-        safe_id = re.sub(r'[^\w\s-]', '_', cache_id).strip().replace(' ', '_')
-        return os.path.join(self.cache_dir, cache_type_clean, f"{safe_id}.json")
-    
-    def get(self, cache_type, cache_id):
-        """
-        Retrieve an item from the cache.
-        
-        Args:
-            cache_type: Type prefix (e.g., LOCATION_PREFIX)
-            cache_id: Unique identifier for the cache item
-            
-        Returns:
-            Dict containing the cached data, or None if not found
-        """
-        try:
-            file_path = self._get_file_path(cache_type, cache_id)
-            if not os.path.exists(file_path):
-                return None
-            
-            with open(file_path, 'r') as f:
-                data = json.load(f)
-            
-            # Check TTL if present
-            if 'ttl' in data and data['ttl'] > 0:
-                if time() > data['ttl']:
-                    # Cache expired, remove file
-                    os.remove(file_path)
-                    return None
-            
-            return data.get('cache_data', {})
-        except Exception as e:
-            logger.error(f"Error getting cache item {cache_type}{cache_id}: {e}")
-            return None
-    
-    def put(self, cache_type, cache_id, cache_data, ttl_days=35):
-        """
-        Store an item in the cache.
-        
-        Args:
-            cache_type: Type prefix (e.g., LOCATION_PREFIX)
-            cache_id: Unique identifier for the cache item
-            cache_data: Dict containing the data to cache
-            ttl_days: Time to live in days (0 = no expiration)
-        """
-        try:
-            file_path = self._get_file_path(cache_type, cache_id)
-            
-            data = {'cache_data': cache_data}
-            if ttl_days > 0:
-                data['ttl'] = int(time()) + (ttl_days * 24 * 60 * 60)
-            
-            with open(file_path, 'w') as f:
-                json.dump(data, f, indent=2)
-        except Exception as e:
-            logger.error(f"Error putting cache item {cache_type}{cache_id}: {e}")
-    
-    def get_location(self, location_id):
-        """Get location cache data."""
-        return self.get(self.LOCATION_PREFIX, location_id)
-    
-    def put_location(self, location_id, location_data, ttl_days=35):
-        """Store location cache data."""
-        self.put(self.LOCATION_PREFIX, location_id, location_data, ttl_days)
-    
-    def get_station(self, station_id):
-        """Get station cache data."""
-        return self.get(self.STATION_PREFIX, station_id)
-    
-    def put_station(self, station_id, station_data, ttl_days=35):
-        """Store station cache data."""
-        self.put(self.STATION_PREFIX, station_id, station_data, ttl_days)
-    
-    def get_zone(self, zone_id: str) -> Optional[Dict[str, Any]]:
-        """Get zone cache data."""
-        return self.get(self.ZONE_PREFIX, zone_id)
-    
-    def put_zone(self, zone_id: str, zone_data: Dict[str, Any], ttl_days: int = 35) -> None:
-        """Store zone cache data."""
-        self.put(self.ZONE_PREFIX, zone_id, zone_data, ttl_days)
-
-
-class LocalJsonSettingsHandler(SettingsHandler):
-    """
-    Settings handler implementation using local JSON files for testing.
-    This allows testing without requiring DynamoDB access.
-    
-    Settings are stored in a single JSON file per user.
-    """
-    
-    def __init__(self, user_id, settings_dir=".test_settings"):
-        """
-        Initialize with a user ID and local directory for settings storage.
-        
-        Args:
-            user_id: User identifier
-            settings_dir: Directory to store settings JSON files
-        """
-        super().__init__()
-        self.user_id = user_id
-        self.settings_dir = settings_dir
-        
-        # Create settings directory if it doesn't exist
-        os.makedirs(settings_dir, exist_ok=True)
-        
-        self._load_settings()
-    
-    def _get_file_path(self):
-        """Get the file path for user settings."""
-        # Sanitize user_id for filename
-        safe_id = re.sub(r'[^\w\s-]', '_', self.user_id).strip().replace(' ', '_')
-        return os.path.join(self.settings_dir, f"{safe_id}.json")
-    
-    def _get_default_metrics(self):
-        """Get default metrics list"""
-        metrics = {}
-        for name, value in METRICS.values():
-            if value and name not in metrics:
-                metrics[value] = name
-        result = []
-        for i in range(1, len(metrics) + 1):
-            result.append(metrics[i])
-        return result
-    
-    def _load_settings(self):
-        """Load settings from local JSON file"""
-        file_path = self._get_file_path()
-        
-        if os.path.exists(file_path):
-            try:
-                with open(file_path, 'r') as f:
-                    settings = json.load(f)
-                
-                self._location = settings.get("location", None)
-                self._rate = settings.get("rate", 100)
-                self._pitch = settings.get("pitch", 100)
-                self._metrics = settings.get("metrics", self._get_default_metrics())
-            except Exception as e:
-                logger.error(f"Error loading settings for {self.user_id}: {e}")
-                self._init_defaults()
-        else:
-            self._init_defaults()
-    
-    def _init_defaults(self):
-        """Initialize with default settings"""
-        self._location = None
-        self._rate = 100
-        self._pitch = 100
-        self._metrics = self._get_default_metrics()
-    
-    def _save_settings(self):
-        """Save settings to local JSON file"""
-        file_path = self._get_file_path()
-        
-        settings = {
-            "location": self._location,
-            "rate": self._rate,
-            "pitch": self._pitch,
-            "metrics": self._metrics
-        }
-        
-        try:
-            with open(file_path, 'w') as f:
-                json.dump(settings, f, indent=2)
-        except Exception as e:
-            logger.error(f"Error saving settings for {self.user_id}: {e}")
-    
-    def get_location(self):
-        """Get user's default location."""
-        return self._location
-    
-    def set_location(self, location):
-        """Set user's default location."""
-        self._location = location
-        self._save_settings()
-    
-    def get_rate(self):
-        """Get user's speech rate setting."""
-        return self._rate
-    
-    def set_rate(self, rate):
-        """Set user's speech rate setting."""
-        self._rate = rate
-        self._save_settings()
-    
-    def get_pitch(self):
-        """Get user's speech pitch setting."""
-        return self._pitch
-    
-    def set_pitch(self, pitch):
-        """Set user's speech pitch setting."""
-        self._pitch = pitch
-        self._save_settings()
-    
-    def get_metrics(self):
-        """Get user's custom metrics list."""
-        return self._metrics
-    
-    def set_metrics(self, metrics):
-        """Set user's custom metrics list."""
-        self._metrics = metrics
-        self._save_settings()
-
 
 def notify(event, sub, msg=None):
     """
@@ -729,7 +277,7 @@ class Base(object):
 
         return station
 
-    def get_product(self, product):
+    def get_product(self, product: str) -> Optional[str]:
         """
             Return the text for the given product
         """
@@ -751,7 +299,7 @@ class Base(object):
 
         return text
 
-    def https(self, path, loc="api.weather.gov"):
+    def https(self, path: str, loc: str = "api.weather.gov") -> Optional[Dict[str, Any]]:
         """
             Retrieve the JSON data from the given path and location
         """
@@ -769,97 +317,36 @@ class Base(object):
         
         return json.loads(r.text)
 
-    def to_skys(self, percent, isday):
-        """
-            Convert the sky cover percentage to text
-        """
-        if percent is not None:
-            if 0.0 <= percent < 12.5:
-                percent = "sunny" if isday else "clear" 
-            elif 12.5 <= percent < 25.0:
-                percent = "mostly sunny" if isday else "mostly clear"
-            elif 25.0 <= percent < 50.0:
-                percent = "partly sunny" if isday else "partly cloudy"
-            elif 50.0 <= percent < 87.5:
-                percent = "mostly cloudy"
-            elif 87.5 <= percent <= 100.0:
-                percent = "cloudy"
-            else:
-                percent = None
-
-        return percent
+    def to_skys(self, percent: Optional[float], isday: bool) -> Optional[str]:
+        """Convert the sky cover percentage to text"""
+        return converters.to_skys(percent, isday)
     
-    def to_percent(self, percent):
-        """
-            Return the given value, if any, as an integer
-        """
-        return None if percent is None else int(percent)
+    def to_percent(self, percent: Optional[float]) -> Optional[int]:
+        """Return the given value, if any, as an integer"""
+        return converters.to_percent(percent)
     
-    def mb_to_in(self, mb):
-        """
-            Convert the given millibar value, if any, to inches
-        """
-        # Every so often we get back a value of 900 which seems to be
-        # some sort of "low value".  So, just consider it invalid.
-        if mb == 900:
-            return None
-        return None if mb is None else "{:.2f}".format(mb * 0.0295301)
+    def mb_to_in(self, mb: Optional[float]) -> Optional[str]:
+        """Convert the given millibar value, if any, to inches"""
+        return converters.mb_to_in(mb)
 
-    def pa_to_in(self, pa):
-        """
-            Convert the given pascals, if any, to inches
-        """
-        return None if pa is None else "{:.2f}".format(pa * 0.000295301)
+    def pa_to_in(self, pa: Optional[float]) -> Optional[str]:
+        """Convert the given pascals, if any, to inches"""
+        return converters.pa_to_in(pa)
 
-    def mm_to_in(self, mm, as_text=False):
+    def mm_to_in(self, mm: Optional[float], as_text: bool = False) -> Optional[Union[str, tuple]]:
         """
             Convert the given millimeters, if any, to inches.  If requested,
             further convert inches to words.
         """
-        inches = None if mm is None else "{:.2f}".format(mm * 0.0393701)
-        if not as_text or not inches:
-            return inches
-
-        inches = float(inches)
-        whole = int(inches)
-        frac = inches - whole
-
-        if inches == 0:
-            return inches, "", ""
-
-        if inches < 0.1:
-            amt = "less than a tenth"
-        elif 0.1 <= frac < 0.125:
-            amt = "less than a quarter"
-        elif 0.125 <= frac < 0.375:
-            amt = "a quarter"
-        elif 0.375 <= frac < 0.625:
-            amt = "a half"
-        elif 0.625 <= frac < 0.875:
-            amt = "three quarters"
-        else:
-            whole += 1
-            frac = 0.0
-            amt = "%d" % whole
-
-        if whole == 0:
-            return inches, amt, "of an inch"
-
-        if frac == 0.0:
-            return inches, amt, "inch%s" % "" if whole == 1 else "es"
-
-        return inches, "%d and %s" % (whole, amt), "of an inch"
+        return converters.mm_to_in(mm, as_text)
 
     def c_to_f(self, c):
-        """
-            Convert the given celcius value, if any, to fahrenheit
-        """
-        return None if c is None else "{:.0f}".format(c * 9 / 5 + 32)
+        """Convert the given celsius value, if any, to fahrenheit"""
+        result = converters.c_to_f(c)
+        return None if result is None else "{:.0f}".format(result)
 
     def kph_to_mph(self, kph):
-        """
-            Convert the given kilometers per hour, if any, to miles per hour
-        """
+        """Convert the given kilometers per hour, if any, to miles per hour"""
         return None if kph is None or kph == 0 else "{:.0f}".format(kph * 0.62137119223733)
 
     def mps_to_mph(self, mps):
@@ -926,7 +413,7 @@ class Base(object):
 
         return int(round(hi))
 
-    def normalize(self, text):
+    def normalize(self, text: str) -> str:
         """
             Tries to identify various text patterns and replaces them
             with easier to hear alternatives
@@ -1937,13 +1424,13 @@ class Skill(Base):
                 if slot_name in SLOTS:
                     val = slot.value
                     setattr(self.slots, slot_name, val.strip().lower() if val else None)
-                    print("SLOT:", slot_name, getattr(self.slots, slot_name))
+                    logger.info("SLOT: %s = %s", slot_name, getattr(self.slots, slot_name))
                 
-        # Print intent name for debugging
+        # Log intent name for debugging
         if hasattr(self.request, 'intent'):
-            print("INTENT:", self.request.intent.name)
+            logger.info("INTENT: %s", self.request.intent.name)
         else:
-            print("REQUEST:", self.request.object_type)
+            logger.info("REQUEST: %s", self.request.object_type)
 
     def respond(self, text, end=None):
         new = self.session.new
@@ -2822,14 +2309,14 @@ class RequestLogger(AbstractRequestInterceptor):
     """Log the request envelope."""
     
     def process(self, handler_input):
-        print("Request Envelope: {}".format(handler_input.request_envelope))
+        logger.info("Request Envelope: %s", handler_input.request_envelope)
 
 
 class ResponseLogger(AbstractResponseInterceptor):
     """Log the response envelope."""
     
     def process(self, handler_input, response):
-        print("Response: {}".format(response))
+        logger.info("Response: %s", response)
 
 
 # ============================================================================
@@ -2843,7 +2330,7 @@ class AllExceptionHandler(AbstractExceptionHandler):
         return True
     
     def handle(self, handler_input, exception):
-        print("Exception encountered: {}".format(exception))
+        logger.error("Exception encountered: %s", exception)
         
         # Get event-like structure for notify
         session_attr = handler_input.attributes_manager.session_attributes
@@ -2954,7 +2441,7 @@ def lambda_handler(event, context=None):
         pass
     except Exception as e:
         import traceback
-        print("Lambda handler exception: {}".format(traceback.format_exc()))
+        logger.error("Lambda handler exception: %s", traceback.format_exc())
         notify(event, "Exception", traceback.format_exc())
         text = '<say-as interpret-as="interjection">aw man</say-as>' + \
                '<prosody pitch="+25%">' + \
@@ -3001,6 +2488,7 @@ def test_one():
         event["session"]["user"]["userId"] = user_id
         TEST_SETTINGS_HANDLER = LocalJsonSettingsHandler(user_id, ".test_settings")
         
+        # Print output for testing (this is only used in __main__ test mode)
         print(json.dumps(lambda_handler(event), indent=4))
 
 if __name__ == "__main__":
