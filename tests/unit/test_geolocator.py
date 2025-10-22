@@ -10,9 +10,9 @@ os.environ["app_id"] = "amzn1.ask.skill.test"
 os.environ["here_api_key"] = "test"
 
 # Add the parent directory to the path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-from geolocator import Geolocator
+from utils.geolocator import Geolocator
 
 
 def test_geolocator_initialization():

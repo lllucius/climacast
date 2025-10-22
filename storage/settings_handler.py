@@ -19,7 +19,7 @@ user settings.
 import logging
 from typing import List, Optional
 from ask_sdk_core.handler_input import HandlerInput
-from utils.constants import METRICS
+from utils.constants import METRICS, get_default_metrics
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -94,14 +94,7 @@ class AlexaSettingsHandler(SettingsHandler):
         Returns:
             List of default metric names in order
         """
-        metrics = {}
-        for name, value in METRICS.values():
-            if value and name not in metrics:
-                metrics[value] = name
-        result = []
-        for i in range(1, len(metrics) + 1):
-            result.append(metrics[i])
-        return result
+        return get_default_metrics()
     
     def _load_settings(self) -> None:
         """Load settings from persistent attributes."""
