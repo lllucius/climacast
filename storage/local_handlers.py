@@ -23,7 +23,7 @@ import re
 from time import time
 from typing import Dict, Optional, Any
 
-from constants import METRICS
+from utils.constants import METRICS
 
 # Configure logging
 logger = logging.getLogger(__name__)
