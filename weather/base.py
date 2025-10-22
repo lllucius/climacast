@@ -19,6 +19,8 @@ HTTP communication, and text normalization.
 
 import json
 from typing import Dict, List, Optional, Any, Union
+import httpx
+from tenacity import retry, stop_after_attempt, retry_if_exception_type, wait_exponential
 
 from utils import converters
 from utils.text_normalizer import normalize as normalize_text
@@ -202,6 +204,11 @@ class WeatherBase(object):
 
         return text
 
+    @retry(
+        stop=stop_after_attempt(3),
+        retry=retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
+        wait=wait_exponential(multiplier=1, min=1, max=10)
+    )
     def https(self, path: str, loc: str = "api.weather.gov") -> Optional[Dict[str, Any]]:
         """
         Retrieve the JSON data from the given path and location.

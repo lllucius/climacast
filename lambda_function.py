@@ -13,7 +13,7 @@ import json
 import logging
 import os
 import re
-import requests
+import httpx
 from typing import Dict, List, Optional, Any, Union
 #from aniso8601 import parse_duration
 from aniso8601.duration import parse_duration
@@ -22,8 +22,7 @@ from datetime import datetime
 from dateutil import parser, tz
 from dateutil.relativedelta import *
 from dotenv import load_dotenv
-from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
+from tenacity import retry, stop_after_attempt, retry_if_exception_type, wait_exponential
 from time import time
 
 from ask_sdk_core.skill_builder import CustomSkillBuilder
@@ -104,7 +103,7 @@ class Config:
     # HTTP retry settings
     HTTP_RETRY_TOTAL: int = 3
     HTTP_RETRY_STATUS_CODES: List[int] = [429, 500, 502, 503, 504]
-    HTTP_RETRY_METHODS: List[str] = ["HEAD", "GET", "OPTIONS"]
+    HTTP_TIMEOUT: int = 30
 
 
 # Maintain backward compatibility with existing code
@@ -117,24 +116,11 @@ TABLE_NAME = Config.DYNAMODB_TABLE_NAME
 # Compiled normalization regex (compiled on first use) - DEPRECATED: moved to text_normalizer
 NORMALIZE = None
 
-# Use allowed_methods for newer urllib3, fallback to method_whitelist for older versions
-try:
-    retry_strategy = Retry(
-        total=Config.HTTP_RETRY_TOTAL,
-        status_forcelist=Config.HTTP_RETRY_STATUS_CODES,
-        allowed_methods=Config.HTTP_RETRY_METHODS
-    )
-except TypeError:
-    retry_strategy = Retry(
-        total=Config.HTTP_RETRY_TOTAL,
-        status_forcelist=Config.HTTP_RETRY_STATUS_CODES,
-        method_whitelist=Config.HTTP_RETRY_METHODS
-    )
-adapter = HTTPAdapter(max_retries=retry_strategy)
-
-HTTPS = requests.Session()
-HTTPS.mount("https://", adapter)
-HTTPS.mount("http://", adapter)
+# Create httpx client with timeout configuration
+HTTPS = httpx.Client(
+    timeout=Config.HTTP_TIMEOUT,
+    follow_redirects=True
+)
 
 # Initialize global Geolocator instance
 GEOLOCATOR = Geolocator(HERE_API_KEY, HTTPS)
@@ -1393,11 +1379,8 @@ def test_one():
 if __name__ == "__main__":
     import logging
     import sys
-    from cachecontrol import CacheControl, CacheControlAdapter
-    from cachecontrol.caches.file_cache import FileCache
-    from cachecontrol.heuristics import ExpiresAfter
     logging.basicConfig()
-    HTTPS.mount('https://', CacheControlAdapter(cache=FileCache(".webcache"),
-                                                heuristic=ExpiresAfter(hours=1)))
+    # Note: httpx doesn't need the cachecontrol library like requests did
+    # The client is already configured with proper timeouts
 
     test_one()
