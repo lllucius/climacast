@@ -18,16 +18,25 @@ os.environ["DYNAMODB_TABLE_NAME"] = "test-table"
 
 def test_cache_handler_structure():
     """Test that CacheHandler has the expected structure"""
-    # Since we can't import due to dependencies, let's verify the code structure
-    # by reading the file and checking for key elements
+    # Check that CacheHandler is in storage/cache_handler.py
     
     print("Testing CacheHandler structure...")
     
+    # Check lambda_function.py imports CacheHandler
     with open("lambda_function.py", "r") as f:
+        lambda_content = f.read()
+    
+    assert "from storage.cache_handler import CacheHandler" in lambda_content, \
+        "CacheHandler not imported in lambda_function.py"
+    print("✓ CacheHandler imported in lambda_function.py")
+    
+    # Check storage/cache_handler.py for class definition
+    with open("storage/cache_handler.py", "r") as f:
         content = f.read()
     
     # Check for CacheHandler class
-    assert "class CacheHandler(object):" in content, "CacheHandler class not found"
+    assert ("class CacheHandler(object):" in content or
+            "class CacheHandler:" in content), "CacheHandler class not found"
     print("✓ CacheHandler class exists")
     
     # Check for key prefixes
@@ -37,40 +46,58 @@ def test_cache_handler_structure():
     print("✓ Cache type prefixes defined")
     
     # Check for cache methods
-    assert "def get(self, cache_type, cache_id):" in content, "get method not found"
-    assert "def put(self, cache_type, cache_id, cache_data" in content, "put method not found"
-    assert "def get_location(self, location_id):" in content, "get_location method not found"
-    assert "def put_location(self, location_id, location_data" in content, "put_location method not found"
-    assert "def get_station(self, station_id):" in content, "get_station method not found"
-    assert "def put_station(self, station_id, station_data" in content, "put_station method not found"
-    assert "def get_zone(self, zone_id):" in content, "get_zone method not found"
-    assert "def put_zone(self, zone_id, zone_data" in content, "put_zone method not found"
+    assert ("def get(self, cache_type, cache_id):" in content or
+            "def get(self, cache_type: str, cache_id: str)" in content), "get method not found"
+    assert ("def put(self, cache_type, cache_id, cache_data" in content or
+            "def put(self, cache_type: str, cache_id: str, cache_data" in content), "put method not found"
+    assert ("def get_location(self, location_id):" in content or
+            "def get_location(self, location_id: str)" in content), "get_location method not found"
+    assert ("def put_location(self, location_id, location_data" in content or
+            "def put_location(self, location_id: str, location_data" in content), "put_location method not found"
+    assert ("def get_station(self, station_id):" in content or
+            "def get_station(self, station_id: str)" in content), "get_station method not found"
+    assert ("def put_station(self, station_id, station_data" in content or
+            "def put_station(self, station_id: str, station_data" in content), "put_station method not found"
+    assert ("def get_zone(self, zone_id):" in content or
+            "def get_zone(self, zone_id: str)" in content), "get_zone method not found"
+    assert ("def put_zone(self, zone_id, zone_data" in content or
+            "def put_zone(self, zone_id: str, zone_data" in content), "put_zone method not found"
     print("✓ All cache methods defined")
     
-    # Check for global cache handler
-    assert "CACHE_HANDLER = CacheHandler(TABLE_NAME)" in content, "Global CACHE_HANDLER not found"
+    # Check lambda_function.py for global cache handler using factory function
+    assert ("CACHE_HANDLER = get_cache_handler()" in lambda_content or
+            "CACHE_HANDLER = CacheHandler(" in lambda_content), "Global CACHE_HANDLER not found"
     print("✓ Global CACHE_HANDLER instance created")
     
     # Check that User class is removed
-    assert "class User(Base):" not in content, "User class still exists (should be removed)"
+    assert "class User(Base):" not in lambda_content, "User class still exists (should be removed)"
     print("✓ User class removed")
     
     # Check that Skill class uses cache_handler
-    assert "def __init__(self, handler_input, cache_handler=None, settings_handler=None):" in content, "Skill doesn't accept cache_handler"
+    assert "def __init__(self, handler_input, cache_handler=None, settings_handler=None):" in lambda_content, "Skill doesn't accept cache_handler"
     print("✓ Skill class accepts cache_handler parameter")
     
     # Check that settings are now in SettingsHandler, not directly in Skill
-    assert "class AlexaSettingsHandler" in content, "AlexaSettingsHandler not found"
-    assert "persistent_attributes" in content, "persistent_attributes not used"
+    # AlexaSettingsHandler is in storage/settings_handler.py
+    with open("storage/settings_handler.py", "r") as f:
+        settings_content = f.read()
+    
+    assert "class AlexaSettingsHandler" in settings_content, "AlexaSettingsHandler not found"
+    assert "persistent_attributes" in settings_content, "persistent_attributes not used"
     print("✓ Settings moved to separate SettingsHandler class")
     
-    # Check that Base class accepts cache_handler
-    assert "def __init__(self, event, cache_handler=None):" in content, "Base doesn't accept cache_handler"
+    # Check that Base class accepts cache_handler (in weather/base.py)
+    with open("weather/base.py", "r") as f:
+        base_content = f.read()
+    
+    assert ("def __init__(self, event, cache_handler=None):" in base_content or
+            "def __init__(self, event: Dict[str, Any], cache_handler=None)" in base_content), \
+        "Base doesn't accept cache_handler"
     print("✓ Base class accepts cache_handler parameter")
     
     # Check DynamoDB persistence adapter
-    assert "from ask_sdk_dynamodb.adapter import DynamoDbAdapter" in content, "DynamoDbAdapter import not found"
-    assert "persistence_adapter = DynamoDbAdapter" in content, "DynamoDbAdapter not instantiated"
+    assert "from ask_sdk_dynamodb.adapter import DynamoDbAdapter" in lambda_content, "DynamoDbAdapter import not found"
+    assert "persistence_adapter = DynamoDbAdapter" in lambda_content, "DynamoDbAdapter not instantiated"
     print("✓ DynamoDB persistence adapter configured")
     
     print("\n✅ All CacheHandler structure tests passed!")
@@ -89,13 +116,15 @@ def test_cache_key_structure():
     print(f"  Expected PK format: {expected_pk}")
     print(f"  Expected SK: {expected_sk}")
     
-    # Verify the key structure in code
-    with open("lambda_function.py", "r") as f:
+    # Verify the key structure in storage/cache_handler.py
+    with open("storage/cache_handler.py", "r") as f:
         content = f.read()
     
     # Check _make_key method
-    assert '"pk": f"{cache_type}{cache_id}"' in content, "PK format incorrect"
-    assert '"sk": "data"' in content, "SK format incorrect"
+    assert ('"pk": f"{cache_type}{cache_id}"' in content or
+            "'pk': f\"{cache_type}{cache_id}\"" in content), "PK format incorrect"
+    assert ('"sk": "data"' in content or
+            "'sk': \"data\"" in content), "SK format incorrect"
     print("✓ Cache key structure is correct")
     
     print("\n✅ Cache key structure tests passed!")
@@ -105,7 +134,8 @@ def test_single_table_design():
     """Verify single table design is implemented"""
     print("\nTesting single table design...")
     
-    with open("lambda_function.py", "r") as f:
+    # Check storage/cache_handler.py
+    with open("storage/cache_handler.py", "r") as f:
         content = f.read()
     
     # Check that old table references are removed
@@ -116,12 +146,15 @@ def test_single_table_design():
     print("✓ Old separate table references removed")
     
     # Check that single table is used
-    assert "self.table = DDB.Table(table_name)" in content, "Single table not used in CacheHandler"
+    assert ("self.table = self.ddb.Table(table_name)" in content or
+            "self.table = DDB.Table(table_name)" in content), "Single table not used in CacheHandler"
     print("✓ Single table design implemented")
     
     # Check that cache_data is used
-    assert '"cache_data": cache_data' in content, "cache_data not stored"
-    assert 'item.get("cache_data"' in content, "cache_data not retrieved"
+    assert ('"cache_data": cache_data' in content or
+            "'cache_data': cache_data" in content), "cache_data not stored"
+    assert ('item.get("cache_data"' in content or
+            "item.get('cache_data'" in content), "cache_data not retrieved"
     print("✓ Cache data stored in cache_data attribute")
     
     print("\n✅ Single table design tests passed!")

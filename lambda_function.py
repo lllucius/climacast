@@ -79,10 +79,6 @@ class Config:
         Access configuration values:
             app_id = Config.APP_ID
             table_name = Config.DYNAMODB_TABLE_NAME
-            
-        For backward compatibility, global variables are maintained:
-            APPID = Config.APP_ID
-            TABLE_NAME = Config.DYNAMODB_TABLE_NAME
     """
     
     # Application identifiers
@@ -104,14 +100,33 @@ class Config:
     HTTP_RETRY_TOTAL: int = 3
     HTTP_RETRY_STATUS_CODES: List[int] = [429, 500, 502, 503, 504]
     HTTP_TIMEOUT: int = 30
+    
+    @classmethod
+    def validate(cls):
+        """
+        Validate required configuration values.
+        
+        Raises:
+            ValueError: If required configuration is missing or invalid
+        """
+        # Check for required values in production (not in test mode)
+        is_test_mode = os.environ.get('CLIMACAST_TEST_MODE', '').lower() == 'true'
+        
+        if not is_test_mode:
+            if not cls.APP_ID or cls.APP_ID == "amzn1.ask.skill.test":
+                logger.warning("APP_ID not set or using test value")
+            
+            if not cls.HERE_API_KEY:
+                logger.warning("HERE_API_KEY not set - geocoding will not work")
+            
+            if not cls.DYNAMODB_TABLE_NAME:
+                raise ValueError("DYNAMODB_TABLE_NAME must be set")
+            
+            if not cls.DYNAMODB_REGION:
+                raise ValueError("DYNAMODB_REGION must be set")
+        
+        logger.info("Configuration validated successfully")
 
-
-# Maintain backward compatibility with existing code
-EVTID = Config.EVENT_ID
-APPID = Config.APP_ID
-HERE_API_KEY = Config.HERE_API_KEY
-DUID = Config.DATA_UPDATE_ID
-TABLE_NAME = Config.DYNAMODB_TABLE_NAME
 
 # Compiled normalization regex (compiled on first use) - DEPRECATED: moved to text_normalizer
 NORMALIZE = None
@@ -174,7 +189,8 @@ def get_cache_handler() -> CacheHandler:
     return _cache_handler_instance
 
 
-# Backward compatibility - these will be removed in Phase 4
+# Backward compatibility - call factory functions to initialize singletons at module load
+# These maintain the same interface for existing code while using the factory pattern
 HTTPS = get_https_client()
 GEOLOCATOR = get_geolocator()
 CACHE_HANDLER = get_cache_handler()
@@ -333,7 +349,7 @@ class Skill(Base):
     def initialize(self):
         """Initialize skill state from handler_input"""
         # Amazon says to verify our application id
-        if self.session.application.application_id != APPID:
+        if self.session.application.application_id != Config.APP_ID:
             raise ValueError("Invoked from unknown application.")
 
         # Retrieve the default location info
@@ -1307,7 +1323,7 @@ from ask_sdk_dynamodb.adapter import DynamoDbAdapter
 
 # Create DynamoDB persistence adapter for user settings
 persistence_adapter = DynamoDbAdapter(
-    table_name=TABLE_NAME,
+    table_name=Config.DYNAMODB_TABLE_NAME,
     create_table=False,  # Table should already exist or be created by Alexa
     partition_key_name="id",
     attribute_name="attributes"
