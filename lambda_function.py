@@ -10,9 +10,11 @@
 # =============================================================================
 
 import json
+import logging
 import os
 import re
 import requests
+from typing import Dict, List, Optional, Any, Union
 #from aniso8601 import parse_duration
 from aniso8601.duration import parse_duration
 from boto3 import resource as resource
@@ -35,6 +37,10 @@ from ask_sdk_core.serialize import DefaultSerializer
 
 from geolocator import Geolocator
 from constants import *
+
+# Configure logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 """
     Anything defined here will persist for the duration of the lambda
@@ -91,7 +97,7 @@ class CacheHandler(object):
     STATION_PREFIX = "station#"
     ZONE_PREFIX = "zone#"
     
-    def __init__(self, table_name):
+    def __init__(self, table_name: str) -> None:
         """
         Initialize the cache handler with the Alexa-provided table.
         
@@ -101,14 +107,14 @@ class CacheHandler(object):
         self.ddb = resource("dynamodb", region_name=os.environ.get("DYNAMODB_PERSISTENCE_REGION"))
         self.table = self.ddb.Table(os.environ.get("DYNAMODB_PERSISTENCE_TABLE_NAME"))
     
-    def _make_key(self, cache_type, cache_id):
+    def _make_key(self, cache_type: str, cache_id: str) -> Dict[str, str]:
         """Create a composite key for the cache item."""
         return {
             "pk": f"{cache_type}{cache_id}",
             "sk": "data"
         }
     
-    def get(self, cache_type, cache_id):
+    def get(self, cache_type: str, cache_id: str) -> Optional[Dict[str, Any]]:
         """
         Retrieve an item from the cache.
         
@@ -130,10 +136,10 @@ class CacheHandler(object):
             # Return the cache_data dict
             return item.get("cache_data", {})
         except Exception as e:
-            print(f"Error getting cache item {cache_type}{cache_id}: {e}")
+            logger.error(f"Error getting cache item {cache_type}{cache_id}: {e}")
             return None
     
-    def put(self, cache_type, cache_id, cache_data, ttl_days=35):
+    def put(self, cache_type: str, cache_id: str, cache_data: Dict[str, Any], ttl_days: int = 35) -> None:
         """
         Store an item in the cache.
         
@@ -152,25 +158,25 @@ class CacheHandler(object):
             
             self.table.put_item(Item=item)
         except Exception as e:
-            print(f"Error putting cache item {cache_type}{cache_id}: {e}")
+            logger.error(f"Error putting cache item {cache_type}{cache_id}: {e}")
     
-    def get_location(self, location_id):
+    def get_location(self, location_id: str) -> Optional[Dict[str, Any]]:
         """Get location cache data."""
         return self.get(self.LOCATION_PREFIX, location_id)
     
-    def put_location(self, location_id, location_data, ttl_days=35):
+    def put_location(self, location_id: str, location_data: Dict[str, Any], ttl_days: int = 35) -> None:
         """Store location cache data."""
         self.put(self.LOCATION_PREFIX, location_id, location_data, ttl_days)
     
-    def get_station(self, station_id):
+    def get_station(self, station_id: str) -> Optional[Dict[str, Any]]:
         """Get station cache data."""
         return self.get(self.STATION_PREFIX, station_id)
     
-    def put_station(self, station_id, station_data, ttl_days=35):
+    def put_station(self, station_id: str, station_data: Dict[str, Any], ttl_days: int = 35) -> None:
         """Store station cache data."""
         self.put(self.STATION_PREFIX, station_id, station_data, ttl_days)
     
-    def get_zone(self, zone_id):
+    def get_zone(self, zone_id: str) -> Optional[Dict[str, Any]]:
         """Get zone cache data."""
         return self.get(self.ZONE_PREFIX, zone_id)
     
@@ -192,39 +198,39 @@ class SettingsHandler(object):
     This allows different backends for user settings storage.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the settings handler."""
         pass
     
-    def get_location(self):
+    def get_location(self) -> Optional[str]:
         """Get user's default location."""
         raise NotImplementedError("Subclass must implement get_location()")
     
-    def set_location(self, location):
+    def set_location(self, location: str) -> None:
         """Set user's default location."""
         raise NotImplementedError("Subclass must implement set_location()")
     
-    def get_rate(self):
+    def get_rate(self) -> int:
         """Get user's speech rate setting."""
         raise NotImplementedError("Subclass must implement get_rate()")
     
-    def set_rate(self, rate):
+    def set_rate(self, rate: int) -> None:
         """Set user's speech rate setting."""
         raise NotImplementedError("Subclass must implement set_rate()")
     
-    def get_pitch(self):
+    def get_pitch(self) -> int:
         """Get user's speech pitch setting."""
         raise NotImplementedError("Subclass must implement get_pitch()")
     
-    def set_pitch(self, pitch):
+    def set_pitch(self, pitch: int) -> None:
         """Set user's speech pitch setting."""
         raise NotImplementedError("Subclass must implement set_pitch()")
     
-    def get_metrics(self):
+    def get_metrics(self) -> List[str]:
         """Get user's custom metrics list."""
         raise NotImplementedError("Subclass must implement get_metrics()")
     
-    def set_metrics(self, metrics):
+    def set_metrics(self, metrics: List[str]) -> None:
         """Set user's custom metrics list."""
         raise NotImplementedError("Subclass must implement set_metrics()")
 
@@ -236,7 +242,7 @@ class AlexaSettingsHandler(SettingsHandler):
     via the ASK SDK's persistent attributes.
     """
     
-    def __init__(self, handler_input):
+    def __init__(self, handler_input: HandlerInput) -> None:
         """
         Initialize with Alexa handler input for accessing attributes_manager.
         
@@ -248,7 +254,7 @@ class AlexaSettingsHandler(SettingsHandler):
         self.attr_mgr = handler_input.attributes_manager
         self._load_settings()
     
-    def _get_default_metrics(self):
+    def _get_default_metrics(self) -> List[str]:
         """Get default metrics list"""
         metrics = {}
         for name, value in METRICS.values():
@@ -259,7 +265,7 @@ class AlexaSettingsHandler(SettingsHandler):
             result.append(metrics[i])
         return result
     
-    def _load_settings(self):
+    def _load_settings(self) -> None:
         """Load settings from persistent attributes"""
         persistent_attrs = self.attr_mgr.persistent_attributes
         
@@ -269,7 +275,7 @@ class AlexaSettingsHandler(SettingsHandler):
         self._pitch = persistent_attrs.get("pitch", 100)
         self._metrics = persistent_attrs.get("metrics", self._get_default_metrics())
     
-    def _save_settings(self):
+    def _save_settings(self) -> None:
         """Save settings to persistent attributes"""
         persistent_attrs = self.attr_mgr.persistent_attributes
         
@@ -280,38 +286,38 @@ class AlexaSettingsHandler(SettingsHandler):
         
         self.attr_mgr.save_persistent_attributes()
     
-    def get_location(self):
+    def get_location(self) -> Optional[str]:
         """Get user's default location."""
         return self._location
     
-    def set_location(self, location):
+    def set_location(self, location: str) -> None:
         """Set user's default location."""
         self._location = location
         self._save_settings()
     
-    def get_rate(self):
+    def get_rate(self) -> int:
         """Get user's speech rate setting."""
         return self._rate
     
-    def set_rate(self, rate):
+    def set_rate(self, rate: int) -> None:
         """Set user's speech rate setting."""
         self._rate = rate
         self._save_settings()
     
-    def get_pitch(self):
+    def get_pitch(self) -> int:
         """Get user's speech pitch setting."""
         return self._pitch
     
-    def set_pitch(self, pitch):
+    def set_pitch(self, pitch: int) -> None:
         """Set user's speech pitch setting."""
         self._pitch = pitch
         self._save_settings()
     
-    def get_metrics(self):
+    def get_metrics(self) -> List[str]:
         """Get user's custom metrics list."""
         return self._metrics
     
-    def set_metrics(self, metrics):
+    def set_metrics(self, metrics: List[str]) -> None:
         """Set user's custom metrics list."""
         self._metrics = metrics
         self._save_settings()
@@ -430,11 +436,11 @@ class LocalJsonCacheHandler(object):
         """Store station cache data."""
         self.put(self.STATION_PREFIX, station_id, station_data, ttl_days)
     
-    def get_zone(self, zone_id):
+    def get_zone(self, zone_id: str) -> Optional[Dict[str, Any]]:
         """Get zone cache data."""
         return self.get(self.ZONE_PREFIX, zone_id)
     
-    def put_zone(self, zone_id, zone_data, ttl_days=35):
+    def put_zone(self, zone_id: str, zone_data: Dict[str, Any], ttl_days: int = 35) -> None:
         """Store zone cache data."""
         self.put(self.ZONE_PREFIX, zone_id, zone_data, ttl_days)
 
