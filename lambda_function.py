@@ -1937,13 +1937,13 @@ class Skill(Base):
                 if slot_name in SLOTS:
                     val = slot.value
                     setattr(self.slots, slot_name, val.strip().lower() if val else None)
-                    print("SLOT:", slot_name, getattr(self.slots, slot_name))
+                    logger.info("SLOT: %s = %s", slot_name, getattr(self.slots, slot_name))
                 
-        # Print intent name for debugging
+        # Log intent name for debugging
         if hasattr(self.request, 'intent'):
-            print("INTENT:", self.request.intent.name)
+            logger.info("INTENT: %s", self.request.intent.name)
         else:
-            print("REQUEST:", self.request.object_type)
+            logger.info("REQUEST: %s", self.request.object_type)
 
     def respond(self, text, end=None):
         new = self.session.new
@@ -2822,14 +2822,14 @@ class RequestLogger(AbstractRequestInterceptor):
     """Log the request envelope."""
     
     def process(self, handler_input):
-        print("Request Envelope: {}".format(handler_input.request_envelope))
+        logger.info("Request Envelope: %s", handler_input.request_envelope)
 
 
 class ResponseLogger(AbstractResponseInterceptor):
     """Log the response envelope."""
     
     def process(self, handler_input, response):
-        print("Response: {}".format(response))
+        logger.info("Response: %s", response)
 
 
 # ============================================================================
@@ -2843,7 +2843,7 @@ class AllExceptionHandler(AbstractExceptionHandler):
         return True
     
     def handle(self, handler_input, exception):
-        print("Exception encountered: {}".format(exception))
+        logger.error("Exception encountered: %s", exception)
         
         # Get event-like structure for notify
         session_attr = handler_input.attributes_manager.session_attributes
@@ -2954,7 +2954,7 @@ def lambda_handler(event, context=None):
         pass
     except Exception as e:
         import traceback
-        print("Lambda handler exception: {}".format(traceback.format_exc()))
+        logger.error("Lambda handler exception: %s", traceback.format_exc())
         notify(event, "Exception", traceback.format_exc())
         text = '<say-as interpret-as="interjection">aw man</say-as>' + \
                '<prosody pitch="+25%">' + \
@@ -3001,6 +3001,7 @@ def test_one():
         event["session"]["user"]["userId"] = user_id
         TEST_SETTINGS_HANDLER = LocalJsonSettingsHandler(user_id, ".test_settings")
         
+        # Print output for testing (this is only used in __main__ test mode)
         print(json.dumps(lambda_handler(event), indent=4))
 
 if __name__ == "__main__":
