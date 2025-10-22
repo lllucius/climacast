@@ -14,7 +14,8 @@ Geolocator class for converting location names/zipcodes to coordinates.
 Supports HERE.com geocoding API.
 """
 
-import requests
+import httpx
+from tenacity import retry, stop_after_attempt, retry_if_exception_type, wait_exponential
 
 
 class Geolocator:
@@ -29,12 +30,17 @@ class Geolocator:
         
         Args:
             api_key: HERE.com API key
-            session: Optional requests.Session object to use for HTTP requests
+            session: Optional httpx.Client object to use for HTTP requests
         """
         self.api_key = api_key
-        self.session = session or requests.Session()
+        self.session = session or httpx.Client(timeout=30.0, follow_redirects=True)
         self.base_url = "https://geocode.search.hereapi.com/v1"
     
+    @retry(
+        stop=stop_after_attempt(3),
+        retry=retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
+        wait=wait_exponential(multiplier=1, min=1, max=10)
+    )
     def geocode(self, search):
         """
         Geocode a location string (zipcode, city+state, or county).
@@ -64,8 +70,7 @@ class Geolocator:
         try:
             response = self.session.get(
                 f"{self.base_url}/geocode",
-                params=params,
-                timeout=10
+                params=params
             )
             
             if response.status_code != 200:
