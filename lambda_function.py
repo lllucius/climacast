@@ -490,7 +490,7 @@ class Base(object):
 
         return station
 
-    def get_product(self, product):
+    def get_product(self, product: str) -> Optional[str]:
         """
             Return the text for the given product
         """
@@ -512,7 +512,7 @@ class Base(object):
 
         return text
 
-    def https(self, path, loc="api.weather.gov"):
+    def https(self, path: str, loc: str = "api.weather.gov") -> Optional[Dict[str, Any]]:
         """
             Retrieve the JSON data from the given path and location
         """
@@ -530,7 +530,7 @@ class Base(object):
         
         return json.loads(r.text)
 
-    def to_skys(self, percent, isday):
+    def to_skys(self, percent: Optional[float], isday: bool) -> Optional[str]:
         """
             Convert the sky cover percentage to text
         """
@@ -550,13 +550,13 @@ class Base(object):
 
         return percent
     
-    def to_percent(self, percent):
+    def to_percent(self, percent: Optional[float]) -> Optional[int]:
         """
             Return the given value, if any, as an integer
         """
         return None if percent is None else int(percent)
     
-    def mb_to_in(self, mb):
+    def mb_to_in(self, mb: Optional[float]) -> Optional[str]:
         """
             Convert the given millibar value, if any, to inches
         """
@@ -566,13 +566,13 @@ class Base(object):
             return None
         return None if mb is None else "{:.2f}".format(mb * 0.0295301)
 
-    def pa_to_in(self, pa):
+    def pa_to_in(self, pa: Optional[float]) -> Optional[str]:
         """
             Convert the given pascals, if any, to inches
         """
         return None if pa is None else "{:.2f}".format(pa * 0.000295301)
 
-    def mm_to_in(self, mm, as_text=False):
+    def mm_to_in(self, mm: Optional[float], as_text: bool = False) -> Optional[Union[str, tuple]]:
         """
             Convert the given millimeters, if any, to inches.  If requested,
             further convert inches to words.
@@ -687,7 +687,7 @@ class Base(object):
 
         return int(round(hi))
 
-    def normalize(self, text):
+    def normalize(self, text: str) -> str:
         """
             Tries to identify various text patterns and replaces them
             with easier to hear alternatives
