@@ -37,6 +37,7 @@ from ask_sdk_core.serialize import DefaultSerializer
 
 from utils.geolocator import Geolocator
 from utils.constants import *
+from utils import converters
 from storage.cache_handler import CacheHandler
 from storage.settings_handler import SettingsHandler, AlexaSettingsHandler
 from storage.local_handlers import LocalJsonCacheHandler, LocalJsonSettingsHandler
@@ -317,96 +318,35 @@ class Base(object):
         return json.loads(r.text)
 
     def to_skys(self, percent: Optional[float], isday: bool) -> Optional[str]:
-        """
-            Convert the sky cover percentage to text
-        """
-        if percent is not None:
-            if 0.0 <= percent < 12.5:
-                percent = "sunny" if isday else "clear" 
-            elif 12.5 <= percent < 25.0:
-                percent = "mostly sunny" if isday else "mostly clear"
-            elif 25.0 <= percent < 50.0:
-                percent = "partly sunny" if isday else "partly cloudy"
-            elif 50.0 <= percent < 87.5:
-                percent = "mostly cloudy"
-            elif 87.5 <= percent <= 100.0:
-                percent = "cloudy"
-            else:
-                percent = None
-
-        return percent
+        """Convert the sky cover percentage to text"""
+        return converters.to_skys(percent, isday)
     
     def to_percent(self, percent: Optional[float]) -> Optional[int]:
-        """
-            Return the given value, if any, as an integer
-        """
-        return None if percent is None else int(percent)
+        """Return the given value, if any, as an integer"""
+        return converters.to_percent(percent)
     
     def mb_to_in(self, mb: Optional[float]) -> Optional[str]:
-        """
-            Convert the given millibar value, if any, to inches
-        """
-        # Every so often we get back a value of 900 which seems to be
-        # some sort of "low value".  So, just consider it invalid.
-        if mb == 900:
-            return None
-        return None if mb is None else "{:.2f}".format(mb * 0.0295301)
+        """Convert the given millibar value, if any, to inches"""
+        return converters.mb_to_in(mb)
 
     def pa_to_in(self, pa: Optional[float]) -> Optional[str]:
-        """
-            Convert the given pascals, if any, to inches
-        """
-        return None if pa is None else "{:.2f}".format(pa * 0.000295301)
+        """Convert the given pascals, if any, to inches"""
+        return converters.pa_to_in(pa)
 
     def mm_to_in(self, mm: Optional[float], as_text: bool = False) -> Optional[Union[str, tuple]]:
         """
             Convert the given millimeters, if any, to inches.  If requested,
             further convert inches to words.
         """
-        inches = None if mm is None else "{:.2f}".format(mm * 0.0393701)
-        if not as_text or not inches:
-            return inches
-
-        inches = float(inches)
-        whole = int(inches)
-        frac = inches - whole
-
-        if inches == 0:
-            return inches, "", ""
-
-        if inches < 0.1:
-            amt = "less than a tenth"
-        elif 0.1 <= frac < 0.125:
-            amt = "less than a quarter"
-        elif 0.125 <= frac < 0.375:
-            amt = "a quarter"
-        elif 0.375 <= frac < 0.625:
-            amt = "a half"
-        elif 0.625 <= frac < 0.875:
-            amt = "three quarters"
-        else:
-            whole += 1
-            frac = 0.0
-            amt = "%d" % whole
-
-        if whole == 0:
-            return inches, amt, "of an inch"
-
-        if frac == 0.0:
-            return inches, amt, "inch%s" % "" if whole == 1 else "es"
-
-        return inches, "%d and %s" % (whole, amt), "of an inch"
+        return converters.mm_to_in(mm, as_text)
 
     def c_to_f(self, c):
-        """
-            Convert the given celcius value, if any, to fahrenheit
-        """
-        return None if c is None else "{:.0f}".format(c * 9 / 5 + 32)
+        """Convert the given celsius value, if any, to fahrenheit"""
+        result = converters.c_to_f(c)
+        return None if result is None else "{:.0f}".format(result)
 
     def kph_to_mph(self, kph):
-        """
-            Convert the given kilometers per hour, if any, to miles per hour
-        """
+        """Convert the given kilometers per hour, if any, to miles per hour"""
         return None if kph is None or kph == 0 else "{:.0f}".format(kph * 0.62137119223733)
 
     def mps_to_mph(self, mps):
