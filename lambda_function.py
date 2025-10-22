@@ -179,11 +179,6 @@ HTTPS = get_https_client()
 GEOLOCATOR = get_geolocator()
 CACHE_HANDLER = get_cache_handler()
 
-# Global test handlers (set by test_one() when running tests)
-TEST_MODE = False
-TEST_CACHE_HANDLER = None
-TEST_SETTINGS_HANDLER = None
-
 
 # =============================================================================
 # Notification function
@@ -1045,12 +1040,17 @@ class BaseIntentHandler(AbstractRequestHandler):
     
     def get_skill_helper(self, handler_input):
         """Create and initialize Skill instance from handler_input"""
-        global TEST_MODE, TEST_CACHE_HANDLER, TEST_SETTINGS_HANDLER
+        # Check if running in test mode via environment variable
+        is_test_mode = os.environ.get('CLIMACAST_TEST_MODE', '').lower() == 'true'
         
-        # Use test handlers if in test mode
-        if TEST_MODE and TEST_CACHE_HANDLER and TEST_SETTINGS_HANDLER:
-            cache_handler = TEST_CACHE_HANDLER
-            settings_handler = TEST_SETTINGS_HANDLER
+        if is_test_mode:
+            # Use local JSON handlers for testing
+            cache_handler = LocalJsonCacheHandler(".test_cache")
+            
+            # Extract user_id for settings handler
+            user_id = handler_input.request_envelope.session.user.user_id
+            settings_handler = LocalJsonSettingsHandler(user_id, ".test_settings")
+            
             # Create Skill instance with test handlers
             skill = Skill(handler_input, cache_handler, settings_handler)
         else:
@@ -1059,7 +1059,7 @@ class BaseIntentHandler(AbstractRequestHandler):
             settings_handler = AlexaSettingsHandler(handler_input)
             
             # Create Skill instance with modern ASK SDK objects, cache handler, and settings handler
-            skill = Skill(handler_input, CACHE_HANDLER, settings_handler)
+            skill = Skill(handler_input, get_cache_handler(), settings_handler)
         
         # Initialize skill (loads location, slots, etc.)
         skill.initialize()
@@ -1408,21 +1408,18 @@ def lambda_handler(event, context=None):
 
 
 def test_one():
-    global TEST_MODE, TEST_CACHE_HANDLER, TEST_SETTINGS_HANDLER
-    
-    # Enable test mode and set up local JSON handlers
-    TEST_MODE = True
-    TEST_CACHE_HANDLER = LocalJsonCacheHandler(".test_cache")
+    """Test function for local development - sets up test mode via environment."""
+    # Enable test mode via environment variable
+    os.environ['CLIMACAST_TEST_MODE'] = 'true'
     
     with open(sys.argv[1] if len(sys.argv) > 1 else "test.json") as f:
         event = json.load(f)
         event["session"]["application"]["applicationId"] = "amzn1.ask.skill.test"
         event["session"]["testing"] = True
         
-        # Extract user_id from the event and create settings handler
+        # Ensure user_id is set
         user_id = event.get("session", {}).get("user", {}).get("userId", "testuser")
         event["session"]["user"]["userId"] = user_id
-        TEST_SETTINGS_HANDLER = LocalJsonSettingsHandler(user_id, ".test_settings")
         
         # Print output for testing (this is only used in __main__ test mode)
         print(json.dumps(lambda_handler(event), indent=4))
