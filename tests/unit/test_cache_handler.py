@@ -64,10 +64,9 @@ def test_cache_handler_structure():
             "def put_zone(self, zone_id: str, zone_data" in content), "put_zone method not found"
     print("✓ All cache methods defined")
     
-    # Check lambda_function.py for global cache handler using factory function
-    assert ("CACHE_HANDLER = get_cache_handler()" in lambda_content or
-            "CACHE_HANDLER = CacheHandler(" in lambda_content), "Global CACHE_HANDLER not found"
-    print("✓ Global CACHE_HANDLER instance created")
+    # Check lambda_function.py for cache handler factory function
+    assert "def get_cache_handler()" in lambda_content, "get_cache_handler factory function not found"
+    print("✓ Cache handler factory function exists")
     
     # Check that User class is removed
     assert "class User(Base):" not in lambda_content, "User class still exists (should be removed)"

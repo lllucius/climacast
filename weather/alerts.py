@@ -81,8 +81,3 @@ class Alert(WeatherBase):
     def instruction(self):
         """Alert instructions."""
         return self.data.get("instruction")
-
-
-# Backward compatibility aliases
-Alerts.__name__ = "Alerts"
-Alert.__name__ = "Alert"

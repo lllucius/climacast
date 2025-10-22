@@ -96,7 +96,3 @@ class Observations(WeatherBase):
         """Current heat index."""
         hi = self.data.get("heatIndex", {}).get("value")
         return self.c_to_f(hi) if hi else None
-
-
-# Backward compatibility alias
-Observations.__name__ = "Observations"

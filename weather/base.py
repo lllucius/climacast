@@ -23,7 +23,7 @@ import httpx
 from tenacity import retry, stop_after_attempt, retry_if_exception_type, wait_exponential
 
 from utils import converters
-from utils.text_normalizer import normalize as normalize_text
+from utils.text_normalizer import TextNormalizer
 from utils.constants import ANGLES
 
 
@@ -53,6 +53,7 @@ class WeatherBase(object):
         """
         self.event = event
         self.cache_handler = cache_handler
+        self._text_normalizer = TextNormalizer()
 
     def get_zone(self, zoneId: str, zoneType: str) -> Dict[str, Any]:
         """
@@ -334,16 +335,12 @@ class WeatherBase(object):
         """
         Normalize text for speech output.
         
-        This method delegates to the utils.text_normalizer module.
+        This method uses the TextNormalizer class instance.
         """
-        return normalize_text(text)
+        return self._text_normalizer.normalize(text)
 
     def is_day(self, when):
         """
         Determine if given time is during the day
         """
         return True if 6 <= when.hour < 18 else False
-
-
-# Export for backward compatibility
-Base = WeatherBase
