@@ -51,10 +51,40 @@ REVISION = 0
 
 load_dotenv()
 
-EVTID = os.environ.get("event_id", "")
-APPID = os.environ.get("app_id", "amzn1.ask.skill.test")
-HERE_API_KEY = os.environ.get("here_api_key", "")
-DUID = os.environ.get("dataupdate_id", "amzn1.ask.data.update")
+
+class Config:
+    """
+    Configuration class for managing environment variables and application settings.
+    Provides a centralized location for all configuration values.
+    """
+    
+    # Application identifiers
+    EVENT_ID: str = os.environ.get("event_id", "")
+    APP_ID: str = os.environ.get("app_id", "amzn1.ask.skill.test")
+    DATA_UPDATE_ID: str = os.environ.get("dataupdate_id", "amzn1.ask.data.update")
+    
+    # API keys
+    HERE_API_KEY: str = os.environ.get("here_api_key", "")
+    
+    # DynamoDB settings
+    DYNAMODB_TABLE_NAME: str = os.environ.get("DYNAMODB_PERSISTENCE_TABLE_NAME", f"ask-{os.environ.get('app_id', 'test')}")
+    DYNAMODB_REGION: str = os.environ.get("DYNAMODB_PERSISTENCE_REGION", "us-east-1")
+    
+    # Cache settings
+    DEFAULT_CACHE_TTL_DAYS: int = 35
+    
+    # HTTP retry settings
+    HTTP_RETRY_TOTAL: int = 3
+    HTTP_RETRY_STATUS_CODES: List[int] = [429, 500, 502, 503, 504]
+    HTTP_RETRY_METHODS: List[str] = ["HEAD", "GET", "OPTIONS"]
+
+
+# Maintain backward compatibility with existing code
+EVTID = Config.EVENT_ID
+APPID = Config.APP_ID
+HERE_API_KEY = Config.HERE_API_KEY
+DUID = Config.DATA_UPDATE_ID
+TABLE_NAME = Config.DYNAMODB_TABLE_NAME
 
 # Compiled normalization regex (compiled on first use)
 NORMALIZE = None
@@ -62,15 +92,15 @@ NORMALIZE = None
 # Use allowed_methods for newer urllib3, fallback to method_whitelist for older versions
 try:
     retry_strategy = Retry(
-        total=3,
-        status_forcelist=[429, 500, 502, 503, 504],
-        allowed_methods=["HEAD", "GET", "OPTIONS"]
+        total=Config.HTTP_RETRY_TOTAL,
+        status_forcelist=Config.HTTP_RETRY_STATUS_CODES,
+        allowed_methods=Config.HTTP_RETRY_METHODS
     )
 except TypeError:
     retry_strategy = Retry(
-        total=3,
-        status_forcelist=[429, 500, 502, 503, 504],
-        method_whitelist=["HEAD", "GET", "OPTIONS"]
+        total=Config.HTTP_RETRY_TOTAL,
+        status_forcelist=Config.HTTP_RETRY_STATUS_CODES,
+        method_whitelist=Config.HTTP_RETRY_METHODS
     )
 adapter = HTTPAdapter(max_retries=retry_strategy)
 
@@ -104,8 +134,8 @@ class CacheHandler(object):
         Args:
             table_name: Name of the DynamoDB table to use
         """
-        self.ddb = resource("dynamodb", region_name=os.environ.get("DYNAMODB_PERSISTENCE_REGION"))
-        self.table = self.ddb.Table(os.environ.get("DYNAMODB_PERSISTENCE_TABLE_NAME"))
+        self.ddb = resource("dynamodb", region_name=Config.DYNAMODB_REGION)
+        self.table = self.ddb.Table(Config.DYNAMODB_TABLE_NAME)
     
     def _make_key(self, cache_type: str, cache_id: str) -> Dict[str, str]:
         """Create a composite key for the cache item."""
