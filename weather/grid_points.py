@@ -394,7 +394,3 @@ class GridPoints(WeatherBase):
                     d.append(txt)
 
         return ", then ".join(d) if d else ""
-
-
-# Backward compatibility alias
-GridPoints.__name__ = "GridPoints"

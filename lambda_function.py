@@ -38,11 +38,10 @@ from utils.geolocator import Geolocator
 from utils.constants import *
 from utils.constants import get_default_metrics
 from utils import converters
-from utils.text_normalizer import normalize as normalize_text
 from storage.cache_handler import CacheHandler
 from storage.settings_handler import SettingsHandler, AlexaSettingsHandler
 from storage.local_handlers import LocalJsonCacheHandler, LocalJsonSettingsHandler
-from weather.base import WeatherBase as Base
+from weather.base import WeatherBase
 from weather.grid_points import GridPoints
 from weather.observations import Observations
 from weather.alerts import Alerts, Alert
@@ -128,9 +127,6 @@ class Config:
         logger.info("Configuration validated successfully")
 
 
-# Compiled normalization regex (compiled on first use) - DEPRECATED: moved to text_normalizer
-NORMALIZE = None
-
 # =============================================================================
 # Factory Functions for Singleton Instances
 # =============================================================================
@@ -189,13 +185,6 @@ def get_cache_handler() -> CacheHandler:
     return _cache_handler_instance
 
 
-# Backward compatibility - call factory functions to initialize singletons at module load
-# These maintain the same interface for existing code while using the factory pattern
-HTTPS = get_https_client()
-GEOLOCATOR = get_geolocator()
-CACHE_HANDLER = get_cache_handler()
-
-
 # =============================================================================
 # Notification function
 # =============================================================================
@@ -244,7 +233,7 @@ def notify(event, sub, msg=None):
 
 # Location class now imported from weather.location module
 
-class Skill(Base):
+class Skill(WeatherBase):
     def __init__(self, handler_input, cache_handler=None, settings_handler=None):
         # Create minimal event dict for Base class (used for notifications)
         request_envelope = handler_input.request_envelope

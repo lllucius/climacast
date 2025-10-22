@@ -212,7 +212,6 @@ class Location(WeatherBase):
     def mapquest(self, search):
         """
         Geocode a location using the Geolocator class.
-        This method is kept for backward compatibility but now uses HERE.com API.
         
         Args:
             search: Location string to geocode
@@ -295,7 +294,3 @@ class Location(WeatherBase):
     def tz(self):
         """Timezone object."""
         return tz.gettz(self.loc["timeZone"])
-
-
-# Backward compatibility alias
-Location.__name__ = "Location"

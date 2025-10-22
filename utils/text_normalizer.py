@@ -214,20 +214,3 @@ class TextNormalizer:
             if direction[1] == value:
                 return direction[0]
         return value
-
-
-# Global instance for backward compatibility
-_normalizer = TextNormalizer()
-
-
-def normalize(text: str) -> str:
-    """
-    Normalize text for speech output (convenience function).
-    
-    Args:
-        text: Input text to normalize
-        
-    Returns:
-        Normalized text in lowercase
-    """
-    return _normalizer.normalize(text)
