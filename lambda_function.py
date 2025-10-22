@@ -39,6 +39,7 @@ from utils.geolocator import Geolocator
 from utils.constants import *
 from utils.constants import get_default_metrics
 from utils import converters
+from utils.text_normalizer import normalize as normalize_text
 from storage.cache_handler import CacheHandler
 from storage.settings_handler import SettingsHandler, AlexaSettingsHandler
 from storage.local_handlers import LocalJsonCacheHandler, LocalJsonSettingsHandler
@@ -108,7 +109,7 @@ HERE_API_KEY = Config.HERE_API_KEY
 DUID = Config.DATA_UPDATE_ID
 TABLE_NAME = Config.DYNAMODB_TABLE_NAME
 
-# Compiled normalization regex (compiled on first use)
+# Compiled normalization regex (compiled on first use) - DEPRECATED: moved to text_normalizer
 NORMALIZE = None
 
 # Use allowed_methods for newer urllib3, fallback to method_whitelist for older versions
@@ -416,92 +417,11 @@ class Base(object):
 
     def normalize(self, text: str) -> str:
         """
-            Tries to identify various text patterns and replaces them
-            with easier to hear alternatives
+        Normalize text for speech output.
+        
+        This method delegates to the utils.text_normalizer module.
         """
-        #print("TEXT", text)
-        # Compile (and save) all of the regular expressions
-        global NORMALIZE
-        if NORMALIZE is None:
-            NORMALIZE = re.compile("(" + "|".join(NORMALIZE_RE) + ")", re.IGNORECASE)
-
-        # Iterate through the matches found in the text
-        out = ""
-        last = 0
-        text = text.replace("\n", " ")
-        for match in NORMALIZE.finditer(text):
-            # Collect the leading text fragment
-            #print("'" + text[last:match.start()] + "'")
-            out += text[last:match.start()]
-
-            # Process the matched groups (there should only be 1)
-            last = match.end()
-            for group in match.groupdict().items():
-                value = group[1]
-                if value is None:
-                    continue
-                
-                #print("N", group[0], "V", group[1])
-                name = group[0]
-
-                # Convert a state abbreviation to the full name, with the exception
-                # IN, NE, and OR since they can't be distinguished from normal text.
-                # And DC since we just want to leave that as-is.
-                if name == "st":
-                    try:
-                        st = value.lower()
-                        if st in "in ne or dc":
-                            out += value
-                        else:
-                            out += STATES[STATES.index(st) - 1]
-                    except:
-                        out += value
-
-                # Substitute full text for abbreviations
-                elif name == "sub":
-                    out += {"ft": "feet",
-                            "nws": "national weather service",
-                            "mph": "miles per hour",
-                            "pt": "point",
-                            "pt.": "point"}[value.lower()]
-
-                # Convert nautical miles
-                elif name == "nm":
-                    out += value[:-2] + " nautical miles"
-
-                # Convert knots
-                elif name == "kt":
-                    out += value[:-2] + " knots"
-
-                # Convert AM/PM and correct the time format so it speaks correctly
-                elif name == "meridian":
-                    time = value[:-2].strip()
-                    if len(time) > 2:
-                        time = time[:-2] + ":" + time[-2:]
-                    out += time + " " + ".".join(list(value[-2:])) + "."
-
-                # Ensure time zone identifiers are abbreviations so they speak properly
-                elif name == "tz":
-                    out += ".".join(list(value)) + "."
-
-                # Just ignore it so it will be removed from the text
-                elif name == "ign":
-                    pass
-
-                # Convert wind direction abbreviations to full text
-                elif name == "wind":
-                    value = value.upper()
-                    for dir in ANGLES:
-                        if dir[1] == value:
-                            value = dir[0]
-                    out += value
-
-                # Change -1|1 degrees to -1|1 degree
-                elif name == "deg":
-                    out += value + " degree"
-
-        # Tack on the final fragment and return
-        return (out + text[last:]).lower()
+        return normalize_text(text)
 
     def is_day(self, when):
         """
