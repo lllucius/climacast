@@ -57,6 +57,23 @@ class Config:
     """
     Configuration class for managing environment variables and application settings.
     Provides a centralized location for all configuration values.
+    
+    Environment Variables:
+        event_id: Event identifier for notifications
+        app_id: Alexa skill application ID (default: amzn1.ask.skill.test)
+        dataupdate_id: Data update identifier (default: amzn1.ask.data.update)
+        here_api_key: HERE.com API key for geocoding
+        DYNAMODB_PERSISTENCE_TABLE_NAME: DynamoDB table name (default: ask-{app_id})
+        DYNAMODB_PERSISTENCE_REGION: AWS region (default: us-east-1)
+    
+    Example:
+        Access configuration values:
+            app_id = Config.APP_ID
+            table_name = Config.DYNAMODB_TABLE_NAME
+            
+        For backward compatibility, global variables are maintained:
+            APPID = Config.APP_ID
+            TABLE_NAME = Config.DYNAMODB_TABLE_NAME
     """
     
     # Application identifiers
