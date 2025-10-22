@@ -1,0 +1,19 @@
+# AWS SDK and Alexa Skills Kit
+boto3>=1.28.0
+ask-sdk-core>=1.18.0
+ask-sdk-dynamodb-persistence-adapter>=1.18.0
+
+# Date/time handling
+python-dateutil>=2.8.2
+aniso8601>=9.0.1
+
+# HTTP client
+requests>=2.31.0
+
+# Configuration
+python-dotenv>=1.0.0
+
+# Development and testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.0

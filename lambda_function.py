@@ -10,9 +10,11 @@
 # =============================================================================
 
 import json
+import logging
 import os
 import re
 import requests
+from typing import Dict, List, Optional, Any, Union
 #from aniso8601 import parse_duration
 from aniso8601.duration import parse_duration
 from boto3 import resource as resource
@@ -34,6 +36,11 @@ from ask_sdk_model.ui import SimpleCard
 from ask_sdk_core.serialize import DefaultSerializer
 
 from geolocator import Geolocator
+from constants import *
+
+# Configure logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 """
     Anything defined here will persist for the duration of the lambda
@@ -44,336 +51,62 @@ REVISION = 0
 
 load_dotenv()
 
-EVTID = os.environ.get("event_id", "")
-APPID = os.environ.get("app_id", "amzn1.ask.skill.test")
-HERE_API_KEY = os.environ.get("here_api_key", "")
-DUID = os.environ.get("dataupdate_id", "amzn1.ask.data.update")
+
+class Config:
+    """
+    Configuration class for managing environment variables and application settings.
+    Provides a centralized location for all configuration values.
+    """
+    
+    # Application identifiers
+    EVENT_ID: str = os.environ.get("event_id", "")
+    APP_ID: str = os.environ.get("app_id", "amzn1.ask.skill.test")
+    DATA_UPDATE_ID: str = os.environ.get("dataupdate_id", "amzn1.ask.data.update")
+    
+    # API keys
+    HERE_API_KEY: str = os.environ.get("here_api_key", "")
+    
+    # DynamoDB settings
+    DYNAMODB_TABLE_NAME: str = os.environ.get("DYNAMODB_PERSISTENCE_TABLE_NAME", f"ask-{os.environ.get('app_id', 'test')}")
+    DYNAMODB_REGION: str = os.environ.get("DYNAMODB_PERSISTENCE_REGION", "us-east-1")
+    
+    # Cache settings
+    DEFAULT_CACHE_TTL_DAYS: int = 35
+    
+    # HTTP retry settings
+    HTTP_RETRY_TOTAL: int = 3
+    HTTP_RETRY_STATUS_CODES: List[int] = [429, 500, 502, 503, 504]
+    HTTP_RETRY_METHODS: List[str] = ["HEAD", "GET", "OPTIONS"]
 
 
+# Maintain backward compatibility with existing code
+EVTID = Config.EVENT_ID
+APPID = Config.APP_ID
+HERE_API_KEY = Config.HERE_API_KEY
+DUID = Config.DATA_UPDATE_ID
+TABLE_NAME = Config.DYNAMODB_TABLE_NAME
+
+# Compiled normalization regex (compiled on first use)
 NORMALIZE = None
-NORMALIZE_RE = [r"(?P<meridian>\d+\s*(am|pm))",
-                r"(?P<deg>\s(1|-1))\s*degrees",
-                r"(?P<ign>[A-Z][A-Z][CZ]\d\d\d.*?/.*?/)",
-                r"(?P<nm>\d+\s*(nm))(?=\s|\W|$)",
-                r"(?P<kt>\d+\s*(kt))(?=\s|\W|$)",
-                r"(?P<tz>(?<=\s|\.)(hadt|hast|akdt|akst|pdt|pst|mdt|mst|cdt|cst|edt|est))(?=\s|\W|$)",
-                r"(?P<sub>(?<=\s|\.)(ft|mph|nws|pt\.|pt))(?=\s|\W|$)",
-                r"(?P<wind>(?<=\s|\.)(n|nne|ne|ene|e|ese|se|sse|s|ssw|sw|wsw|w|wnw|nw|nnw))(?=\s|$)",
-                r"(?P<st>(?<=\s|\.)[A-Z][A-Z])(?=\s|\W|$)"]
-
-SLOTS = ["day",
-         "leadin",
-         "location",
-         "metric",
-         "month",
-         "percent",
-         "quarter",
-         "setting",
-         "when_abs",
-         "when_any",
-         "when_pos",
-         "zip_conn",
-         "zipcode"]
-
-QUARTERS = ["morning",
-            "afternoon",
-            "evening",
-            "overnight",
-            "tonight",
-            "night"]
-
-DAYS = ["monday",
-        "tuesday",
-        "wednesday",
-        "thursday",
-        "friday",
-        "saturday",
-        "sunday"]
-
-MONTH_DAYS_XLATE = {"1st": "first",
-                    "2nd": "second",
-                    "3rd": "third",
-                    "4th": "fourth",
-                    "5th": "fifth",
-                    "6th": "sixth",
-                    "7th": "seventh",
-                    "8th": "eighth",
-                    "9th": "ninth",
-                    "10th": "tenth",
-                    "11th": "eleventh",
-                    "12th": "twelfth",
-                    "13th": "thirteenth",
-                    "14th": "fourteenth",
-                    "15th": "fifteenth",
-                    "16th": "sixteenth",
-                    "17th": "seventeenth",
-                    "18th": "eighteenth",
-                    "19th": "nineteenth",
-                    "20th": "twentieth",
-                    "21st": "twenty first",
-                    "22nd": "twenty second",
-                    "23rd": "twenty third",
-                    "24th": "twenty fourth",
-                    "25th": "twenty fifth",
-                    "26th": "twenty sixth",
-                    "27th": "twenty seventh",
-                    "28th": "twenty eighth",
-                    "29th": "twenty ninth",
-                    "30th": "thirtieth",
-                    "31st": "thirty first",
-                    "11st": "eleventh",
-                    "13rd": "thirteenth",
-                    "20 second": "twenty second"};
-
-MONTH_DAYS = ["first",
-              "second",
-              "third",
-              "fourth",
-              "fifth",
-              "sixth",
-              "seventh",
-              "eighth",
-              "ninth",
-              "tenth",
-              "eleventh",
-              "twelfth",
-              "thirteenth",
-              "fourteenth",
-              "fifteenth",
-              "sixteenth",
-              "seventeenth",
-              "eighteenth",
-              "nineteenth",
-              "twentieth",
-              "twenty first",
-              "twenty second",
-              "twenty third",
-              "twenty fourth",
-              "twenty fifth",
-              "twenty sixth",
-              "twenty seventh",
-              "twenty eighth",
-              "twenty ninth",
-              "thirtieth",
-              "thirty first"]
- 
-MONTH_NAMES = ["january",
-               "february",
-               "march",
-               "april",
-               "may",
-               "june",
-               "july",
-               "august",
-               "september",
-               "october",
-               "november",
-               "december"]
-
-METRICS = {"summary": ["summary", 1],
-           "temp": ["temperature", 2],
-           "temperature": ["temperature", 2],
-           "wind chill": ["temperature", 2],
-           "heat index": ["temperature", 2],
-           "precipitation": ["precipitation", 3],
-           "chance of rain": ["precipitation", 3],
-           "chance of snow": ["precipitation", 3],
-           "rain chance": ["precipitation", 3],
-           "snow chance": ["precipitation", 3],
-           "skys": ["skys", 4],
-           "wind": ["wind", 5],
-           "barometric pressure": ["barometric pressure", 6],
-           "pressure": ["barometric pressure", 6],
-           "humidity": ["relative humidity", 7],
-           "relative humidity": ["relative humidity", 7],
-           "dewpoint": ["dewpoint", 8],
-           "dew point": ["dewpoint", 8],
-           "weather": ["all", 0],
-           "conditions": ["all", 0],
-           "extended forecast": ["extended forecast", 0],
-           "forecast": ["all", 0],
-           "rainy": ["precipitation", 0],
-           "raining": ["precipitation", 0],
-           "snowy": ["precipitation", 0],
-           "snowing": ["precipitation", 0],
-           "windy": ["wind", 0],
-           "cloudy": ["skys", 0],
-           "overcast": ["skys", 0],
-           "clear": ["skys", 0],
-           "sunny": ["skys", 0],
-           "rain": ["precipitation", 0],
-           "snow": ["precipitation", 0]}
-
-ANGLES = [["north", "N", 11.25],
-          ["north northeast", "NNE", 33.75],
-          ["northeast", "NE", 56.25],
-          ["east northeast", "ENE", 78.75],
-          ["east", "E", 101.25],
-          ["east southeast", "ESE", 123.75],
-          ["southeast", "SE", 146.25],
-          ["south southeast", "SSE", 168.75],
-          ["south", "S", 191.25],
-          ["south southwest", "SSW", 213.75],
-          ["southwest", "SW", 236.25],
-          ["west southwest", "WSW", 258.75],
-          ["west", "W", 281.25],
-          ["west northwest", "WNW", 303.75],
-          ["northwest", "NW", 326.25],
-          ["north northwest", "NNW", 348.75],
-          ["north", "N", 360]]
-
-STATES = ["alabama", "al",
-          "alaska", "ak",
-          "arizona", "az",
-          "arkansas", "ar", 
-          "dc", "dc",
-          "california", "ca",
-          "colorado", "co",
-          "connecticut", "ct",
-          "delaware", "de",
-          "florida", "fl",
-          "georgia", "ga",
-          "hawaii", "hi",
-          "idaho", "id",
-          "illinois", "il",
-          "indiana", "in",
-          "iowa", "ia",
-          "kansas", "ks",
-          "kentucky", "ky",
-          "louisiana", "la",
-          "maine", "me",
-          "maryland", "md",
-          "massachusetts", "ma",
-          "michigan", "mi",
-          "minnesota", "mn",
-          "mississippi", "ms",
-          "missouri", "mo",
-          "montana", "mt",
-          "nebraska", "ne",
-          "nevada", "nv",
-          "new hampshire", "nh",
-          "new jersey", "nj",
-          "new mexico", "nm",
-          "new york", "ny",
-          "north carolina", "nc",
-          "north dakota", "nd",
-          "ohio", "oh",
-          "oklahoma", "ok",
-          "oregon", "or",
-          "pennsylvania", "pa",
-          "peurto rico", "pr",
-          "rhode island", "ri",
-          "south carolina", "sc",
-          "south dakota", "sd",
-          "tennessee", "tn",
-          "texas", "tx",
-          "utah", "ut",
-          "vermont", "vt",
-          "virginia", "va",
-          "washington", "wa",
-          "west virginia", "wv",
-          "wisconsin", "wi",
-          "wyoming", "wy"]
-
-SETTINGS = {"location": "location",
-            "pitch": "pitch",
-            "rate": "rate",
-            "forecast": "forecast"}
-
-TIME_QUARTERS = {0: ["overnight", False],
-                 1: ["morning", True],
-                 2: ["after noon", True],
-                 3: ["evening", False]}
-
-# Most of these are guesses.  "good" means observed in data
-WEATHER_COVERAGE = {"areas_of": "areas of",                         # good
-                    "brief": "brief",
-                    "chance": "a chance of",                        # good
-                    "definite": "definite",                         # good
-                    "frequent": "frequent",
-                    "intermittent": "intermittent",
-                    "isolated": "isolated",                         # good
-                    "likely": "likely",                             # good
-                    "numerous": "numerous",                         # good
-                    "occasional": "occasional",                     # good
-                    "patchy": "patchy",                             # good
-                    "periods_of": "periods of",
-                    "scattered": "scattered",                       # good
-                    "slight_chance": "a slight chance of",          # good
-                    "widespread": "widespread"}                     # good
-
-WEATHER_WEATHER = {"blowing_dust": "blowing dust",
-                   "blowing_sand": "blowing sand",
-                   "blowing_snow": "blowing snow",
-                   "drizzle": "drizzle",                            # good
-                   "fog": "fog or mist",                            # good
-                   "freezing_drizzle": "freezing drizzle",
-                   "freezing_fog": "freezing fog",                  # good
-                   "freezing_rain": "freezing rain",                # good
-                   "freezing_spray": "freezing spray",
-                   "frost": "frost",
-                   "hail": "hail",
-                   "haze": "haze",                                  # good
-                   "ice_crystals": "ice crystals",
-                   "ice_fog": "ice fog",
-                   "ice_pellets": "sleet",
-                   "rain": "rain",                                  # good
-                   "rain_showers": "rain showers",                  # good
-                   "smoke": "smoke",
-                   "snow": "snow",                                  # good
-                   "snow_showers": "snow showers",                  # good
-                   "thunderstorms": "thunderstorms",                # good
-                   "volcanic ash": "volcanic ash",
-                   "water_spouts": "water spouts"}
-
-WEATHER_INTENSITY = {"": ["", 0],                                   # good
-                     "very_light": ["very light", 1],               # good
-                     "light": ["light", 2],                         # good
-                     "moderate": ["moderate", 3],                   # good
-                     "heavy": ["heavy", 4]}                         # good
-
-WEATHER_VISIBILITY = {"": None}
-
-WEATHER_ATTRIBUTES = {"damaging_wind": "damaging wind",                     # good
-                      "dry": "dry",
-                      "frequent_lightning": "frequent lightning",
-                      "gusty_wind": "gusty winds",                          # good
-                      "heavy_rain": "heavy rain",                           # good
-                      "highest_ranking": "highest ranking",
-                      "include_unconditionally": "include unconditionally",
-                      "large_hail": "large hail",                           # good
-                      "mixture": "mixture",
-                      "on_bridges": "on bridges and overpasses",
-                      "on_grassy": "on grassy areas",
-                      "or": "or",
-                      "outlying": "outlying areas",
-                      "small_hail": "small hail",                           # good
-                      "tornado": "tornado"}
-
-# TODO: Need to figure out a better way to handle misunderstood names
-LOCATION_XLATE = {"gnome alaska": "nome alaska",
-                  "woodberry minnesota": "woodbury minnesota"}
 
 # Use allowed_methods for newer urllib3, fallback to method_whitelist for older versions
 try:
     retry_strategy = Retry(
-        total=3,
-        status_forcelist=[429, 500, 502, 503, 504],
-        allowed_methods=["HEAD", "GET", "OPTIONS"]
+        total=Config.HTTP_RETRY_TOTAL,
+        status_forcelist=Config.HTTP_RETRY_STATUS_CODES,
+        allowed_methods=Config.HTTP_RETRY_METHODS
     )
 except TypeError:
     retry_strategy = Retry(
-        total=3,
-        status_forcelist=[429, 500, 502, 503, 504],
-        method_whitelist=["HEAD", "GET", "OPTIONS"]
+        total=Config.HTTP_RETRY_TOTAL,
+        status_forcelist=Config.HTTP_RETRY_STATUS_CODES,
+        method_whitelist=Config.HTTP_RETRY_METHODS
     )
 adapter = HTTPAdapter(max_retries=retry_strategy)
 
 HTTPS = requests.Session()
 HTTPS.mount("https://", adapter)
 HTTPS.mount("http://", adapter)
-
-HTTPS = requests.Session()
 
 # Initialize global Geolocator instance
 GEOLOCATOR = Geolocator(HERE_API_KEY, HTTPS)
@@ -394,24 +127,24 @@ class CacheHandler(object):
     STATION_PREFIX = "station#"
     ZONE_PREFIX = "zone#"
     
-    def __init__(self, table_name):
+    def __init__(self, table_name: str) -> None:
         """
         Initialize the cache handler with the Alexa-provided table.
         
         Args:
             table_name: Name of the DynamoDB table to use
         """
-        self.ddb = resource("dynamodb", region_name=os.environ.get("DYNAMODB_PERSISTENCE_REGION"))
-        self.table = ddb.Table(os.environ.get("DYNAMODB_PERSISTENCE_TABLE_NAME")
+        self.ddb = resource("dynamodb", region_name=Config.DYNAMODB_REGION)
+        self.table = self.ddb.Table(Config.DYNAMODB_TABLE_NAME)
     
-    def _make_key(self, cache_type, cache_id):
+    def _make_key(self, cache_type: str, cache_id: str) -> Dict[str, str]:
         """Create a composite key for the cache item."""
         return {
             "pk": f"{cache_type}{cache_id}",
             "sk": "data"
         }
     
-    def get(self, cache_type, cache_id):
+    def get(self, cache_type: str, cache_id: str) -> Optional[Dict[str, Any]]:
         """
         Retrieve an item from the cache.
         
@@ -433,10 +166,10 @@ class CacheHandler(object):
             # Return the cache_data dict
             return item.get("cache_data", {})
         except Exception as e:
-            print(f"Error getting cache item {cache_type}{cache_id}: {e}")
+            logger.error(f"Error getting cache item {cache_type}{cache_id}: {e}")
             return None
     
-    def put(self, cache_type, cache_id, cache_data, ttl_days=35):
+    def put(self, cache_type: str, cache_id: str, cache_data: Dict[str, Any], ttl_days: int = 35) -> None:
         """
         Store an item in the cache.
         
@@ -455,25 +188,25 @@ class CacheHandler(object):
             
             self.table.put_item(Item=item)
         except Exception as e:
-            print(f"Error putting cache item {cache_type}{cache_id}: {e}")
+            logger.error(f"Error putting cache item {cache_type}{cache_id}: {e}")
     
-    def get_location(self, location_id):
+    def get_location(self, location_id: str) -> Optional[Dict[str, Any]]:
         """Get location cache data."""
         return self.get(self.LOCATION_PREFIX, location_id)
     
-    def put_location(self, location_id, location_data, ttl_days=35):
+    def put_location(self, location_id: str, location_data: Dict[str, Any], ttl_days: int = 35) -> None:
         """Store location cache data."""
         self.put(self.LOCATION_PREFIX, location_id, location_data, ttl_days)
     
-    def get_station(self, station_id):
+    def get_station(self, station_id: str) -> Optional[Dict[str, Any]]:
         """Get station cache data."""
         return self.get(self.STATION_PREFIX, station_id)
     
-    def put_station(self, station_id, station_data, ttl_days=35):
+    def put_station(self, station_id: str, station_data: Dict[str, Any], ttl_days: int = 35) -> None:
         """Store station cache data."""
         self.put(self.STATION_PREFIX, station_id, station_data, ttl_days)
     
-    def get_zone(self, zone_id):
+    def get_zone(self, zone_id: str) -> Optional[Dict[str, Any]]:
         """Get zone cache data."""
         return self.get(self.ZONE_PREFIX, zone_id)
     
@@ -495,39 +228,39 @@ class SettingsHandler(object):
     This allows different backends for user settings storage.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the settings handler."""
         pass
     
-    def get_location(self):
+    def get_location(self) -> Optional[str]:
         """Get user's default location."""
         raise NotImplementedError("Subclass must implement get_location()")
     
-    def set_location(self, location):
+    def set_location(self, location: str) -> None:
         """Set user's default location."""
         raise NotImplementedError("Subclass must implement set_location()")
     
-    def get_rate(self):
+    def get_rate(self) -> int:
         """Get user's speech rate setting."""
         raise NotImplementedError("Subclass must implement get_rate()")
     
-    def set_rate(self, rate):
+    def set_rate(self, rate: int) -> None:
         """Set user's speech rate setting."""
         raise NotImplementedError("Subclass must implement set_rate()")
     
-    def get_pitch(self):
+    def get_pitch(self) -> int:
         """Get user's speech pitch setting."""
         raise NotImplementedError("Subclass must implement get_pitch()")
     
-    def set_pitch(self, pitch):
+    def set_pitch(self, pitch: int) -> None:
         """Set user's speech pitch setting."""
         raise NotImplementedError("Subclass must implement set_pitch()")
     
-    def get_metrics(self):
+    def get_metrics(self) -> List[str]:
         """Get user's custom metrics list."""
         raise NotImplementedError("Subclass must implement get_metrics()")
     
-    def set_metrics(self, metrics):
+    def set_metrics(self, metrics: List[str]) -> None:
         """Set user's custom metrics list."""
         raise NotImplementedError("Subclass must implement set_metrics()")
 
@@ -539,7 +272,7 @@ class AlexaSettingsHandler(SettingsHandler):
     via the ASK SDK's persistent attributes.
     """
     
-    def __init__(self, handler_input):
+    def __init__(self, handler_input: HandlerInput) -> None:
         """
         Initialize with Alexa handler input for accessing attributes_manager.
         
@@ -551,7 +284,7 @@ class AlexaSettingsHandler(SettingsHandler):
         self.attr_mgr = handler_input.attributes_manager
         self._load_settings()
     
-    def _get_default_metrics(self):
+    def _get_default_metrics(self) -> List[str]:
         """Get default metrics list"""
         metrics = {}
         for name, value in METRICS.values():
@@ -562,7 +295,7 @@ class AlexaSettingsHandler(SettingsHandler):
             result.append(metrics[i])
         return result
     
-    def _load_settings(self):
+    def _load_settings(self) -> None:
         """Load settings from persistent attributes"""
         persistent_attrs = self.attr_mgr.persistent_attributes
         
@@ -572,7 +305,7 @@ class AlexaSettingsHandler(SettingsHandler):
         self._pitch = persistent_attrs.get("pitch", 100)
         self._metrics = persistent_attrs.get("metrics", self._get_default_metrics())
     
-    def _save_settings(self):
+    def _save_settings(self) -> None:
         """Save settings to persistent attributes"""
         persistent_attrs = self.attr_mgr.persistent_attributes
         
@@ -583,38 +316,38 @@ class AlexaSettingsHandler(SettingsHandler):
         
         self.attr_mgr.save_persistent_attributes()
     
-    def get_location(self):
+    def get_location(self) -> Optional[str]:
         """Get user's default location."""
         return self._location
     
-    def set_location(self, location):
+    def set_location(self, location: str) -> None:
         """Set user's default location."""
         self._location = location
         self._save_settings()
     
-    def get_rate(self):
+    def get_rate(self) -> int:
         """Get user's speech rate setting."""
         return self._rate
     
-    def set_rate(self, rate):
+    def set_rate(self, rate: int) -> None:
         """Set user's speech rate setting."""
         self._rate = rate
         self._save_settings()
     
-    def get_pitch(self):
+    def get_pitch(self) -> int:
         """Get user's speech pitch setting."""
         return self._pitch
     
-    def set_pitch(self, pitch):
+    def set_pitch(self, pitch: int) -> None:
         """Set user's speech pitch setting."""
         self._pitch = pitch
         self._save_settings()
     
-    def get_metrics(self):
+    def get_metrics(self) -> List[str]:
         """Get user's custom metrics list."""
         return self._metrics
     
-    def set_metrics(self, metrics):
+    def set_metrics(self, metrics: List[str]) -> None:
         """Set user's custom metrics list."""
         self._metrics = metrics
         self._save_settings()
@@ -692,7 +425,7 @@ class LocalJsonCacheHandler(object):
             
             return data.get('cache_data', {})
         except Exception as e:
-            print(f"Error getting cache item {cache_type}{cache_id}: {e}")
+            logger.error(f"Error getting cache item {cache_type}{cache_id}: {e}")
             return None
     
     def put(self, cache_type, cache_id, cache_data, ttl_days=35):
@@ -715,7 +448,7 @@ class LocalJsonCacheHandler(object):
             with open(file_path, 'w') as f:
                 json.dump(data, f, indent=2)
         except Exception as e:
-            print(f"Error putting cache item {cache_type}{cache_id}: {e}")
+            logger.error(f"Error putting cache item {cache_type}{cache_id}: {e}")
     
     def get_location(self, location_id):
         """Get location cache data."""
@@ -733,11 +466,11 @@ class LocalJsonCacheHandler(object):
         """Store station cache data."""
         self.put(self.STATION_PREFIX, station_id, station_data, ttl_days)
     
-    def get_zone(self, zone_id):
+    def get_zone(self, zone_id: str) -> Optional[Dict[str, Any]]:
         """Get zone cache data."""
         return self.get(self.ZONE_PREFIX, zone_id)
     
-    def put_zone(self, zone_id, zone_data, ttl_days=35):
+    def put_zone(self, zone_id: str, zone_data: Dict[str, Any], ttl_days: int = 35) -> None:
         """Store zone cache data."""
         self.put(self.ZONE_PREFIX, zone_id, zone_data, ttl_days)
 
@@ -798,7 +531,7 @@ class LocalJsonSettingsHandler(SettingsHandler):
                 self._pitch = settings.get("pitch", 100)
                 self._metrics = settings.get("metrics", self._get_default_metrics())
             except Exception as e:
-                print(f"Error loading settings for {self.user_id}: {e}")
+                logger.error(f"Error loading settings for {self.user_id}: {e}")
                 self._init_defaults()
         else:
             self._init_defaults()
@@ -825,7 +558,7 @@ class LocalJsonSettingsHandler(SettingsHandler):
             with open(file_path, 'w') as f:
                 json.dump(settings, f, indent=2)
         except Exception as e:
-            print(f"Error saving settings for {self.user_id}: {e}")
+            logger.error(f"Error saving settings for {self.user_id}: {e}")
     
     def get_location(self):
         """Get user's default location."""
@@ -896,14 +629,14 @@ def notify(event, sub, msg=None):
         text += "  " + msg
         text += "\n\n"
 
-    print("NOTIFY:\n\n  %s\n\n%s" % (sub, text))
+    logger.info(f"NOTIFY:\n\n  {sub}\n\n{text}")
 
 class Base(object):
-    def __init__(self, event, cache_handler=None):
+    def __init__(self, event: Dict[str, Any], cache_handler: Optional[CacheHandler] = None) -> None:
         self.event = event
         self.cache_handler = cache_handler
 
-    def get_zone(self, zoneId, zoneType):
+    def get_zone(self, zoneId: str, zoneType: str) -> Dict[str, Any]:
         """
             Returns the zone information for the give zone ID
         """
@@ -918,7 +651,7 @@ class Base(object):
 
         return zone
  
-    def put_zone(self, data):
+    def put_zone(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
             Writes the zone information to the cache
         """
@@ -931,25 +664,25 @@ class Base(object):
 
         return zone
 
-    def get_forecast_zone(self, zoneId):
+    def get_forecast_zone(self, zoneId: str) -> Dict[str, Any]:
         """
             Returns the forecast zone for the given zone ID
         """
         return self.get_zone(zoneId, "forecast")
 
-    def get_county_zone(self, zoneId):
+    def get_county_zone(self, zoneId: str) -> Dict[str, Any]:
         """
             Return the county zone for the given zone ID
         """
         return self.get_zone(zoneId, "county")
 
-    def get_fire_zone(self, zoneId):
+    def get_fire_zone(self, zoneId: str) -> Dict[str, Any]:
         """
             Returns the fire zone for the given zone ID
         """
         return self.get_zone(zoneId, "fire")
 
-    def get_stations(self, coords):
+    def get_stations(self, coords: str) -> List[str]:
         """
             Returns the list of stations nearest to furthest order
             from the given coordinates
@@ -963,7 +696,7 @@ class Base(object):
 
         return [station.rsplit("/")[-1] for station in data["observationStations"]]
 
-    def get_station(self, stationId):
+    def get_station(self, stationId: str) -> Optional[Dict[str, Any]]:
         """
             Returns the station information for the given station ID
         """
@@ -978,7 +711,7 @@ class Base(object):
 
         return station
 
-    def put_station(self, data):
+    def put_station(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
             Save station information to the cache
         """
