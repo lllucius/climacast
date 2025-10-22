@@ -329,3 +329,23 @@ NORMALIZE_RE = [r"(?P<meridian>\d+\s*(am|pm))",
                 r"(?P<sub>(?<=\s|\.)(ft|mph|nws|pt\.|pt))(?=\s|\W|$)",
                 r"(?P<wind>(?<=\s|\.)(n|nne|ne|ene|e|ese|se|sse|s|ssw|sw|wsw|w|wnw|nw|nnw))(?=\s|$)",
                 r"(?P<st>(?<=\s|\.)[A-Z][A-Z])(?=\s|\W|$)"]
+
+
+def get_default_metrics():
+    """
+    Returns the default ordered list of forecast metrics.
+    
+    This function consolidates the default metrics initialization logic
+    that was previously duplicated across multiple locations.
+    
+    Returns:
+        List[str]: Ordered list of default metric names
+    """
+    metrics = {}
+    for name, value in METRICS.values():
+        if value and name not in metrics:
+            metrics[value] = name
+    result = []
+    for i in range(1, len(metrics) + 1):
+        result.append(metrics[i])
+    return result
