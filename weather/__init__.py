@@ -5,5 +5,15 @@ This package contains weather-related classes for interacting with the NWS API.
 """
 
 from weather.base import WeatherBase, Base
+from weather.grid_points import GridPoints
+from weather.observations import Observations
+from weather.alerts import Alerts, Alert
+from weather.location import Location
 
-__all__ = ['WeatherBase', 'Base']
+__all__ = [
+    'WeatherBase', 'Base',
+    'GridPoints',
+    'Observations',
+    'Alerts', 'Alert',
+    'Location'
+]
