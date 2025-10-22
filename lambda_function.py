@@ -395,7 +395,7 @@ class LocalJsonCacheHandler(object):
             
             return data.get('cache_data', {})
         except Exception as e:
-            print(f"Error getting cache item {cache_type}{cache_id}: {e}")
+            logger.error(f"Error getting cache item {cache_type}{cache_id}: {e}")
             return None
     
     def put(self, cache_type, cache_id, cache_data, ttl_days=35):
@@ -418,7 +418,7 @@ class LocalJsonCacheHandler(object):
             with open(file_path, 'w') as f:
                 json.dump(data, f, indent=2)
         except Exception as e:
-            print(f"Error putting cache item {cache_type}{cache_id}: {e}")
+            logger.error(f"Error putting cache item {cache_type}{cache_id}: {e}")
     
     def get_location(self, location_id):
         """Get location cache data."""
@@ -501,7 +501,7 @@ class LocalJsonSettingsHandler(SettingsHandler):
                 self._pitch = settings.get("pitch", 100)
                 self._metrics = settings.get("metrics", self._get_default_metrics())
             except Exception as e:
-                print(f"Error loading settings for {self.user_id}: {e}")
+                logger.error(f"Error loading settings for {self.user_id}: {e}")
                 self._init_defaults()
         else:
             self._init_defaults()
@@ -528,7 +528,7 @@ class LocalJsonSettingsHandler(SettingsHandler):
             with open(file_path, 'w') as f:
                 json.dump(settings, f, indent=2)
         except Exception as e:
-            print(f"Error saving settings for {self.user_id}: {e}")
+            logger.error(f"Error saving settings for {self.user_id}: {e}")
     
     def get_location(self):
         """Get user's default location."""
@@ -599,14 +599,14 @@ def notify(event, sub, msg=None):
         text += "  " + msg
         text += "\n\n"
 
-    print("NOTIFY:\n\n  %s\n\n%s" % (sub, text))
+    logger.info(f"NOTIFY:\n\n  {sub}\n\n{text}")
 
 class Base(object):
-    def __init__(self, event, cache_handler=None):
+    def __init__(self, event: Dict[str, Any], cache_handler: Optional[CacheHandler] = None) -> None:
         self.event = event
         self.cache_handler = cache_handler
 
-    def get_zone(self, zoneId, zoneType):
+    def get_zone(self, zoneId: str, zoneType: str) -> Dict[str, Any]:
         """
             Returns the zone information for the give zone ID
         """
@@ -621,7 +621,7 @@ class Base(object):
 
         return zone
  
-    def put_zone(self, data):
+    def put_zone(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
             Writes the zone information to the cache
         """
@@ -634,25 +634,25 @@ class Base(object):
 
         return zone
 
-    def get_forecast_zone(self, zoneId):
+    def get_forecast_zone(self, zoneId: str) -> Dict[str, Any]:
         """
             Returns the forecast zone for the given zone ID
         """
         return self.get_zone(zoneId, "forecast")
 
-    def get_county_zone(self, zoneId):
+    def get_county_zone(self, zoneId: str) -> Dict[str, Any]:
         """
             Return the county zone for the given zone ID
         """
         return self.get_zone(zoneId, "county")
 
-    def get_fire_zone(self, zoneId):
+    def get_fire_zone(self, zoneId: str) -> Dict[str, Any]:
         """
             Returns the fire zone for the given zone ID
         """
         return self.get_zone(zoneId, "fire")
 
-    def get_stations(self, coords):
+    def get_stations(self, coords: str) -> List[str]:
         """
             Returns the list of stations nearest to furthest order
             from the given coordinates
@@ -666,7 +666,7 @@ class Base(object):
 
         return [station.rsplit("/")[-1] for station in data["observationStations"]]
 
-    def get_station(self, stationId):
+    def get_station(self, stationId: str) -> Optional[Dict[str, Any]]:
         """
             Returns the station information for the given station ID
         """
@@ -681,7 +681,7 @@ class Base(object):
 
         return station
 
-    def put_station(self, data):
+    def put_station(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
             Save station information to the cache
         """
