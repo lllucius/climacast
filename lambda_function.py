@@ -373,8 +373,6 @@ HTTPS = requests.Session()
 HTTPS.mount("https://", adapter)
 HTTPS.mount("http://", adapter)
 
-HTTPS = requests.Session()
-
 # Initialize global Geolocator instance
 GEOLOCATOR = Geolocator(HERE_API_KEY, HTTPS)
 
@@ -402,7 +400,7 @@ class CacheHandler(object):
             table_name: Name of the DynamoDB table to use
         """
         self.ddb = resource("dynamodb", region_name=os.environ.get("DYNAMODB_PERSISTENCE_REGION"))
-        self.table = ddb.Table(os.environ.get("DYNAMODB_PERSISTENCE_TABLE_NAME")
+        self.table = self.ddb.Table(os.environ.get("DYNAMODB_PERSISTENCE_TABLE_NAME"))
     
     def _make_key(self, cache_type, cache_id):
         """Create a composite key for the cache item."""
