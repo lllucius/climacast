@@ -79,10 +79,6 @@ class Config:
         Access configuration values:
             app_id = Config.APP_ID
             table_name = Config.DYNAMODB_TABLE_NAME
-            
-        For backward compatibility, global variables are maintained:
-            APPID = Config.APP_ID
-            TABLE_NAME = Config.DYNAMODB_TABLE_NAME
     """
     
     # Application identifiers
@@ -104,34 +100,100 @@ class Config:
     HTTP_RETRY_TOTAL: int = 3
     HTTP_RETRY_STATUS_CODES: List[int] = [429, 500, 502, 503, 504]
     HTTP_TIMEOUT: int = 30
+    
+    @classmethod
+    def validate(cls):
+        """
+        Validate required configuration values.
+        
+        Raises:
+            ValueError: If required configuration is missing or invalid
+        """
+        # Check for required values in production (not in test mode)
+        is_test_mode = os.environ.get('CLIMACAST_TEST_MODE', '').lower() == 'true'
+        
+        if not is_test_mode:
+            if not cls.APP_ID or cls.APP_ID == "amzn1.ask.skill.test":
+                logger.warning("APP_ID not set or using test value")
+            
+            if not cls.HERE_API_KEY:
+                logger.warning("HERE_API_KEY not set - geocoding will not work")
+            
+            if not cls.DYNAMODB_TABLE_NAME:
+                raise ValueError("DYNAMODB_TABLE_NAME must be set")
+            
+            if not cls.DYNAMODB_REGION:
+                raise ValueError("DYNAMODB_REGION must be set")
+        
+        logger.info("Configuration validated successfully")
 
-
-# Maintain backward compatibility with existing code
-EVTID = Config.EVENT_ID
-APPID = Config.APP_ID
-HERE_API_KEY = Config.HERE_API_KEY
-DUID = Config.DATA_UPDATE_ID
-TABLE_NAME = Config.DYNAMODB_TABLE_NAME
 
 # Compiled normalization regex (compiled on first use) - DEPRECATED: moved to text_normalizer
 NORMALIZE = None
 
-# Create httpx client with timeout configuration
-HTTPS = httpx.Client(
-    timeout=Config.HTTP_TIMEOUT,
-    follow_redirects=True
-)
+# =============================================================================
+# Factory Functions for Singleton Instances
+# =============================================================================
 
-# Initialize global Geolocator instance
-GEOLOCATOR = Geolocator(HERE_API_KEY, HTTPS)
+_https_client = None
 
-# Create global cache handler instance
-CACHE_HANDLER = CacheHandler(TABLE_NAME, Config.DYNAMODB_REGION)
+def get_https_client() -> httpx.Client:
+    """
+    Get or create the global HTTPS client instance.
+    
+    Returns:
+        httpx.Client: Configured HTTP client for API calls
+    """
+    global _https_client
+    if _https_client is None:
+        _https_client = httpx.Client(
+            timeout=Config.HTTP_TIMEOUT,
+            follow_redirects=True
+        )
+    return _https_client
 
-# Global test handlers (set by test_one() when running tests)
-TEST_MODE = False
-TEST_CACHE_HANDLER = None
-TEST_SETTINGS_HANDLER = None
+
+_geolocator_instance = None
+
+def get_geolocator() -> Geolocator:
+    """
+    Get or create the global geolocator instance.
+    
+    Returns:
+        Geolocator: Configured geolocator for geocoding operations
+    """
+    global _geolocator_instance
+    if _geolocator_instance is None:
+        _geolocator_instance = Geolocator(
+            api_key=Config.HERE_API_KEY,
+            session=get_https_client()
+        )
+    return _geolocator_instance
+
+
+_cache_handler_instance = None
+
+def get_cache_handler() -> CacheHandler:
+    """
+    Get or create the global cache handler instance.
+    
+    Returns:
+        CacheHandler: Configured cache handler for DynamoDB operations
+    """
+    global _cache_handler_instance
+    if _cache_handler_instance is None:
+        _cache_handler_instance = CacheHandler(
+            table_name=Config.DYNAMODB_TABLE_NAME,
+            region=Config.DYNAMODB_REGION
+        )
+    return _cache_handler_instance
+
+
+# Backward compatibility - call factory functions to initialize singletons at module load
+# These maintain the same interface for existing code while using the factory pattern
+HTTPS = get_https_client()
+GEOLOCATOR = get_geolocator()
+CACHE_HANDLER = get_cache_handler()
 
 
 # =============================================================================
@@ -287,7 +349,7 @@ class Skill(Base):
     def initialize(self):
         """Initialize skill state from handler_input"""
         # Amazon says to verify our application id
-        if self.session.application.application_id != APPID:
+        if self.session.application.application_id != Config.APP_ID:
             raise ValueError("Invoked from unknown application.")
 
         # Retrieve the default location info
@@ -994,12 +1056,17 @@ class BaseIntentHandler(AbstractRequestHandler):
     
     def get_skill_helper(self, handler_input):
         """Create and initialize Skill instance from handler_input"""
-        global TEST_MODE, TEST_CACHE_HANDLER, TEST_SETTINGS_HANDLER
+        # Check if running in test mode via environment variable
+        is_test_mode = os.environ.get('CLIMACAST_TEST_MODE', '').lower() == 'true'
         
-        # Use test handlers if in test mode
-        if TEST_MODE and TEST_CACHE_HANDLER and TEST_SETTINGS_HANDLER:
-            cache_handler = TEST_CACHE_HANDLER
-            settings_handler = TEST_SETTINGS_HANDLER
+        if is_test_mode:
+            # Use local JSON handlers for testing
+            cache_handler = LocalJsonCacheHandler(".test_cache")
+            
+            # Extract user_id for settings handler
+            user_id = handler_input.request_envelope.session.user.user_id
+            settings_handler = LocalJsonSettingsHandler(user_id, ".test_settings")
+            
             # Create Skill instance with test handlers
             skill = Skill(handler_input, cache_handler, settings_handler)
         else:
@@ -1008,7 +1075,7 @@ class BaseIntentHandler(AbstractRequestHandler):
             settings_handler = AlexaSettingsHandler(handler_input)
             
             # Create Skill instance with modern ASK SDK objects, cache handler, and settings handler
-            skill = Skill(handler_input, CACHE_HANDLER, settings_handler)
+            skill = Skill(handler_input, get_cache_handler(), settings_handler)
         
         # Initialize skill (loads location, slots, etc.)
         skill.initialize()
@@ -1256,7 +1323,7 @@ from ask_sdk_dynamodb.adapter import DynamoDbAdapter
 
 # Create DynamoDB persistence adapter for user settings
 persistence_adapter = DynamoDbAdapter(
-    table_name=TABLE_NAME,
+    table_name=Config.DYNAMODB_TABLE_NAME,
     create_table=False,  # Table should already exist or be created by Alexa
     partition_key_name="id",
     attribute_name="attributes"
@@ -1357,21 +1424,18 @@ def lambda_handler(event, context=None):
 
 
 def test_one():
-    global TEST_MODE, TEST_CACHE_HANDLER, TEST_SETTINGS_HANDLER
-    
-    # Enable test mode and set up local JSON handlers
-    TEST_MODE = True
-    TEST_CACHE_HANDLER = LocalJsonCacheHandler(".test_cache")
+    """Test function for local development - sets up test mode via environment."""
+    # Enable test mode via environment variable
+    os.environ['CLIMACAST_TEST_MODE'] = 'true'
     
     with open(sys.argv[1] if len(sys.argv) > 1 else "test.json") as f:
         event = json.load(f)
         event["session"]["application"]["applicationId"] = "amzn1.ask.skill.test"
         event["session"]["testing"] = True
         
-        # Extract user_id from the event and create settings handler
+        # Ensure user_id is set
         user_id = event.get("session", {}).get("user", {}).get("userId", "testuser")
         event["session"]["user"]["userId"] = user_id
-        TEST_SETTINGS_HANDLER = LocalJsonSettingsHandler(user_id, ".test_settings")
         
         # Print output for testing (this is only used in __main__ test mode)
         print(json.dumps(lambda_handler(event), indent=4))

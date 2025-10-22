@@ -19,12 +19,12 @@ os.environ["DYNAMODB_TABLE_NAME"] = "test-table"
 # Add the parent directory to the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from lambda_function import Location, GEOLOCATOR
+from lambda_function import Location, get_geolocator
 from unittest.mock import Mock, patch
 
 
 def test_location_uses_geolocator():
-    """Test that Location.mapquest method uses GEOLOCATOR"""
+    """Test that Location.mapquest method uses get_geolocator"""
     print("Testing Location integration with Geolocator...")
     
     # Create a mock event
@@ -42,22 +42,23 @@ def test_location_uses_geolocator():
     # Create a Location instance
     location = Location(event, cache_handler=None)
     
-    # Mock the GEOLOCATOR.geocode method
-    with patch.object(GEOLOCATOR, 'geocode') as mock_geocode:
-        # Set up the mock to return test data
-        mock_geocode.return_value = ((40.7128, -74.0060), {"State": "New York", "City": "New York"})
+    # Mock the geolocator instance
+    with patch('lambda_function.get_geolocator') as mock_get_geolocator:
+        mock_geolocator = Mock()
+        mock_geolocator.geocode.return_value = ((40.7128, -74.0060), {"State": "New York", "City": "New York"})
+        mock_get_geolocator.return_value = mock_geolocator
         
         # Call the mapquest method
         coords, props = location.mapquest("New York NY")
         
         # Verify the geolocator was called
-        mock_geocode.assert_called_once_with("New York NY")
+        mock_geolocator.geocode.assert_called_once_with("New York NY")
         
         # Verify the results
         assert coords == (40.7128, -74.0060)
         assert props == {"State": "New York", "City": "New York"}
     
-    print("✓ Location.mapquest correctly delegates to GEOLOCATOR")
+    print("✓ Location.mapquest correctly delegates to get_geolocator")
     print()
 
 
@@ -78,9 +79,11 @@ def test_location_handles_geocoding_failure():
     
     location = Location(event, cache_handler=None)
     
-    # Mock the GEOLOCATOR.geocode method to return None
-    with patch.object(GEOLOCATOR, 'geocode') as mock_geocode:
-        mock_geocode.return_value = (None, None)
+    # Mock the geolocator to return None
+    with patch('lambda_function.get_geolocator') as mock_get_geolocator:
+        mock_geolocator = Mock()
+        mock_geolocator.geocode.return_value = (None, None)
+        mock_get_geolocator.return_value = mock_geolocator
         
         coords, props = location.mapquest("InvalidLocation")
         
@@ -92,12 +95,13 @@ def test_location_handles_geocoding_failure():
 
 
 def test_geolocator_initialized_with_api_key():
-    """Test that GEOLOCATOR is initialized with the HERE_API_KEY"""
-    print("Testing GEOLOCATOR initialization...")
+    """Test that get_geolocator returns initialized geolocator"""
+    print("Testing geolocator initialization...")
     
-    assert GEOLOCATOR is not None
-    assert GEOLOCATOR.api_key == "test_key"
-    assert GEOLOCATOR.base_url == "https://geocode.search.hereapi.com/v1"
+    geolocator = get_geolocator()
+    assert geolocator is not None
+    assert geolocator.api_key == "test_key"
+    assert geolocator.base_url == "https://geocode.search.hereapi.com/v1"
     
     print("✓ GEOLOCATOR initialized with correct API key")
     print()

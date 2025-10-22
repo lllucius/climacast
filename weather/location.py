@@ -23,12 +23,11 @@ from weather.base import WeatherBase
 from utils.constants import STATES, LOCATION_XLATE
 
 
-# Global GEOLOCATOR will be set by lambda_function
-GEOLOCATOR = None
+# No module-level globals needed - use lazy imports in methods
 
 
 def notify(event, subject, message=None):
-    """Placeholder for notify function - will be replaced by lambda_function import"""
+    """Placeholder for notify function - will be replaced by lazy import"""
     import logging
     logging.error(f"{subject}: {message}")
 
@@ -62,12 +61,10 @@ class Location(WeatherBase):
         Returns:
             None on success, error message string on failure
         """
-        # Import notify if needed
-        global notify, GEOLOCATOR
-        if notify is None or GEOLOCATOR is None:
-            import lambda_function
-            notify = lambda_function.notify
-            GEOLOCATOR = lambda_function.GEOLOCATOR
+        # Lazy import to avoid circular dependency
+        from lambda_function import notify, get_geolocator
+        
+        geolocator = get_geolocator()
             
         # Normalize name
         name = name.strip().lower()
@@ -223,11 +220,11 @@ class Location(WeatherBase):
         Returns:
             Tuple of (coordinates, properties) where coordinates is (lat, lng) or None
         """
-        global GEOLOCATOR
-        if GEOLOCATOR is None:
-            import lambda_function
-            GEOLOCATOR = lambda_function.GEOLOCATOR
-        return GEOLOCATOR.geocode(search)
+        # Lazy import to avoid circular dependency
+        from lambda_function import get_geolocator
+        
+        geolocator = get_geolocator()
+        return geolocator.geocode(search)
 
     def spoken_name(self, name=None):
         """Get the spoken form of the location name."""
