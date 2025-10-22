@@ -23,7 +23,7 @@ import re
 from time import time
 from typing import Dict, Optional, Any
 
-from utils.constants import METRICS
+from utils.constants import METRICS, get_default_metrics
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -244,14 +244,7 @@ class LocalJsonSettingsHandler:
         Returns:
             List of default metric names in order
         """
-        metrics = {}
-        for name, value in METRICS.values():
-            if value and name not in metrics:
-                metrics[value] = name
-        result = []
-        for i in range(1, len(metrics) + 1):
-            result.append(metrics[i])
-        return result
+        return get_default_metrics()
     
     def _load_settings(self) -> None:
         """Load settings from local JSON file."""

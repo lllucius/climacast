@@ -37,6 +37,7 @@ from ask_sdk_core.serialize import DefaultSerializer
 
 from utils.geolocator import Geolocator
 from utils.constants import *
+from utils.constants import get_default_metrics
 from utils import converters
 from storage.cache_handler import CacheHandler
 from storage.settings_handler import SettingsHandler, AlexaSettingsHandler
@@ -1356,14 +1357,7 @@ class Skill(Base):
         if self.settings_handler:
             return self.settings_handler.get_metrics()
         # Return default metrics if no settings handler
-        metrics = {}
-        for name, value in METRICS.values():
-            if value and name not in metrics:
-                metrics[value] = name
-        result = []
-        for i in range(1, len(metrics) + 1):
-            result.append(metrics[i])
-        return result
+        return get_default_metrics()
 
     @user_metrics.setter
     def user_metrics(self, metrics):
@@ -1387,14 +1381,7 @@ class Skill(Base):
     def reset_metrics(self):
         if self.settings_handler:
             # Get default metrics
-            metrics = {}
-            for name, value in METRICS.values():
-                if value and name not in metrics:
-                    metrics[value] = name
-            result = []
-            for i in range(1, len(metrics) + 1):
-                result.append(metrics[i])
-            self.settings_handler.set_metrics(result)
+            self.settings_handler.set_metrics(get_default_metrics())
 
     def has_metric(self, metric):
         return metric in self.user_metrics
