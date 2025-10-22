@@ -27,9 +27,8 @@ from utils.text_normalizer import normalize as normalize_text
 from utils.constants import ANGLES
 
 
-# These will be set by lambda_function module to avoid circular imports
-notify = None
-HTTPS = None
+# These will be lazily imported to avoid circular imports
+# No module-level globals needed - use lazy imports in methods
 
 
 class WeatherBase(object):
@@ -66,10 +65,8 @@ class WeatherBase(object):
         Returns:
             Dict containing zone information
         """
-        global notify
-        if notify is None:
-            import lambda_function
-            notify = lambda_function.notify
+        # Lazy import to avoid circular dependency
+        from lambda_function import notify
             
         zoneId = zoneId.rsplit("/")[-1]
         zone = self.cache_handler.get_zone(zoneId) if self.cache_handler else None
@@ -220,16 +217,13 @@ class WeatherBase(object):
         Returns:
             Dict containing JSON response or None
         """
-        # Import HTTPS session from lambda_function
-        global HTTPS, notify
-        if HTTPS is None or notify is None:
-            import lambda_function
-            HTTPS = lambda_function.HTTPS
-            notify = lambda_function.notify
-            
+        # Lazy import to avoid circular dependency
+        from lambda_function import get_https_client, notify
+        
+        client = get_https_client()
         headers = {"User-Agent": "ClimacastAlexaSkill/1.0 (climacast@homerow.net)",
                    "Accept": "application/ld+json"}
-        r = HTTPS.get("https://%s/%s" % (loc, path.replace(" ", "+")), headers=headers)
+        r = client.get("https://%s/%s" % (loc, path.replace(" ", "+")), headers=headers)
         if r.status_code != 200 or r.text is None or r.text == "":
             notify(self.event,
                         "HTTPSTATUS: %s" % r.status_code,
