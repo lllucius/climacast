@@ -662,6 +662,7 @@ class Skill(WeatherBase):
         # Retrieve the current observations from the nearest station
         obs = Observations(self.event, self.loc.observationStations, self.cache_handler)
         if obs.is_good:
+            #data = self.https("gridpoints/%s/%s" % (self.loc.cwa, self.loc.grid_point))
             text += "At %s, %s reported %s, " % \
                     (obs.time_reported.astimezone(self.loc.tz).strftime("%I:%M%p"),
                      obs.station_name,
@@ -760,9 +761,11 @@ class Skill(WeatherBase):
         etime = self.etime 
         fulltext = ""
         gp = GridPoints(self.event, self.loc.tz, self.loc.cwa, self.loc.grid_point, self.cache_handler)
+        print("METRICS", metrics)
         for metric in metrics:
+            print("FORECAST METRIC", metric, "STIME", stime, "ETIME", etime)
             metric = METRICS[metric][0]
-            #print("FORECAST METRIC", metric, "STIME", stime, "ETIME", etime)
+            print("FORECAST METRIC", metric, "STIME", stime, "ETIME", etime)
 #            if gp.set_interval(stime, etime):
             if not gp.set_interval(stime, etime):
                 text = "Forecast information is unavailable for %s %s" % \

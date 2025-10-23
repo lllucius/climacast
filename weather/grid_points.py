@@ -89,7 +89,7 @@ class GridPoints(WeatherBase):
         """
         dt, _, dur = time.partition("/")
         dts = parser.parse(dt).astimezone(self.tz)
-        dte = dts + parse_duration(dur, relative=True)
+        dte = dts + parse_duration(dur) #, relative=True)
     
         if stime >= dts and stime < dte \
            or etime >= dts and etime < dte:
@@ -233,6 +233,38 @@ class GridPoints(WeatherBase):
 
     # Precipitation properties
     @property
+    def precip_chance_low(self):
+        return self.to_percent(self.get_low("probabilityOfPrecipitation"))
+
+    @property
+    def precip_chance_high(self):
+        return self.to_percent(self.get_high("probabilityOfPrecipitation"))
+
+    @property
+    def precip_chance_initial(self):
+        return self.to_percent(self.get_initial("probabilityOfPrecipitation"))
+
+    @property
+    def precip_chance_final(self):
+        return self.to_percent(self.get_final("probabilityOfPrecipitation"))
+
+    @property
+    def precip_amount_low(self):
+        return self.mm_to_in(self.get_low("quantitativePrecipitation"), as_text=True)
+
+    @property
+    def precip_amount_high(self):
+        return self.mm_to_in(self.get_high("quantitativePrecipitation"), as_text=True)
+
+    @property
+    def precip_amount_initial(self):
+        return self.mm_to_in(self.get_initial("quantitativePrecipitation"), as_text=True)
+
+    @property
+    def precip_amount_final(self):
+        return self.mm_to_in(self.get_final("quantitativePrecipitation"), as_text=True)
+
+    @property
     def precip_total(self):
         values = [value for value in self.get_values("quantitativePrecipitation") if value is not None]
         if len(values) == 0:
@@ -287,70 +319,86 @@ class GridPoints(WeatherBase):
 
     # Wind properties
     @property
-    def wind_low(self):
+    def wind_speed_low(self):
         return self.mps_to_mph(self.get_low("windSpeed"))
 
     @property
-    def wind_high(self):
+    def wind_speed_high(self):
         return self.mps_to_mph(self.get_high("windSpeed"))
 
     @property
-    def wind_initial(self):
+    def wind_speed_initial(self):
         return self.mps_to_mph(self.get_initial("windSpeed"))
 
     @property
-    def wind_final(self):
+    def wind_speed_final(self):
         return self.mps_to_mph(self.get_final("windSpeed"))
 
     @property
-    def wind_dir_initial(self):
+    def wind_direction_initial(self):
         return self.da_to_dir(self.get_initial("windDirection"))
 
     @property
-    def wind_dir_final(self):
+    def wind_direction_final(self):
         return self.da_to_dir(self.get_final("windDirection"))
+
+    @property
+    def wind_gust_low(self):
+        return self.kph_to_mph(self.get_low("windGust"))
+
+    @property
+    def wind_gust_high(self):
+        return self.kph_to_mph(self.get_high("windGust"))
+
+    @property
+    def wind_gust_initial(self):
+        return self.kph_to_mph(self.get_initial("windGust"))
+
+    @property
+    def wind_gust_final(self):
+        return self.kph_to_mph(self.get_final("windGust"))
 
     # Heat index and wind chill
     @property
+    def heat_index_low(self):
+        return self.c_to_f(self.get_low("heatIndex"))
+
+    @property
     def heat_index_high(self):
-        temps = [self.c_to_f(t) for t in self.get_values("temperature") if t is not None]
-        hums = [value for value in self.get_values("relativeHumidity") if value is not None]
-        if len(temps) == 0 or len(hums) == 0:
-            return None
-        idxs = []
-        for i in range(min(len(temps), len(hums))):
-            hi = self.to_heat_index(float(temps[i]), float(hums[i]))
-            if hi:
-                idxs.append(hi)
-        return "{:.0f}".format(max(idxs)) if len(idxs) > 0 else None
+        return self.c_to_f(self.get_high("heatIndex"))
+
+    @property
+    def heat_index_initial(self):
+        return self.c_to_f(self.get_initial("heatIndex"))
+
+    @property
+    def heat_index_final(self):
+        return self.c_to_f(self.get_final("heatIndex"))
 
     @property
     def wind_chill_low(self):
-        temps = [self.c_to_f(t) for t in self.get_values("temperature") if t is not None]
-        winds = [self.mps_to_mph(w) for w in self.get_values("windSpeed") if w is not None]
-        if len(temps) == 0 or len(winds) == 0:
-            return None
-        chills = []
-        for i in range(min(len(temps), len(winds))):
-            wc = self.to_wind_chill(float(temps[i]), float(winds[i]))
-            if wc:
-                chills.append(wc)
-        return "{:.0f}".format(min(chills)) if len(chills) > 0 else None
+        return self.c_to_f(self.get_low("windChill"))
+
+    @property
+    def wind_chill_high(self):
+        return self.c_to_f(self.get_high("windChill"))
+
+    @property
+    def wind_chill_initial(self):
+        return self.c_to_f(self.get_initial("windChill"))
+
+    @property
+    def wind_chill_final(self):
+        return self.c_to_f(self.get_final("windChill"))
 
     # Sky cover
     @property
     def skys_initial(self):
-        times = self.get_times("skyCover")
-        if len(times) == 0:
-            return None
-        return self.to_skys(self.get_initial("skyCover"), self.is_day(times[0]))
+        return self.to_skys(self.get_initial("skyCover"), self.is_day(self.stime))
 
     @property
     def skys_final(self):
-        times = self.get_times("skyCover")
-        if len(times) == 0:
-            return None
-        return self.to_skys(self.get_final("skyCover"), self.is_day(times[-1]))
+        return self.to_skys(self.get_final("skyCover"), self.is_day(self.stime))
 
     @property
     def weather_text(self):

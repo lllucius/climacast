@@ -17,6 +17,7 @@ conditions from National Weather Service observation stations.
 """
 
 import json
+from datetime import datetime
 
 from weather.base import WeatherBase
 
@@ -41,20 +42,14 @@ class Observations(WeatherBase):
         super().__init__(event, cache_handler)
         self.data = None
         self.station = None
-        print("STATIONS")
-        print(json.dumps(stations, indent=4))
         for station in stations["@graph"]:
-            print("STATIPON")
-            print(station)
             stationId = station["stationIdentifier"]
-            print("STATIONID==================", stationId)
             station = self.get_station(stationId)
-            print("STATION", station)
             if station:
                 data = self.https(f"stations/{stationId}/observations/latest")
-                print("DATA", data)
-                if data and data.get("properties"):
-                    self.data = data["properties"]
+#                data = self.https(f"stations/{stationId}/observations?limit=1")
+                if data:
+                    self.data = data
                     self.station = station
                     break
 
@@ -89,9 +84,14 @@ class Observations(WeatherBase):
         return self.mps_to_mph(self.data.get("windSpeed", {}).get("value"))
 
     @property
-    def wind_dir(self):
+    def wind_direction(self):
         """Current wind direction."""
         return self.da_to_dir(self.data.get("windDirection", {}).get("value"))
+
+    @property
+    def wind_gust(self):
+        """Current wind speed gusts in mph."""
+        return self.mps_to_mph(self.data.get("windGust", {}).get("value"))
 
     @property
     def skys(self):
@@ -112,5 +112,24 @@ class Observations(WeatherBase):
 
     @property
     def time_reported(self):
-        """Current heat index."""
-        ireturn datetime.fromisoformat(self.data.get("timestamp")).astimezone(self.tz)
+        """Date and time reported."""
+        print("====================")
+        print(self.data.get("timestamp"))
+        print(self.data)
+        return datetime.fromisoformat(self.data.get("timestamp"))
+
+    @property
+    def station_name(self):
+        """Name of reporting station."""
+        return self.data.get("stationName")
+
+    @property
+    def description(self):
+        """Current weather description."""
+        return "blah, blash, description" #self.data.get("stationName")
+
+    @property
+    def pressure_trend(self):
+        """Barometric pressure trend."""
+        return None
+    
