@@ -122,7 +122,9 @@ class WeatherBase(object):
         Returns:
             List of station IDs
         """
-        data = self.https("points/%s/stations" % coords)
+        print("GETTING STATIONS================================")
+        data = self.https("gridpoints/%s/stations" % coords)
+        print("DATA", data)
         if data is None or data.get("status", 0) != 0:
             notify(self.event, "Unable to get stations for %s" % coords, data)
             return []
@@ -202,11 +204,11 @@ class WeatherBase(object):
 
         return text
 
-    @retry(
-        stop=stop_after_attempt(3),
-        retry=retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
-        wait=wait_exponential(multiplier=1, min=1, max=10)
-    )
+    #@retry(
+    #    stop=stop_after_attempt(3),
+    #    retry=retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
+    #    wait=wait_exponential(multiplier=1, min=1, max=10)
+    #)
     def https(self, path: str, loc: str = "api.weather.gov") -> Optional[Dict[str, Any]]:
         """
         Retrieve the JSON data from the given path and location.
@@ -218,18 +220,21 @@ class WeatherBase(object):
         Returns:
             Dict containing JSON response or None
         """
+        print("HTTPS:", path, loc)
         # Lazy import to avoid circular dependency
         from lambda_function import get_https_client, notify
         
         client = get_https_client()
         headers = {"User-Agent": "ClimacastAlexaSkill/1.0 (climacast@homerow.net)",
                    "Accept": "application/ld+json"}
-        r = client.get("https://%s/%s" % (loc, path.replace(" ", "+")), headers=headers)
+        url = path if path.startswith("https") else f"https://{loc}/{path.replace(" ", "+")}"
+        r = client.get(url, headers=headers)
         if r.status_code != 200 or r.text is None or r.text == "":
             notify(self.event,
                         "HTTPSTATUS: %s" % r.status_code,
                         "URL: %s\n\n%s" % (r.url, r.content))
             return None
+        print("rESPNMSE", r.text)
             
         return json.loads(r.text)
 

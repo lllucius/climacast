@@ -16,7 +16,6 @@ This module provides classes for processing weather alerts and warnings
 from the National Weather Service.
 """
 
-from typing import Dict, Any, Optional, List
 from weather.base import WeatherBase
 
 

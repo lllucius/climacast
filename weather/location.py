@@ -16,8 +16,8 @@ This module provides the Location class for converting location names
 and zip codes to coordinates and retrieving associated weather zones.
 """
 
-from typing import Dict, Any, Optional, Tuple
 from dateutil import tz
+import json
 
 from weather.base import WeatherBase
 from utils.constants import STATES, LOCATION_XLATE
@@ -64,7 +64,7 @@ class Location(WeatherBase):
         # Lazy import to avoid circular dependency
         from lambda_function import notify, get_geolocator
         
-        geolocator = get_geolocator()
+        get_geolocator()
             
         # Normalize name
         name = name.strip().lower()
@@ -134,11 +134,15 @@ class Location(WeatherBase):
             coords, props = self.mapquest("%s+%s" % (city, state))
             if coords is None:
                 return "%s %s could not be located.  Try using the zip code." % (city, state)
+        print("CORDS", coords)
+        print("PROPS", json.dumps(props, indent=4))
 
         # Get the NWS location information (limit to 4 decimal places for the API)
+        print("GETTING LOCAITON==========================")
         point = self.https("points/%s,%s" % \
                            (("%.4f" % coords[0]).rstrip("0").rstrip("."),
                             ("%.4f" % coords[1]).rstrip("0").rstrip(".")))
+        print("POINT", point)
 
         # Make sure we have the real location
         if point is None or "relativeLocation" not in point:
@@ -177,16 +181,18 @@ class Location(WeatherBase):
 
         # Some NWS locations are missing the county zone, so try to deduce it by getting
         # the county coordinates from the geolocator and asking NWS for that point.
-        if "county" not in point and "county" in props:
-            county = props["county"].lower().split()
+        if "county" not in point and "County" in props:
+            county = props["County"].lower().split()
             if county[-1] == "county":
                 county[-1] = ""
             county = " ".join(list(county))
             coords, props = self.mapquest("%s+county+%s" % (county, loc["state"]))
             if coords is not None:
+                print("PT==================================")
                 pt = self.https("points/%s,%s" % \
                                 (("%.4f" % coords[0]).rstrip("0").rstrip("."),
                                  ("%.4f" % coords[1]).rstrip("0").rstrip(".")))
+                print("pt", pt)
                 if "county" in pt:
                     point["county"] = pt["county"]
 
@@ -196,8 +202,7 @@ class Location(WeatherBase):
         loc["countyZoneName"] = data.get("name", "missing")
 
         # Retrieve the observation stations
-        data = self.get_stations(loc["coords"])
-        loc["observationStations"] = data
+        loc["observationStations"] = self.https(point["observationStations"] + "?limit=5")
 
         # Put it to the cache
         loc["location"] = "%s %s" % (city, state) if state else city

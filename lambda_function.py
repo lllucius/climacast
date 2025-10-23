@@ -658,6 +658,7 @@ class Skill(WeatherBase):
                        (cnt,
                         "s" if cnt > 1 else "")
 
+        print("OBS", self.loc.observationStations)
         # Retrieve the current observations from the nearest station
         obs = Observations(self.event, self.loc.observationStations, self.cache_handler)
         if obs.is_good:

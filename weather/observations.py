@@ -16,7 +16,8 @@ This module provides the Observations class for processing current weather
 conditions from National Weather Service observation stations.
 """
 
-from typing import Dict, Any, Optional
+import json
+
 from weather.base import WeatherBase
 
 
@@ -40,15 +41,27 @@ class Observations(WeatherBase):
         super().__init__(event, cache_handler)
         self.data = None
         self.station = None
-
-        for stationId in stations:
+        print("STATIONS")
+        print(json.dumps(stations, indent=4))
+        for station in stations["@graph"]:
+            print("STATIPON")
+            print(station)
+            stationId = station["stationIdentifier"]
+            print("STATIONID==================", stationId)
             station = self.get_station(stationId)
+            print("STATION", station)
             if station:
-                data = self.https("stations/%s/observations" % stationId)
-                if data and data.get("features"):
-                    self.data = data["features"][0]["properties"]
+                data = self.https(f"stations/{stationId}/observations/latest")
+                print("DATA", data)
+                if data and data.get("properties"):
+                    self.data = data["properties"]
                     self.station = station
                     break
+
+    @property
+    def is_good(self):
+        """Current temperature in Fahrenheit."""
+        return not self.data is None
 
     @property
     def temp(self):
@@ -96,3 +109,8 @@ class Observations(WeatherBase):
         """Current heat index."""
         hi = self.data.get("heatIndex", {}).get("value")
         return self.c_to_f(hi) if hi else None
+
+    @property
+    def time_reported(self):
+        """Current heat index."""
+        ireturn datetime.fromisoformat(self.data.get("timestamp")).astimezone(self.tz)
