@@ -108,7 +108,7 @@ def mm_to_in(mm: Optional[float], as_text: bool = False) -> Optional[Union[str, 
     frac = inches_float - whole
 
     if inches_float == 0:
-        return inches, "", ""
+        return inches_float, "", ""
 
     if inches_float < 0.1:
         amt = "less than a tenth"
@@ -130,7 +130,7 @@ def mm_to_in(mm: Optional[float], as_text: bool = False) -> Optional[Union[str, 
     else:
         whole_text = str(whole)
 
-    return inches, amt, whole_text
+    return inches_float, amt, whole_text
 
 
 def c_to_f(celsius: Optional[float]) -> Optional[int]:

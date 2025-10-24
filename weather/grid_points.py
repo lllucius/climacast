@@ -294,6 +294,22 @@ class GridPoints(WeatherBase):
 
     # Snow properties
     @property
+    def snow_amount_low(self):
+        return self.mm_to_in(self.get_low("snowfallAmount"), as_text=True)
+
+    @property
+    def snow_amount_high(self):
+        return self.mm_to_in(self.get_high("snowfallAmount"), as_text=True)
+
+    @property
+    def snow_amount_initial(self):
+        return self.mm_to_in(self.get_initial("snowfallAmount"), as_text=True)
+
+    @property
+    def snow_amount_final(self):
+        return self.mm_to_in(self.get_final("snowfallAmount"), as_text=True)
+
+    @property
     def snow_total(self):
         values = [value for value in self.get_values("snowfallAmount") if value is not None]
         if len(values) == 0:

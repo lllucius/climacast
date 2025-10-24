@@ -512,7 +512,7 @@ class Skill(WeatherBase):
 
     def get_setting_intent(self):
         # Verify location first
-        text = skill.get_location()
+        text = self.get_location()
         if text is not None:
             return text
 
@@ -858,6 +858,8 @@ class Skill(WeatherBase):
 
                         pal = gp.precip_amount_low
                         pah = gp.precip_amount_high
+                        print("PAL", pal, type(pal))
+                        print("PAH", pah, type(pah))
 
                         if pal is not None and pah is not None and pah[0] != 0:
                             text += ", with amounts of "
