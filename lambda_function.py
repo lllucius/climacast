@@ -109,7 +109,7 @@ class Config:
             ValueError: If required configuration is missing or invalid
         """
         # Check for required values in production (not in test mode)
-        is_test_mode = os.environ.get('CLIMACAST_TEST_MODE', '').lower() == 'true'
+        is_test_mode = os.environ.get('SKILLTEST', '').lower() == 'true'
         
         if not is_test_mode:
             if not cls.APP_ID or cls.APP_ID == "amzn1.ask.skill.test":
@@ -1052,7 +1052,7 @@ class BaseIntentHandler(AbstractRequestHandler):
     def get_skill_helper(self, handler_input):
         """Create and initialize Skill instance from handler_input"""
         # Check if running in test mode via environment variable
-        is_test_mode = os.environ.get('CLIMACAST_TEST_MODE', '').lower() == 'true'
+        is_test_mode = os.environ.get('SKILLTEST', '').lower() == 'true'
         
         if is_test_mode:
             # Use local JSON handlers for testing
@@ -1361,7 +1361,7 @@ def lambda_handler(event, context=None):
     """
     Lambda handler for Alexa skill using ASK SDK.
     """
-    #print(json.dumps(event, indent=4))
+    print(json.dumps(event, indent=4))
     try:
         from ask_sdk_model import RequestEnvelope
         
@@ -1421,7 +1421,7 @@ def lambda_handler(event, context=None):
 def test_one():
     """Test function for local development - sets up test mode via environment."""
     # Enable test mode via environment variable
-    os.environ['CLIMACAST_TEST_MODE'] = 'true'
+    os.environ['SKILLTEST'] = 'true'
     
     with open(sys.argv[1] if len(sys.argv) > 1 else "test.json") as f:
         event = json.load(f)
