@@ -1512,7 +1512,7 @@ def parse_slot_args(args):
     return slots
 
 
-def test_from_args(intent_name, slot_args):
+def run_test_from_args(intent_name, slot_args):
     """
     Test the skill with command line arguments.
     
@@ -1538,7 +1538,7 @@ def test_from_args(intent_name, slot_args):
     return response
 
 
-def test_from_file(filepath):
+def run_test_from_file(filepath):
     """
     Test the skill by reading test cases from a file.
     Each line in the file should be in the format:
@@ -1573,14 +1573,14 @@ def test_from_file(filepath):
             print('='*60)
             
             try:
-                test_from_args(intent_name, slot_args)
+                run_test_from_args(intent_name, slot_args)
             except Exception as e:
                 logger.error(f"Error processing test case {line_num}: {e}")
                 import traceback
                 traceback.print_exc()
 
 
-def test_one():
+def run_test_one():
     """Test function for local development - sets up test mode via environment."""
     # Enable test mode via environment variable
     os.environ['SKILLTEST'] = 'true'
@@ -1634,13 +1634,13 @@ Examples:
     # Legacy JSON file mode
     if args.json:
         sys.argv = [sys.argv[0], args.json]
-        test_one()
+        run_test_one()
     # File mode with multiple test cases
     elif args.file:
-        test_from_file(args.file)
+        run_test_from_file(args.file)
     # Command line mode
     elif args.intent:
-        test_from_args(args.intent, args.slots)
+        run_test_from_args(args.intent, args.slots)
     else:
         parser.print_help()
         sys.exit(1)
