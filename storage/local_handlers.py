@@ -21,9 +21,9 @@ import logging
 import os
 import re
 from time import time
-from typing import Dict, Optional, Any
+from typing import Any, Dict, Optional
 
-from utils.constants import METRICS, get_default_metrics
+from utils.constants import get_default_metrics
 
 # Configure logging
 logger = logging.getLogger(__name__)

@@ -3,11 +3,11 @@
 Functional tests for LocalJsonCacheHandler and LocalJsonSettingsHandler.
 These tests actually instantiate the handlers and verify they work correctly.
 """
-import sys
-import os
 import json
-import shutil
+import os
 import re
+import shutil
+import sys
 from time import time
 
 # Set required environment variables before importing

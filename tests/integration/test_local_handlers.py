@@ -3,10 +3,9 @@
 Unit tests for LocalJsonCacheHandler and LocalJsonSettingsHandler classes.
 Tests the local JSON file storage without requiring DynamoDB or ASK SDK.
 """
-import sys
 import os
-import json
 import shutil
+import sys
 
 # Set required environment variables before importing
 os.environ["app_id"] = "amzn1.ask.skill.test"

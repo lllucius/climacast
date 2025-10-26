@@ -3,8 +3,8 @@
 Simple test script to validate the refactored ASK SDK integration
 """
 import json
-import sys
 import os
+import sys
 
 # Add the parent directory to the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -17,6 +17,7 @@ os.environ["dataupdate_id"] = "amzn1.ask.data.update"
 
 # Import the lambda handler
 from lambda_function import lambda_handler
+
 
 def test_launch():
     """Test the launch request"""

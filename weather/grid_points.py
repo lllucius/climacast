@@ -16,12 +16,13 @@ This module provides the GridPoints class for processing weather forecast
 data from the National Weather Service gridpoints endpoint.
 """
 
+from aniso8601.duration import parse_duration
 from dateutil import parser
 from dateutil.relativedelta import relativedelta
-from aniso8601.duration import parse_duration
 
+from utils.constants import (WEATHER_ATTRIBUTES, WEATHER_COVERAGE,
+                             WEATHER_INTENSITY, WEATHER_WEATHER)
 from weather.base import WeatherBase
-from utils.constants import WEATHER_COVERAGE, WEATHER_WEATHER, WEATHER_INTENSITY, WEATHER_ATTRIBUTES
 
 
 class GridPoints(WeatherBase):

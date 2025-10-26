@@ -2,9 +2,8 @@
 """
 Test ASK SDK integration without requiring AWS resources
 """
-import json
-import sys
 import os
+import sys
 
 # Add the parent directory to the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -20,6 +19,7 @@ os.environ["AWS_SECRET_ACCESS_KEY"] = "test"
 
 # Import the lambda handler
 from lambda_function import lambda_handler
+
 
 def test_ask_sdk_handlers():
     """Test that ASK SDK handlers are properly invoked"""

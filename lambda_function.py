@@ -13,39 +13,37 @@ import json
 import logging
 import os
 import re
-import httpx
-from typing import Dict, List, Optional, Any, Union
-#from aniso8601 import parse_duration
-from aniso8601.duration import parse_duration
-from boto3 import resource as resource
+import sys
 from datetime import datetime
-from dateutil import parser, tz
-from dateutil.relativedelta import *
-from dotenv import load_dotenv
-from tenacity import retry, stop_after_attempt, retry_if_exception_type, wait_exponential
-from time import time
+from typing import List
 
-from ask_sdk_core.skill_builder import CustomSkillBuilder
-from ask_sdk_core.dispatch_components import AbstractRequestHandler, AbstractExceptionHandler
-from ask_sdk_core.dispatch_components import AbstractRequestInterceptor, AbstractResponseInterceptor
-from ask_sdk_core.utils import is_request_type, is_intent_name
-from ask_sdk_core.handler_input import HandlerInput
-from ask_sdk_model import Response
-from ask_sdk_model.ui import SimpleCard
+import httpx
+from ask_sdk_core.dispatch_components import (AbstractExceptionHandler,
+                                              AbstractRequestHandler,
+                                              AbstractRequestInterceptor,
+                                              AbstractResponseInterceptor)
 from ask_sdk_core.serialize import DefaultSerializer
+from ask_sdk_core.skill_builder import CustomSkillBuilder
+from ask_sdk_core.utils import is_intent_name, is_request_type
+from ask_sdk_dynamodb.adapter import DynamoDbAdapter
+#from aniso8601 import parse_duration
+from boto3 import resource as resource
+from dateutil import parser, tz
+from dateutil.relativedelta import relativedelta
+from dotenv import load_dotenv
 
-from utils.geolocator import Geolocator
-from utils.constants import *
-from utils.constants import get_default_metrics
-from utils import converters
 from storage.cache_handler import CacheHandler
-from storage.settings_handler import SettingsHandler, AlexaSettingsHandler
-from storage.local_handlers import LocalJsonCacheHandler, LocalJsonSettingsHandler
+from storage.local_handlers import (LocalJsonCacheHandler,
+                                    LocalJsonSettingsHandler)
+from storage.settings_handler import AlexaSettingsHandler
+from utils.constants import (DAYS, METRICS, MONTH_DAYS, MONTH_DAYS_XLATE,
+                             MONTH_NAMES, SETTINGS, SLOTS, get_default_metrics)
+from utils.geolocator import Geolocator
+from weather.alerts import Alerts
 from weather.base import WeatherBase
 from weather.grid_points import GridPoints
-from weather.observations import Observations
-from weather.alerts import Alerts, Alert
 from weather.location import Location
+from weather.observations import Observations
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -739,23 +737,11 @@ class Skill(WeatherBase):
             text + "."
 
         header = "The extended forecast for the %s zone " % self.loc.forecastZoneName
-        if not text:
-            header += "is unavailable for %s %s " % \
-                    (MONTH_NAMES[when.month - 1],
-                     MONTH_DAYS[when.day - 1])
 
         return self.normalize(header + text)
 
     def get_forecast(self, metrics):
         text = ""
-        snames = {0: "overnight, ",
-                  6: "in the morning, ",
-                  12: "in the afternoon, ",
-                  18: "in the evening, "}
-        enames = {0: "midnight",
-                  6: "the morning",
-                  12: "mid day",
-                  18: "the evening"}
 
         stime = self.stime
         etime = self.etime 
@@ -773,15 +759,12 @@ class Skill(WeatherBase):
                 return text
 
             isday = self.is_day(stime)
-            sname = snames[stime.hour]
-            ename = enames[etime.hour]
 
             text = ""
             if metric == "wind":
                 wsh = gp.wind_speed_high
                 wsl = gp.wind_speed_low
                 wdi = gp.wind_direction_initial
-                wdf = gp.wind_direction_final
                 if wsh is None:
                     text = "winds will be calm"
                 else:
@@ -839,7 +822,7 @@ class Skill(WeatherBase):
                 if si is not None:
                     if si == sf:
                         text = "it will be %s" % si
-                    elif si == None or sf == None:
+                    elif si is None or sf is None:
                         text = "it will be %s" % si or sf
                     else:
                         text = "it will be %s changing to %s" % (si, sf)
@@ -928,7 +911,6 @@ class Skill(WeatherBase):
         base = now + relativedelta(hour=6)
         stime = base
         hours = 12
-        quarter = None
         sname = ""
 
         # Handle the days like Monday or Today.
@@ -1279,7 +1261,6 @@ class AllExceptionHandler(AbstractExceptionHandler):
         logger.error("Exception encountered: %s", exception)
         
         # Get event-like structure for notify
-        session_attr = handler_input.attributes_manager.session_attributes
         request_envelope = handler_input.request_envelope
         event = {
             "session": {
@@ -1311,9 +1292,6 @@ class AllExceptionHandler(AbstractExceptionHandler):
 # ============================================================================
 # Skill Builder
 # ============================================================================
-
-# Import DynamoDB persistence adapter
-from ask_sdk_dynamodb.adapter import DynamoDbAdapter
 
 # Create DynamoDB persistence adapter for user settings
 persistence_adapter = DynamoDbAdapter(
@@ -1385,7 +1363,7 @@ def lambda_handler(event, context=None):
         
     except SystemExit:
         pass
-    except Exception as e:
+    except Exception:
         import traceback
         logger.error("Lambda handler exception: %s", traceback.format_exc())
         notify(event, "Exception", traceback.format_exc())

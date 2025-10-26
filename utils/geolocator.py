@@ -15,7 +15,8 @@ Supports HERE.com geocoding API.
 """
 
 import httpx
-from tenacity import retry, stop_after_attempt, retry_if_exception_type, wait_exponential
+from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
+                      wait_exponential)
 
 
 class Geolocator:

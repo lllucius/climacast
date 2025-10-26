@@ -16,12 +16,12 @@ This module provides the Location class for converting location names
 and zip codes to coordinates and retrieving associated weather zones.
 """
 
-from dateutil import tz
 import json
 
-from weather.base import WeatherBase
-from utils.constants import STATES, LOCATION_XLATE
+from dateutil import tz
 
+from utils.constants import LOCATION_XLATE, STATES
+from weather.base import WeatherBase
 
 # No module-level globals needed - use lazy imports in methods
 
@@ -62,7 +62,7 @@ class Location(WeatherBase):
             None on success, error message string on failure
         """
         # Lazy import to avoid circular dependency
-        from lambda_function import notify, get_geolocator
+        from lambda_function import get_geolocator, notify
         
         get_geolocator()
             

@@ -18,14 +18,11 @@ HTTP communication, and text normalization.
 """
 
 import json
-from typing import Dict, List, Optional, Any, Union
-import httpx
-from tenacity import retry, stop_after_attempt, retry_if_exception_type, wait_exponential
+from typing import Any, Dict, List, Optional, Union
 
 from utils import converters
-from utils.text_normalizer import TextNormalizer
 from utils.constants import ANGLES
-
+from utils.text_normalizer import TextNormalizer
 
 # These will be lazily imported to avoid circular imports
 # No module-level globals needed - use lazy imports in methods
@@ -122,6 +119,9 @@ class WeatherBase(object):
         Returns:
             List of station IDs
         """
+        # Lazy import to avoid circular dependency
+        from lambda_function import notify
+        
         print("GETTING STATIONS================================")
         data = self.https("gridpoints/%s/stations" % coords)
         print("DATA", data)
@@ -141,6 +141,9 @@ class WeatherBase(object):
         Returns:
             Dict containing station information or None
         """
+        # Lazy import to avoid circular dependency
+        from lambda_function import notify
+        
         stationId = stationId.rsplit("/")[-1]
         station = self.cache_handler.get_station(stationId) if self.cache_handler else None
         if station is None:
@@ -186,6 +189,9 @@ class WeatherBase(object):
         Returns:
             Product text or None
         """
+        # Lazy import to avoid circular dependency
+        from lambda_function import notify
+        
         text = ""
 
         # Retrieve list of features provided by the given CWA

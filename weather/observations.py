@@ -16,7 +16,6 @@ This module provides the Observations class for processing current weather
 conditions from National Weather Service observation stations.
 """
 
-import json
 from datetime import datetime
 
 from weather.base import WeatherBase
@@ -56,7 +55,7 @@ class Observations(WeatherBase):
     @property
     def is_good(self):
         """Current temperature in Fahrenheit."""
-        return not self.data is None
+        return self.data is not None
 
     @property
     def temp(self):

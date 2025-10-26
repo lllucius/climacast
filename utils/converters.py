@@ -16,7 +16,7 @@ This module provides utility functions for converting between different units
 of measurement (temperature, pressure, distance, etc.).
 """
 
-from typing import Optional, Union, Tuple
+from typing import Optional, Tuple, Union
 
 
 def to_skys(percent: Optional[float], isday: bool) -> Optional[str]:

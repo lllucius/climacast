@@ -17,7 +17,8 @@ This module provides DynamoDB-based caching for weather data.
 
 import logging
 from time import time
-from typing import Dict, Optional, Any
+from typing import Any, Dict, Optional
+
 from boto3 import resource as resource
 
 # Configure logging

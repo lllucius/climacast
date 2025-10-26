@@ -19,8 +19,9 @@ os.environ["DYNAMODB_TABLE_NAME"] = "test-table"
 # Add the parent directory to the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from lambda_function import Location, get_geolocator
 from unittest.mock import Mock, patch
+
+from lambda_function import Location, get_geolocator
 
 
 def test_location_uses_geolocator():

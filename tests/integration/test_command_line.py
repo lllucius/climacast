@@ -4,8 +4,8 @@ Test command line processing functionality for lambda_function.py
 """
 import json
 import os
-import sys
 import subprocess
+import sys
 import tempfile
 
 # Add the parent directories to the path
@@ -22,7 +22,7 @@ os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 os.environ["AWS_ACCESS_KEY_ID"] = "test"
 os.environ["AWS_SECRET_ACCESS_KEY"] = "test"
 
-from lambda_function import build_test_event, parse_slot_args, run_test_from_args
+from lambda_function import build_test_event, parse_slot_args  # noqa: E402
 
 
 def test_build_test_event_launch_request():

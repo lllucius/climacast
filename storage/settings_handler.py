@@ -18,8 +18,10 @@ user settings.
 
 import logging
 from typing import List, Optional
+
 from ask_sdk_core.handler_input import HandlerInput
-from utils.constants import METRICS, get_default_metrics
+
+from utils.constants import get_default_metrics
 
 # Configure logging
 logger = logging.getLogger(__name__)

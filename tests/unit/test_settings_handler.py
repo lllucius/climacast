@@ -3,8 +3,8 @@
 Unit tests for SettingsHandler class.
 Tests the settings handler structure and logic.
 """
-import sys
 import os
+import sys
 
 # Set required environment variables before importing
 os.environ["app_id"] = "amzn1.ask.skill.test"

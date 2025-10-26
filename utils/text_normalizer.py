@@ -19,7 +19,8 @@ wind directions, and other specialized text patterns.
 
 import re
 from typing import Optional
-from utils.constants import NORMALIZE_RE, STATES, ANGLES
+
+from utils.constants import ANGLES, NORMALIZE_RE, STATES
 
 
 class TextNormalizer:

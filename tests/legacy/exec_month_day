@@ -1,9 +1,10 @@
 #!/usr/bin/python
 
 from datetime import datetime
-from dateutil.relativedelta import *
 from random import randrange
 from sys import argv
+
+from dateutil.relativedelta import *
 
 DAY_NAMES = ["first",
              "second",

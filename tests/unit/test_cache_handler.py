@@ -3,8 +3,8 @@
 Unit tests for CacheHandler class.
 Tests the cache key structure and logic without requiring DynamoDB.
 """
-import sys
 import os
+import sys
 
 # Set required environment variables before importing
 os.environ["app_id"] = "amzn1.ask.skill.test"
