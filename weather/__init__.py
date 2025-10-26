@@ -10,10 +10,4 @@ from weather.grid_points import GridPoints
 from weather.location import Location
 from weather.observations import Observations
 
-__all__ = [
-    'WeatherBase',
-    'GridPoints',
-    'Observations',
-    'Alerts', 'Alert',
-    'Location'
-]
+__all__ = ["WeatherBase", "GridPoints", "Observations", "Alerts", "Alert", "Location"]

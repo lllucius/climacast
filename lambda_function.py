@@ -18,26 +18,36 @@ from datetime import datetime
 from typing import List
 
 import httpx
-from ask_sdk_core.dispatch_components import (AbstractExceptionHandler,
-                                              AbstractRequestHandler,
-                                              AbstractRequestInterceptor,
-                                              AbstractResponseInterceptor)
+from ask_sdk_core.dispatch_components import (
+    AbstractExceptionHandler,
+    AbstractRequestHandler,
+    AbstractRequestInterceptor,
+    AbstractResponseInterceptor,
+)
 from ask_sdk_core.serialize import DefaultSerializer
 from ask_sdk_core.skill_builder import CustomSkillBuilder
 from ask_sdk_core.utils import is_intent_name, is_request_type
 from ask_sdk_dynamodb.adapter import DynamoDbAdapter
-#from aniso8601 import parse_duration
+
+# from aniso8601 import parse_duration
 from boto3 import resource as resource
 from dateutil import parser, tz
 from dateutil.relativedelta import relativedelta
 from dotenv import load_dotenv
 
 from storage.cache_handler import CacheHandler
-from storage.local_handlers import (LocalJsonCacheHandler,
-                                    LocalJsonSettingsHandler)
+from storage.local_handlers import LocalJsonCacheHandler, LocalJsonSettingsHandler
 from storage.settings_handler import AlexaSettingsHandler
-from utils.constants import (DAYS, METRICS, MONTH_DAYS, MONTH_DAYS_XLATE,
-                             MONTH_NAMES, SETTINGS, SLOTS, get_default_metrics)
+from utils.constants import (
+    DAYS,
+    METRICS,
+    MONTH_DAYS,
+    MONTH_DAYS_XLATE,
+    MONTH_NAMES,
+    SETTINGS,
+    SLOTS,
+    get_default_metrics,
+)
 from utils.geolocator import Geolocator
 from weather.alerts import Alerts
 from weather.base import WeatherBase
@@ -63,7 +73,7 @@ class Config:
     """
     Configuration class for managing environment variables and application settings.
     Provides a centralized location for all configuration values.
-    
+
     Environment Variables:
         event_id: Event identifier for notifications
         app_id: Alexa skill application ID (default: amzn1.ask.skill.test)
@@ -71,57 +81,59 @@ class Config:
         here_api_key: HERE.com API key for geocoding
         DYNAMODB_PERSISTENCE_TABLE_NAME: DynamoDB table name (default: ask-{app_id})
         DYNAMODB_PERSISTENCE_REGION: AWS region (default: us-east-1)
-    
+
     Example:
         Access configuration values:
             app_id = Config.APP_ID
             table_name = Config.DYNAMODB_TABLE_NAME
     """
-    
+
     # Application identifiers
     EVENT_ID: str = os.environ.get("event_id", "")
     APP_ID: str = os.environ.get("app_id", "amzn1.ask.skill.test")
     DATA_UPDATE_ID: str = os.environ.get("dataupdate_id", "amzn1.ask.data.update")
-    
+
     # API keys
     HERE_API_KEY: str = os.environ.get("here_api_key", "")
-    
+
     # DynamoDB settings
-    DYNAMODB_TABLE_NAME: str = os.environ.get("DYNAMODB_PERSISTENCE_TABLE_NAME", f"ask-{os.environ.get('app_id', 'test')}")
+    DYNAMODB_TABLE_NAME: str = os.environ.get(
+        "DYNAMODB_PERSISTENCE_TABLE_NAME", f"ask-{os.environ.get('app_id', 'test')}"
+    )
     DYNAMODB_REGION: str = os.environ.get("DYNAMODB_PERSISTENCE_REGION", "us-east-1")
-    
+
     # Cache settings
     DEFAULT_CACHE_TTL_DAYS: int = 35
-    
+
     # HTTP retry settings
     HTTP_RETRY_TOTAL: int = 3
     HTTP_RETRY_STATUS_CODES: List[int] = [429, 500, 502, 503, 504]
     HTTP_TIMEOUT: int = 30
-    
+
     @classmethod
     def validate(cls):
         """
         Validate required configuration values.
-        
+
         Raises:
             ValueError: If required configuration is missing or invalid
         """
         # Check for required values in production (not in test mode)
-        is_test_mode = os.environ.get('SKILLTEST', '').lower() == 'true'
-        
+        is_test_mode = os.environ.get("SKILLTEST", "").lower() == "true"
+
         if not is_test_mode:
             if not cls.APP_ID or cls.APP_ID == "amzn1.ask.skill.test":
                 logger.warning("APP_ID not set or using test value")
-            
+
             if not cls.HERE_API_KEY:
                 logger.warning("HERE_API_KEY not set - geocoding will not work")
-            
+
             if not cls.DYNAMODB_TABLE_NAME:
                 raise ValueError("DYNAMODB_TABLE_NAME must be set")
-            
+
             if not cls.DYNAMODB_REGION:
                 raise ValueError("DYNAMODB_REGION must be set")
-        
+
         logger.info("Configuration validated successfully")
 
 
@@ -131,54 +143,52 @@ class Config:
 
 _https_client = None
 
+
 def get_https_client() -> httpx.Client:
     """
     Get or create the global HTTPS client instance.
-    
+
     Returns:
         httpx.Client: Configured HTTP client for API calls
     """
     global _https_client
     if _https_client is None:
-        _https_client = httpx.Client(
-            timeout=Config.HTTP_TIMEOUT,
-            follow_redirects=True
-        )
+        _https_client = httpx.Client(timeout=Config.HTTP_TIMEOUT, follow_redirects=True)
     return _https_client
 
 
 _geolocator_instance = None
 
+
 def get_geolocator() -> Geolocator:
     """
     Get or create the global geolocator instance.
-    
+
     Returns:
         Geolocator: Configured geolocator for geocoding operations
     """
     global _geolocator_instance
     if _geolocator_instance is None:
         _geolocator_instance = Geolocator(
-            api_key=Config.HERE_API_KEY,
-            session=get_https_client()
+            api_key=Config.HERE_API_KEY, session=get_https_client()
         )
     return _geolocator_instance
 
 
 _cache_handler_instance = None
 
+
 def get_cache_handler() -> CacheHandler:
     """
     Get or create the global cache handler instance.
-    
+
     Returns:
         CacheHandler: Configured cache handler for DynamoDB operations
     """
     global _cache_handler_instance
     if _cache_handler_instance is None:
         _cache_handler_instance = CacheHandler(
-            table_name=Config.DYNAMODB_TABLE_NAME,
-            region=Config.DYNAMODB_REGION
+            table_name=Config.DYNAMODB_TABLE_NAME, region=Config.DYNAMODB_REGION
         )
     return _cache_handler_instance
 
@@ -187,9 +197,10 @@ def get_cache_handler() -> CacheHandler:
 # Notification function
 # =============================================================================
 
+
 def notify(event, sub, msg=None):
     """
-        Send SNS message of an unusual event
+    Send SNS message of an unusual event
     """
     text = ""
     if "request" in event:
@@ -207,7 +218,10 @@ def notify(event, sub, msg=None):
         if slots:
             text += "SLOTS:\n\n"
             for slot in SLOTS:
-                text += "  %-15s %s\n" % (slot + ":", str(slots.get(slot, {}).get("value", None)))
+                text += "  %-15s %s\n" % (
+                    slot + ":",
+                    str(slots.get(slot, {}).get("value", None)),
+                )
             text += "\n"
 
     text += "EVENT:\n\n"
@@ -221,6 +235,7 @@ def notify(event, sub, msg=None):
 
     logger.info(f"NOTIFY:\n\n  {sub}\n\n{text}")
 
+
 # Base class now imported from weather.base module
 
 # GridPoints class now imported from weather.gridpoints module
@@ -231,6 +246,7 @@ def notify(event, sub, msg=None):
 
 # Location class now imported from weather.location module
 
+
 class Skill(WeatherBase):
     def __init__(self, handler_input, cache_handler=None, settings_handler=None):
         # Create minimal event dict for Base class (used for notifications)
@@ -238,30 +254,25 @@ class Skill(WeatherBase):
         event = {
             "session": {
                 "sessionId": request_envelope.session.session_id,
-                "user": {
-                    "userId": request_envelope.session.user.user_id
-                }
+                "user": {"userId": request_envelope.session.user.user_id},
             },
             "request": {
                 "type": request_envelope.request.object_type,
-                "requestId": request_envelope.request.request_id
-            }
+                "requestId": request_envelope.request.request_id,
+            },
         }
-        
+
         # Add intent info if present (for notifications)
-        if hasattr(request_envelope.request, 'intent'):
+        if hasattr(request_envelope.request, "intent"):
             intent = request_envelope.request.intent
-            event["request"]["intent"] = {
-                "name": intent.name,
-                "slots": {}
-            }
+            event["request"]["intent"] = {"name": intent.name, "slots": {}}
             if intent.slots:
                 for slot_name, slot in intent.slots.items():
                     event["request"]["intent"]["slots"][slot_name] = {
                         "name": slot.name,
-                        "value": slot.value
+                        "value": slot.value,
                     }
-        
+
         super().__init__(event, cache_handler)
         self.handler_input = handler_input
         self.request_envelope = request_envelope
@@ -336,7 +347,7 @@ class Skill(WeatherBase):
     def initialize(self):
         """Initialize skill state from handler_input"""
         # Amazon says to verify our application id
-        #if self.session.application.application_id != Config.APP_ID:
+        # if self.session.application.application_id != Config.APP_ID:
         #    raise ValueError("Invoked from unknown application.")
 
         # Retrieve the default location info
@@ -353,15 +364,17 @@ class Skill(WeatherBase):
             setattr(self.slots, slot, None)
 
         # Load the slot values
-        if hasattr(self.request, 'intent') and self.request.intent.slots:
+        if hasattr(self.request, "intent") and self.request.intent.slots:
             for slot_name, slot in self.request.intent.slots.items():
                 if slot_name in SLOTS:
                     val = slot.value
                     setattr(self.slots, slot_name, val.strip().lower() if val else None)
-                    logger.info("SLOT: %s = %s", slot_name, getattr(self.slots, slot_name))
-                
+                    logger.info(
+                        "SLOT: %s = %s", slot_name, getattr(self.slots, slot_name)
+                    )
+
         # Log intent name for debugging
-        if hasattr(self.request, 'intent'):
+        if hasattr(self.request, "intent"):
             logger.info("INTENT: %s", self.request.intent.name)
         else:
             logger.info("REQUEST: %s", self.request.object_type)
@@ -373,45 +386,59 @@ class Skill(WeatherBase):
 
         prompt = None
         if not end:
-            prompt = "For %s, say help, " % ("more examples" if new else "example requests") + \
-                     "To interrupt speaking, say Alexa, cancel, " + \
-                     "If you are done, say stop."
+            prompt = (
+                "For %s, say help, " % ("more examples" if new else "example requests")
+                + "To interrupt speaking, say Alexa, cancel, "
+                + "If you are done, say stop."
+            )
             text += ". " if text.strip()[-1] != "." else " "
             text += prompt if new else "if you are done, say stop."
-        
+
         # Build SSML speech
-        speech_ssml = '<speak><prosody rate="%d%%" pitch="%+d%%">%s</prosody></speak>' % \
-                      (self.user_rate, self.user_pitch - 100, text)
-        
+        speech_ssml = (
+            '<speak><prosody rate="%d%%" pitch="%+d%%">%s</prosody></speak>'
+            % (self.user_rate, self.user_pitch - 100, text)
+        )
+
         # Use ASK SDK response builder
         response_builder = self.handler_input.response_builder
         response_builder.speak(speech_ssml)
-        
+
         if not end and prompt:
-            reprompt_ssml = '<speak><prosody rate="%d%%" pitch="%+d%%">%s</prosody></speak>' % \
-                           (self.user_rate, self.user_pitch - 100, prompt)
+            reprompt_ssml = (
+                '<speak><prosody rate="%d%%" pitch="%+d%%">%s</prosody></speak>'
+                % (self.user_rate, self.user_pitch - 100, prompt)
+            )
             response_builder.ask(reprompt_ssml)
-        
+
         response_builder.set_should_end_session(end)
-        
+
         # Update session attributes
         self.handler_input.attributes_manager.session_attributes.update(self.attrs)
-        
+
         return response_builder.response
 
     def default_handler(self):
         notify(self.event, "Unrecognized event", json.dumps(self.event, indent=4))
-        return self.respond("Unhandled event %s, %s." % \
-                            (self.request["type"],
-                             self.intent["name"] if self.request["type"] == "IntentRequest" else ""))
+        return self.respond(
+            "Unhandled event %s, %s."
+            % (
+                self.request["type"],
+                self.intent["name"] if self.request["type"] == "IntentRequest" else "",
+            )
+        )
 
     def launch_request(self):
-        text = "Welcome to Clime a Cast. " \
-               "For current conditions, use phrases like: What's the weather. "\
-               "For forecasts, try phrases like: What's the forecast."
+        text = (
+            "Welcome to Clime a Cast. "
+            "For current conditions, use phrases like: What's the weather. "
+            "For forecasts, try phrases like: What's the forecast."
+        )
         if self.loc is None:
-            text += "You must set your default location by saying something like: " \
-                    "set location to Miami Florida."
+            text += (
+                "You must set your default location by saying something like: "
+                "set location to Miami Florida."
+            )
 
         return text
 
@@ -422,19 +449,18 @@ class Skill(WeatherBase):
         if "error" in self.request:
             notify(self.event, "Error detected", self.request["error"]["message"])
             return self.request["error"]["message"]
-    
+
         notify(self.event, "Session Ended", self.request["reason"])
         return self.request["reason"]
 
     def cancel_intent(self):
         return "Canceled."
- 
+
     def stop_intent(self):
         return self.session_end_request()
 
     def help_intent(self):
-        text = \
-            """
+        text = """
             For complete information, please refer to the Clima Cast skill
             page in the Alexa app.
             You may get the current conditions with phrases like:
@@ -473,10 +499,10 @@ class Skill(WeatherBase):
         text = self.get_location()
         if text is not None:
             return text
-        
+
         # Determine the start and end times for the request
         self.get_when()
-        
+
         metric = self.slots.metric
         if metric is None:
             return "You must include a metric like temperature, humidity or wind"
@@ -484,7 +510,7 @@ class Skill(WeatherBase):
         if metric == "alerts":
             text = self.get_alerts()
             return text
- 
+
         if metric == "extended forecast":
             text = self.get_extended()
             return text
@@ -492,7 +518,9 @@ class Skill(WeatherBase):
         if metric not in METRICS:
             return "%s is an unrecognized metric." % metric
 
-        metrics = self.user_metrics if METRICS[metric][0] == "all" else [METRICS[metric][0]]
+        metrics = (
+            self.user_metrics if METRICS[metric][0] == "all" else [METRICS[metric][0]]
+        )
 
         # These are absolute
         if metric == "forecast" or self.has_when:
@@ -543,8 +571,12 @@ class Skill(WeatherBase):
             elif setting == "rate":
                 text += "the voice rate is set to %d percent." % self.user_rate
             elif setting == "forecast":
-                text += "the custom forecast will include the %s." % \
-                        ", ".join(list(self.user_metrics[:-1])) + " and " + self.user_metrics[-1]
+                text += (
+                    "the custom forecast will include the %s."
+                    % ", ".join(list(self.user_metrics[:-1]))
+                    + " and "
+                    + self.user_metrics[-1]
+                )
 
         return text
 
@@ -583,10 +615,13 @@ class Skill(WeatherBase):
         return text
 
     def get_custom_intent(self):
-        text = "The custom forecast will include the %s." % \
-               ", ".join(list(self.user_metrics[:-1])) + " and " + self.user_metrics[-1]
+        text = (
+            "The custom forecast will include the %s."
+            % ", ".join(list(self.user_metrics[:-1]))
+            + " and "
+            + self.user_metrics[-1]
+        )
         return text
-
 
     def add_custom_intent(self):
         metric = self.slots.metric
@@ -602,7 +637,7 @@ class Skill(WeatherBase):
 
         if self.has_metric(metric[0]):
             return "%s is already included in the custom forecast." % metric[0]
-    
+
         self.add_metric(metric[0])
 
         return "%s has been added to the custom forecast." % metric[0]
@@ -621,7 +656,7 @@ class Skill(WeatherBase):
 
         if not self.has_metric(metric[0]):
             return "%s is already excluded from the custom forecast." % metric[0]
-    
+
         self.remove_metric(metric[0])
 
         return "%s has been removed from the custom forecast." % metric[0]
@@ -642,7 +677,7 @@ class Skill(WeatherBase):
                 text += "for " + alert.area + "...\n"
                 text += alert.description + "...\n"
                 text += alert.instruction + "...\n"
-        
+
         return self.normalize(text)
 
     def get_current(self, metrics):
@@ -652,19 +687,21 @@ class Skill(WeatherBase):
             alerts = Alerts(self.event, self.loc.countyZoneId, self.cache_handler)
             cnt = len(alerts)
             if cnt > 0:
-                text += "There's %d alert%s in effect for your area! " % \
-                       (cnt,
-                        "s" if cnt > 1 else "")
+                text += "There's %d alert%s in effect for your area! " % (
+                    cnt,
+                    "s" if cnt > 1 else "",
+                )
 
-        #print("OBS", self.loc.observationStations)
+        # print("OBS", self.loc.observationStations)
         # Retrieve the current observations from the nearest station
         obs = Observations(self.event, self.loc.observationStations, self.cache_handler)
         if obs.is_good:
-            #data = self.https("gridpoints/%s/%s" % (self.loc.cwa, self.loc.grid_point))
-            text += "At %s, %s reported %s, " % \
-                    (obs.time_reported.astimezone(self.loc.tz).strftime("%I:%M%p"),
-                     obs.station_name,
-                     obs.description)
+            # data = self.https("gridpoints/%s/%s" % (self.loc.cwa, self.loc.grid_point))
+            text += "At %s, %s reported %s, " % (
+                obs.time_reported.astimezone(self.loc.tz).strftime("%I:%M%p"),
+                obs.station_name,
+                obs.description,
+            )
 
             for metric in metrics:
                 if metric == "wind":
@@ -674,13 +711,15 @@ class Skill(WeatherBase):
                         if obs.wind_direction is None:
                             text += "Winds are %s miles per hour" % obs.wind_speed
                         elif obs.wind_direction == "Variable":
-                            text += "Winds are %s at %s miles per hour" % \
-                                    (obs.wind_direction,
-                                     obs.wind_speed)
+                            text += "Winds are %s at %s miles per hour" % (
+                                obs.wind_direction,
+                                obs.wind_speed,
+                            )
                         else:
-                            text += "Winds are out of the %s at %s miles per hour" % \
-                                    (obs.wind_direction,
-                                     obs.wind_speed)
+                            text += "Winds are out of the %s at %s miles per hour" % (
+                                obs.wind_direction,
+                                obs.wind_speed,
+                            )
 
                         if obs.wind_gust is not None:
                             text += ", gusting to %s" % obs.wind_gust
@@ -710,8 +749,9 @@ class Skill(WeatherBase):
         return self.normalize(text)
 
     def get_discussion(self):
-        match = re.compile(r".*(^\.SHORT TERM.*?)^&&$",
-                           re.MULTILINE|re.DOTALL).match(self.get_product("AFD"))
+        match = re.compile(r".*(^\.SHORT TERM.*?)^&&$", re.MULTILINE | re.DOTALL).match(
+            self.get_product("AFD")
+        )
         if not match:
             return "Unable to extract forecast discussion"
 
@@ -720,12 +760,14 @@ class Skill(WeatherBase):
         return text
 
     def get_extended(self):
-        data = self.https("gridpoints/%s/%s/forecast" % (self.loc.cwa, self.loc.grid_point))
-        #print(json.dumps(data, indent=4))
+        data = self.https(
+            "gridpoints/%s/%s/forecast" % (self.loc.cwa, self.loc.grid_point)
+        )
+        # print(json.dumps(data, indent=4))
         if data is None or data.get("periods", None) is None:
             notify(self.event, "Extended forecast missing periods", data)
-            return "the extended forecast is currently unavailable."        
-        
+            return "the extended forecast is currently unavailable."
+
         text = ""
         for period in data.get("periods", {}):
             text += " " + period["name"] + ", " + period["detailedForecast"]
@@ -733,7 +775,10 @@ class Skill(WeatherBase):
                 wind = period["windSpeed"]
                 if wind.lower().find("to") < 0:
                     wind = "around " + wind
-                text += ". %s wind %s" % (self.dir_to_dir(period["windDirection"]), wind)
+                text += ". %s wind %s" % (
+                    self.dir_to_dir(period["windDirection"]),
+                    wind,
+                )
             text + "."
 
         header = "The extended forecast for the %s zone " % self.loc.forecastZoneName
@@ -744,18 +789,25 @@ class Skill(WeatherBase):
         text = ""
 
         stime = self.stime
-        etime = self.etime 
+        etime = self.etime
         fulltext = ""
-        gp = GridPoints(self.event, self.loc.tz, self.loc.cwa, self.loc.grid_point, self.cache_handler)
-        #print("METRICS", metrics)
+        gp = GridPoints(
+            self.event,
+            self.loc.tz,
+            self.loc.cwa,
+            self.loc.grid_point,
+            self.cache_handler,
+        )
+        # print("METRICS", metrics)
         for metric in metrics:
-            #print("FORECAST METRIC", metric, "STIME", stime, "ETIME", etime)
+            # print("FORECAST METRIC", metric, "STIME", stime, "ETIME", etime)
             metric = METRICS[metric][0]
-            #print("FORECAST METRIC", metric, "STIME", stime, "ETIME", etime)
+            # print("FORECAST METRIC", metric, "STIME", stime, "ETIME", etime)
             if not gp.set_interval(stime, etime):
-                text = "Forecast information is unavailable for %s %s" % \
-                       (MONTH_NAMES[self.stime.month - 1],
-                        MONTH_DAYS[self.stime.day - 1])
+                text = "Forecast information is unavailable for %s %s" % (
+                    MONTH_NAMES[self.stime.month - 1],
+                    MONTH_DAYS[self.stime.day - 1],
+                )
                 return text
 
             isday = self.is_day(stime)
@@ -770,26 +822,30 @@ class Skill(WeatherBase):
                 else:
                     if wsh == wsl:
                         if wdi is None:
-                            text = "winds will be %s miles per hour" % \
-                                   (wsh)
+                            text = "winds will be %s miles per hour" % (wsh)
                         else:
-                            text = "winds will be out of the %s at %s miles per hour" % \
-                                   (wdi, wsh)
+                            text = (
+                                "winds will be out of the %s at %s miles per hour"
+                                % (wdi, wsh)
+                            )
                     else:
                         if wdi is None:
-                            text = "winds will be %s to %s miles per hour" % \
-                                   (wsl, wsh)
+                            text = "winds will be %s to %s miles per hour" % (wsl, wsh)
                         else:
-                            text = "winds will be out of the %s at %s to %s miles per hour" % \
-                                   (wdi, wsl, wsh)
+                            text = (
+                                "winds will be out of the %s at %s to %s miles per hour"
+                                % (wdi, wsl, wsh)
+                            )
                     wg = gp.wind_gust_high
                     if wg is not None:
                         text += ", with gusts as high as %s" % wg
             elif metric == "temperature":
                 t = gp.temp_high if isday else gp.temp_low
                 if t is not None:
-                    text = "the %s temperature will be %s degrees" % \
-                           ("high" if isday else "low", t)
+                    text = "the %s temperature will be %s degrees" % (
+                        "high" if isday else "low",
+                        t,
+                    )
 
                     wcl = gp.wind_chill_low
                     wch = gp.wind_chill_high
@@ -798,7 +854,10 @@ class Skill(WeatherBase):
                             if wcl != t:
                                 text += ", with a wind chill of %s degrees" % wcl
                         else:
-                            text += ", with a wind chill of %s to %s degrees" % (wcl, wch)
+                            text += ", with a wind chill of %s to %s degrees" % (
+                                wcl,
+                                wch,
+                            )
 
                     hil = gp.heat_index_low
                     hih = gp.heat_index_high
@@ -807,7 +866,10 @@ class Skill(WeatherBase):
                             if hil != t:
                                 text += ", with a heat index of %s degrees" % hil
                         else:
-                            text += ", with a heat index of %s to %s degrees" % (hil, hih)
+                            text += ", with a heat index of %s to %s degrees" % (
+                                hil,
+                                hih,
+                            )
             elif metric == "dewpoint":
                 dh = gp.dewpoint_high
                 if dh is not None:
@@ -829,19 +891,19 @@ class Skill(WeatherBase):
             elif metric == "relative humidity":
                 hh = gp.humidity_high
                 if hh is not None:
-                    text = 'the relative humidity will be %.0f percent' % hh
+                    text = "the relative humidity will be %.0f percent" % hh
             elif metric == "precipitation":
                 pch = gp.precip_chance_high
                 if pch is not None:
                     if pch == 0:
                         text = "No precipitation forecasted"
                     else:
-                        text = 'the chance of precipitation will be %d percent' % pch
+                        text = "the chance of precipitation will be %d percent" % pch
 
                         pal = gp.precip_amount_low
                         pah = gp.precip_amount_high
-                        #print("PAL", pal, type(pal))
-                        #print("PAH", pah, type(pah))
+                        # print("PAL", pal, type(pal))
+                        # print("PAH", pah, type(pah))
 
                         if pal is not None and pah is not None and pah[0] != 0:
                             text += ", with amounts of "
@@ -849,7 +911,11 @@ class Skill(WeatherBase):
                             if pal[1] == pah[1] or pal[0] < 0.1:
                                 text += "%s %s possible" % (pah[1], pah[2])
                             else:
-                                text += "%s to %s %s possible" % (pal[1], pah[1], pah[2])
+                                text += "%s to %s %s possible" % (
+                                    pal[1],
+                                    pah[1],
+                                    pah[2],
+                                )
 
                         sal = gp.snow_amount_low
                         sah = gp.snow_amount_high
@@ -859,7 +925,11 @@ class Skill(WeatherBase):
                             if sal[1] == sah[1] or sal[0] < 0.1:
                                 text += "%s %s possible" % (sah[1], sah[2])
                             else:
-                                text += "%s to %s %s possible" % (sal[1], sah[1], sah[2])
+                                text += "%s to %s %s possible" % (
+                                    sal[1],
+                                    sah[1],
+                                    sah[2],
+                                )
             elif metric == "summary":
                 wt = gp.weather_text
                 if wt:
@@ -869,14 +939,12 @@ class Skill(WeatherBase):
                 fulltext += text + ". "
 
         if fulltext != "":
-            fulltext = "%s in %s, %s" % \
-                       (self.sname,
-                        self.loc.city,
-                        fulltext)
+            fulltext = "%s in %s, %s" % (self.sname, self.loc.city, fulltext)
         else:
-            fulltext = "Forecast information is unavailable for %s in %s" % \
-                       (self.sname,
-                        self.loc.city)
+            fulltext = "Forecast information is unavailable for %s in %s" % (
+                self.sname,
+                self.loc.city,
+            )
 
         return fulltext
 
@@ -901,13 +969,17 @@ class Skill(WeatherBase):
         return text
 
     def get_when(self):
-        self.has_when = (self.slots.when_abs or \
-                         self.slots.when_any or \
-                         self.slots.when_pos or \
-                         self.slots.day or \
-                         self.slots.month) is not None
+        self.has_when = (
+            self.slots.when_abs
+            or self.slots.when_any
+            or self.slots.when_pos
+            or self.slots.day
+            or self.slots.month
+        ) is not None
 
-        now = datetime.now(tz=self.loc.tz) + relativedelta(minute=0, second=0, microsecond=0)
+        now = datetime.now(tz=self.loc.tz) + relativedelta(
+            minute=0, second=0, microsecond=0
+        )
         base = now + relativedelta(hour=6)
         stime = base
         hours = 12
@@ -929,26 +1001,28 @@ class Skill(WeatherBase):
                 elif day[0] == "this":
                     day = [day[1]]
 
-            # Now, determine the actual day           
+            # Now, determine the actual day
             if day[0] == "tomorrow":
                 stime += relativedelta(days=+1, hour=6)
             elif day[0] in DAYS:
-                d = ((DAYS.index(day[0]) - stime.weekday()) % 7)
+                d = (DAYS.index(day[0]) - stime.weekday()) % 7
                 stime += relativedelta(days=+d, hour=6)
 
-            # Set the name now, otherwise the user will hear it as a day off 
+            # Set the name now, otherwise the user will hear it as a day off
             # if they used "overnight"
             sname = DAYS[stime.weekday()]
             is_today = stime == base
 
-            #key: [number of days to add, starting hour, duration, label]
-            specs = {"today":     [0, 6,  12, ""],
-                     "tonight":   [0, 18, 12, " night"],
-                     "night":     [0, 18, 12, " night"],
-                     "overnight": [1, 0,  6,  " overnight"],
-                     "morning":   [0, 6,  6,  " morning"], 
-                     "afternoon": [0, 12, 6,  " afternoon"], 
-                     "evening":   [0, 18, 6,  " evening"]}
+            # key: [number of days to add, starting hour, duration, label]
+            specs = {
+                "today": [0, 6, 12, ""],
+                "tonight": [0, 18, 12, " night"],
+                "night": [0, 18, 12, " night"],
+                "overnight": [1, 0, 6, " overnight"],
+                "morning": [0, 6, 6, " morning"],
+                "afternoon": [0, 12, 6, " afternoon"],
+                "evening": [0, 18, 6, " evening"],
+            }
 
             # Handle any special references
             if day[-1] in specs:
@@ -988,10 +1062,10 @@ class Skill(WeatherBase):
                     if m in MONTH_NAMES:
                         month = MONTH_NAMES.index(m) + 1
                     else:
-                        #notify(self.event, "Unexpected month %s" % m)
+                        # notify(self.event, "Unexpected month %s" % m)
                         pass
             else:
-                #notify(self.event, "Unexpected day %s" % d)
+                # notify(self.event, "Unexpected day %s" % d)
                 pass
 
             # Adjust the date relative to today
@@ -1021,50 +1095,52 @@ class Skill(WeatherBase):
         self.etime = self.stime + relativedelta(hours=hours)
         self.sname = sname
         self.quarters = hours // 6
-        #print("WHEN:", self.stime, self.etime, self.quarters, quarter)
+        # print("WHEN:", self.stime, self.etime, self.quarters, quarter)
+
 
 # ============================================================================
 # ASK SDK Request Handlers
 # ============================================================================
 
+
 class BaseIntentHandler(AbstractRequestHandler):
     """Base handler providing common functionality for all intent handlers"""
-    
+
     def get_skill_helper(self, handler_input):
         """Create and initialize Skill instance from handler_input"""
         # Check if running in test mode via environment variable
-        is_test_mode = os.environ.get('SKILLTEST', '').lower() == 'true'
-        
+        is_test_mode = os.environ.get("SKILLTEST", "").lower() == "true"
+
         if is_test_mode:
             # Use local JSON handlers for testing
             cache_handler = LocalJsonCacheHandler(".test_cache")
-            
+
             # Extract user_id for settings handler
             user_id = handler_input.request_envelope.session.user.user_id
             settings_handler = LocalJsonSettingsHandler(user_id, ".test_settings")
-            
+
             # Create Skill instance with test handlers
             skill = Skill(handler_input, cache_handler, settings_handler)
         else:
             # Use production handlers (DynamoDB-based)
             # Create settings handler using Alexa's attributes_manager
             settings_handler = AlexaSettingsHandler(handler_input)
-            
+
             # Create Skill instance with modern ASK SDK objects, cache handler, and settings handler
             skill = Skill(handler_input, get_cache_handler(), settings_handler)
-        
+
         # Initialize skill (loads location, slots, etc.)
         skill.initialize()
-        
+
         return skill
 
 
 class LaunchRequestHandler(BaseIntentHandler):
     """Handler for Skill Launch"""
-    
+
     def can_handle(self, handler_input):
         return is_request_type("LaunchRequest")(handler_input)
-    
+
     def handle(self, handler_input):
         skill = self.get_skill_helper(handler_input)
         text = skill.launch_request()
@@ -1073,35 +1149,40 @@ class LaunchRequestHandler(BaseIntentHandler):
 
 class SessionEndedRequestHandler(BaseIntentHandler):
     """Handler for Session End"""
-    
+
     def can_handle(self, handler_input):
         return is_request_type("SessionEndedRequest")(handler_input)
-    
+
     def handle(self, handler_input):
         skill = self.get_skill_helper(handler_input)
-        
+
         # Check for errors in the request
-        if hasattr(handler_input.request_envelope.request, 'error'):
+        if hasattr(handler_input.request_envelope.request, "error"):
             error = handler_input.request_envelope.request.error
-            notify(skill.event, "Error detected", error.message if error else "Unknown error")
-        
-        if hasattr(handler_input.request_envelope.request, 'reason'):
+            notify(
+                skill.event,
+                "Error detected",
+                error.message if error else "Unknown error",
+            )
+
+        if hasattr(handler_input.request_envelope.request, "reason"):
             reason = handler_input.request_envelope.request.reason
             notify(skill.event, "Session Ended", str(reason))
-        
+
         return handler_input.response_builder.response
 
 
 class CancelAndStopIntentHandler(BaseIntentHandler):
     """Handler for Cancel and Stop Intents"""
-    
+
     def can_handle(self, handler_input):
-        return (is_intent_name("AMAZON.CancelIntent")(handler_input) or
-                is_intent_name("AMAZON.StopIntent")(handler_input))
-    
+        return is_intent_name("AMAZON.CancelIntent")(handler_input) or is_intent_name(
+            "AMAZON.StopIntent"
+        )(handler_input)
+
     def handle(self, handler_input):
         skill = self.get_skill_helper(handler_input)
-        
+
         if is_intent_name("AMAZON.CancelIntent")(handler_input):
             return skill.respond("Canceled.", end=True)
         else:
@@ -1110,10 +1191,10 @@ class CancelAndStopIntentHandler(BaseIntentHandler):
 
 class HelpIntentHandler(BaseIntentHandler):
     """Handler for Help Intent"""
-    
+
     def can_handle(self, handler_input):
         return is_intent_name("AMAZON.HelpIntent")(handler_input)
-    
+
     def handle(self, handler_input):
         skill = self.get_skill_helper(handler_input)
         text = skill.help_intent()
@@ -1122,11 +1203,12 @@ class HelpIntentHandler(BaseIntentHandler):
 
 class MetricIntentHandler(BaseIntentHandler):
     """Handler for Metric Intent"""
-    
+
     def can_handle(self, handler_input):
-        return (is_intent_name("MetricIntent")(handler_input) or
-                is_intent_name("MetricPosIntent")(handler_input))
-    
+        return is_intent_name("MetricIntent")(handler_input) or is_intent_name(
+            "MetricPosIntent"
+        )(handler_input)
+
     def handle(self, handler_input):
         skill = self.get_skill_helper(handler_input)
         text = skill.metric_intent()
@@ -1135,10 +1217,10 @@ class MetricIntentHandler(BaseIntentHandler):
 
 class GetSettingIntentHandler(BaseIntentHandler):
     """Handler for Get Setting Intent"""
-    
+
     def can_handle(self, handler_input):
         return is_intent_name("GetSettingIntent")(handler_input)
-    
+
     def handle(self, handler_input):
         skill = self.get_skill_helper(handler_input)
         text = skill.get_setting_intent()
@@ -1147,10 +1229,10 @@ class GetSettingIntentHandler(BaseIntentHandler):
 
 class SetLocationIntentHandler(BaseIntentHandler):
     """Handler for Set Location Intent"""
-    
+
     def can_handle(self, handler_input):
         return is_intent_name("SetLocationIntent")(handler_input)
-    
+
     def handle(self, handler_input):
         skill = self.get_skill_helper(handler_input)
         text = skill.set_location_intent()
@@ -1159,10 +1241,10 @@ class SetLocationIntentHandler(BaseIntentHandler):
 
 class SetPitchIntentHandler(BaseIntentHandler):
     """Handler for Set Pitch Intent"""
-    
+
     def can_handle(self, handler_input):
         return is_intent_name("SetPitchIntent")(handler_input)
-    
+
     def handle(self, handler_input):
         skill = self.get_skill_helper(handler_input)
         text = skill.set_pitch_intent()
@@ -1171,10 +1253,10 @@ class SetPitchIntentHandler(BaseIntentHandler):
 
 class SetRateIntentHandler(BaseIntentHandler):
     """Handler for Set Rate Intent"""
-    
+
     def can_handle(self, handler_input):
         return is_intent_name("SetRateIntent")(handler_input)
-    
+
     def handle(self, handler_input):
         skill = self.get_skill_helper(handler_input)
         text = skill.set_rate_intent()
@@ -1183,10 +1265,10 @@ class SetRateIntentHandler(BaseIntentHandler):
 
 class GetCustomIntentHandler(BaseIntentHandler):
     """Handler for Get Custom Forecast Intent"""
-    
+
     def can_handle(self, handler_input):
         return is_intent_name("GetCustomIntent")(handler_input)
-    
+
     def handle(self, handler_input):
         skill = self.get_skill_helper(handler_input)
         text = skill.get_custom_intent()
@@ -1195,10 +1277,10 @@ class GetCustomIntentHandler(BaseIntentHandler):
 
 class AddCustomIntentHandler(BaseIntentHandler):
     """Handler for Add Custom Forecast Intent"""
-    
+
     def can_handle(self, handler_input):
         return is_intent_name("AddCustomIntent")(handler_input)
-    
+
     def handle(self, handler_input):
         skill = self.get_skill_helper(handler_input)
         text = skill.add_custom_intent()
@@ -1207,10 +1289,10 @@ class AddCustomIntentHandler(BaseIntentHandler):
 
 class RemoveCustomIntentHandler(BaseIntentHandler):
     """Handler for Remove Custom Forecast Intent"""
-    
+
     def can_handle(self, handler_input):
         return is_intent_name("RemCustomIntent")(handler_input)
-    
+
     def handle(self, handler_input):
         skill = self.get_skill_helper(handler_input)
         text = skill.remove_custom_intent()
@@ -1219,10 +1301,10 @@ class RemoveCustomIntentHandler(BaseIntentHandler):
 
 class ResetCustomIntentHandler(BaseIntentHandler):
     """Handler for Reset Custom Forecast Intent"""
-    
+
     def can_handle(self, handler_input):
         return is_intent_name("RstCustomIntent")(handler_input)
-    
+
     def handle(self, handler_input):
         skill = self.get_skill_helper(handler_input)
         text = skill.reset_custom_intent()
@@ -1233,16 +1315,17 @@ class ResetCustomIntentHandler(BaseIntentHandler):
 # Request and Response Interceptors
 # ============================================================================
 
+
 class RequestLogger(AbstractRequestInterceptor):
     """Log the request envelope."""
-    
+
     def process(self, handler_input):
         logger.info("Request Envelope: %s", handler_input.request_envelope)
 
 
 class ResponseLogger(AbstractResponseInterceptor):
     """Log the response envelope."""
-    
+
     def process(self, handler_input, response):
         logger.info("Response: %s", response)
 
@@ -1251,40 +1334,42 @@ class ResponseLogger(AbstractResponseInterceptor):
 # Exception Handler
 # ============================================================================
 
+
 class AllExceptionHandler(AbstractExceptionHandler):
     """Catch all exception handler."""
-    
+
     def can_handle(self, handler_input, exception):
         return True
-    
+
     def handle(self, handler_input, exception):
         logger.error("Exception encountered: %s", exception)
-        
+
         # Get event-like structure for notify
         request_envelope = handler_input.request_envelope
         event = {
             "session": {
                 "sessionId": request_envelope.session.session_id,
-                "user": {
-                    "userId": request_envelope.session.user.user_id
-                }
+                "user": {"userId": request_envelope.session.user.user_id},
             },
             "request": {
                 "type": request_envelope.request.object_type,
-                "requestId": request_envelope.request.request_id
-            }
+                "requestId": request_envelope.request.request_id,
+            },
         }
-        
+
         import traceback
+
         notify(event, "Exception", traceback.format_exc())
-        
-        speech = ('<say-as interpret-as="interjection">aw man</say-as>'
-                  '<prosody pitch="+25%">'
-                  'Clima Cast has experienced an error. The author has been '
-                  'notified and will address it as soon as possible. Until then '
-                  'you might be able to rephrase your request to get around the issue.'
-                  '</prosody>')
-        
+
+        speech = (
+            '<say-as interpret-as="interjection">aw man</say-as>'
+            '<prosody pitch="+25%">'
+            "Clima Cast has experienced an error. The author has been "
+            "notified and will address it as soon as possible. Until then "
+            "you might be able to rephrase your request to get around the issue."
+            "</prosody>"
+        )
+
         handler_input.response_builder.speak(speech).set_should_end_session(True)
         return handler_input.response_builder.response
 
@@ -1298,7 +1383,7 @@ persistence_adapter = DynamoDbAdapter(
     table_name=Config.DYNAMODB_TABLE_NAME,
     create_table=False,  # Table should already exist or be created by Alexa
     partition_key_name="id",
-    attribute_name="attributes"
+    attribute_name="attributes",
 )
 
 # Create skill builder instance with persistence adapter
@@ -1334,21 +1419,20 @@ skill_instance = sb.create()
 # Lambda Handler
 # ============================================================================
 
+
 def lambda_handler(event, context=None):
     """
     Lambda handler for Alexa skill using ASK SDK.
     """
-    #print(json.dumps(event, indent=4))
+    # print(json.dumps(event, indent=4))
     try:
         from ask_sdk_model import RequestEnvelope
-        
+
         serializer = DefaultSerializer()
-        request_envelope = serializer.deserialize(
-            json.dumps(event), RequestEnvelope
-        )
-        
+        request_envelope = serializer.deserialize(json.dumps(event), RequestEnvelope)
+
         response_envelope = skill_instance.invoke(request_envelope, context)
-        
+
         # Serialize the response back to dict for Lambda
         if response_envelope:
             response_dict = serializer.serialize(response_envelope)
@@ -1360,91 +1444,74 @@ def lambda_handler(event, context=None):
             else:
                 return response_dict
         return None
-        
+
     except SystemExit:
         pass
     except Exception:
         import traceback
+
         logger.error("Lambda handler exception: %s", traceback.format_exc())
         notify(event, "Exception", traceback.format_exc())
-        text = '<say-as interpret-as="interjection">aw man</say-as>' + \
-               '<prosody pitch="+25%">' + \
-               "Clima Cast has experienced an error.  The author has been " + \
-               "notified and will address it as soon as possible.  Until then " + \
-               "you might be able to rephrase your request to get around the issue." + \
-               '</prosody>'
+        text = (
+            '<say-as interpret-as="interjection">aw man</say-as>'
+            + '<prosody pitch="+25%">'
+            + "Clima Cast has experienced an error.  The author has been "
+            + "notified and will address it as soon as possible.  Until then "
+            + "you might be able to rephrase your request to get around the issue."
+            + "</prosody>"
+        )
         return {
-                 "version": "1.0",
-                 "response":
-                 {
-                   "outputSpeech":
-                   {
-                     "type": "SSML",
-                     "ssml": '<speak>%s</speak>' % text
-                   },
-                   "reprompt":
-                   {
-                     "outputSpeech":
-                     {
-                       "type": "SSML",
-                        "ssml": None
-                     },
-                   },
-                   "shouldEndSession": True
-                 } 
-               }
+            "version": "1.0",
+            "response": {
+                "outputSpeech": {"type": "SSML", "ssml": "<speak>%s</speak>" % text},
+                "reprompt": {
+                    "outputSpeech": {"type": "SSML", "ssml": None},
+                },
+                "shouldEndSession": True,
+            },
+        }
 
 
 def build_test_event(intent_name, slots=None):
     """
     Build an Alexa event structure for testing from intent name and slots.
-    
+
     Args:
         intent_name: Name of the intent (e.g., 'MetricIntent', 'LaunchRequest')
         slots: Dictionary of slot key-value pairs (e.g., {'location': 'Seattle', 'metric': 'temperature'})
-    
+
     Returns:
         Dictionary representing an Alexa event
     """
     if slots is None:
         slots = {}
-    
+
     # Base event structure
     event = {
         "version": "1.0",
         "session": {
             "new": True,
             "sessionId": "amzn1.echo-api.session.test",
-            "application": {
-                "applicationId": "amzn1.ask.skill.test"
-            },
+            "application": {"applicationId": "amzn1.ask.skill.test"},
             "attributes": {},
-            "user": {
-                "userId": "amzn1.ask.account.test"
-            }
+            "user": {"userId": "amzn1.ask.account.test"},
         },
         "context": {
             "System": {
-                "application": {
-                    "applicationId": "amzn1.ask.skill.test"
-                },
-                "user": {
-                    "userId": "amzn1.ask.account.test"
-                },
-                "device": {
-                    "deviceId": "amzn1.ask.device.test"
-                },
-                "apiEndpoint": "https://api.amazonalexa.com"
+                "application": {"applicationId": "amzn1.ask.skill.test"},
+                "user": {"userId": "amzn1.ask.account.test"},
+                "device": {"deviceId": "amzn1.ask.device.test"},
+                "apiEndpoint": "https://api.amazonalexa.com",
             }
         },
         "request": {
             "type": "IntentRequest",
             "requestId": "amzn1.echo-api.request.test",
             "timestamp": datetime.now(tz=tz.UTC).isoformat(),
-            "locale": "en-US"
-        }
+            "locale": "en-US",
+        },
     }
-    
+
     # Handle special request types (LaunchRequest, SessionEndedRequest, etc.)
     if intent_name == "LaunchRequest":
         event["request"]["type"] = "LaunchRequest"
@@ -1456,63 +1523,65 @@ def build_test_event(intent_name, slots=None):
         event["request"]["intent"] = {
             "name": intent_name,
             "confirmationStatus": "NONE",
-            "slots": {}
+            "slots": {},
         }
-        
+
         # Add slots to the intent
         for slot_name, slot_value in slots.items():
             event["request"]["intent"]["slots"][slot_name] = {
                 "name": slot_name,
                 "value": slot_value,
-                "confirmationStatus": "NONE"
+                "confirmationStatus": "NONE",
             }
-    
+
     return event
 
 
 def parse_slot_args(args):
     """
     Parse slot arguments in the form 'key=value'.
-    
+
     Args:
         args: List of strings in 'key=value' format
-    
+
     Returns:
         Dictionary of slot key-value pairs
     """
     slots = {}
     for arg in args:
-        if '=' in arg:
-            key, value = arg.split('=', 1)
+        if "=" in arg:
+            key, value = arg.split("=", 1)
             slots[key.strip()] = value.strip()
         else:
-            logger.warning(f"Ignoring invalid slot argument: {arg} (expected key=value format)")
+            logger.warning(
+                f"Ignoring invalid slot argument: {arg} (expected key=value format)"
+            )
     return slots
 
 
 def run_test_from_args(intent_name, slot_args):
     """
     Test the skill with command line arguments.
-    
+
     Args:
         intent_name: Name of the intent to test
         slot_args: List of slot arguments in 'key=value' format
     """
     # Enable test mode
-    os.environ['SKILLTEST'] = 'true'
-    
+    os.environ["SKILLTEST"] = "true"
+
     # Parse slot arguments
     slots = parse_slot_args(slot_args)
-    
+
     # Build event
     event = build_test_event(intent_name, slots)
-    
+
     # Execute handler
     response = lambda_handler(event)
-    
+
     # Print response
     print(json.dumps(response, indent=4))
-    
+
     return response
 
 
@@ -1521,57 +1590,58 @@ def run_test_from_file(filepath):
     Test the skill by reading test cases from a file.
     Each line in the file should be in the format:
     IntentName [key=value ...]
-    
+
     Lines starting with # are treated as comments.
     Empty lines are ignored.
-    
+
     Args:
         filepath: Path to the file containing test cases
     """
     # Enable test mode
-    os.environ['SKILLTEST'] = 'true'
-    
-    with open(filepath, 'r') as f:
+    os.environ["SKILLTEST"] = "true"
+
+    with open(filepath, "r") as f:
         for line_num, line in enumerate(f, 1):
             # Skip comments and empty lines
             line = line.strip()
-            if not line or line.startswith('#'):
+            if not line or line.startswith("#"):
                 continue
-            
+
             # Parse the line
             parts = line.split()
             if not parts:
                 continue
-            
+
             intent_name = parts[0]
             slot_args = parts[1:] if len(parts) > 1 else []
-            
+
             print(f"\n{'='*60}")
             print(f"Test case {line_num}: {line}")
-            print('='*60)
-            
+            print("=" * 60)
+
             try:
                 run_test_from_args(intent_name, slot_args)
             except Exception as e:
                 logger.error(f"Error processing test case {line_num}: {e}")
                 import traceback
+
                 traceback.print_exc()
 
 
 def run_test_one():
     """Test function for local development - sets up test mode via environment."""
     # Enable test mode via environment variable
-    os.environ['SKILLTEST'] = 'true'
-    
+    os.environ["SKILLTEST"] = "true"
+
     with open(sys.argv[1] if len(sys.argv) > 1 else "test.json") as f:
         event = json.load(f)
         event["session"]["application"]["applicationId"] = "amzn1.ask.skill.test"
         event["session"]["testing"] = True
-        
+
         # Ensure user_id is set
         user_id = event.get("session", {}).get("user", {}).get("userId", "testuser")
         event["session"]["user"]["userId"] = user_id
-        
+
         # Print output for testing (this is only used in __main__ test mode)
         print(json.dumps(lambda_handler(event), indent=4))
 
@@ -1580,12 +1650,12 @@ if __name__ == "__main__":
     import argparse
     import logging
     import sys
-    
+
     logging.basicConfig(level=logging.INFO)
-    
+
     parser = argparse.ArgumentParser(
-        description='Test the Clima Cast Alexa skill from the command line',
-        epilog='''
+        description="Test the Clima Cast Alexa skill from the command line",
+        epilog="""
 Examples:
   # Test a launch request
   python lambda_function.py LaunchRequest
@@ -1598,17 +1668,21 @@ Examples:
   
   # Use JSON file (legacy mode)
   python lambda_function.py --json test.json
-        ''',
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    
-    parser.add_argument('intent', nargs='?', help='Intent name (e.g., LaunchRequest, MetricIntent)')
-    parser.add_argument('slots', nargs='*', help='Slot arguments in key=value format')
-    parser.add_argument('--file', '-f', help='Read test cases from a file (one per line)')
-    parser.add_argument('--json', '-j', help='Use a JSON event file (legacy mode)')
-    
+
+    parser.add_argument(
+        "intent", nargs="?", help="Intent name (e.g., LaunchRequest, MetricIntent)"
+    )
+    parser.add_argument("slots", nargs="*", help="Slot arguments in key=value format")
+    parser.add_argument(
+        "--file", "-f", help="Read test cases from a file (one per line)"
+    )
+    parser.add_argument("--json", "-j", help="Use a JSON event file (legacy mode)")
+
     args = parser.parse_args()
-    
+
     # Legacy JSON file mode
     if args.json:
         sys.argv = [sys.argv[0], args.json]

@@ -9,9 +9,9 @@ from .local_handlers import LocalJsonCacheHandler, LocalJsonSettingsHandler
 from .settings_handler import AlexaSettingsHandler, SettingsHandler
 
 __all__ = [
-    'CacheHandler',
-    'SettingsHandler', 
-    'AlexaSettingsHandler',
-    'LocalJsonCacheHandler', 
-    'LocalJsonSettingsHandler'
+    "CacheHandler",
+    "SettingsHandler",
+    "AlexaSettingsHandler",
+    "LocalJsonCacheHandler",
+    "LocalJsonSettingsHandler",
 ]

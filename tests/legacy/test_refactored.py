@@ -24,14 +24,17 @@ def test_launch():
     print("Testing LaunchRequest...")
     with open("test_launch.json") as f:
         event = json.load(f)
-    
+
     response = lambda_handler(event, None)
     print("Response:")
     print(json.dumps(response, indent=2))
-    
+
     # Verify response structure
-    assert "version" in response or "response" in response, "Response should have version or response"
+    assert (
+        "version" in response or "response" in response
+    ), "Response should have version or response"
     print("✓ LaunchRequest test passed\n")
+
 
 def test_help_intent():
     """Test the help intent"""
@@ -41,22 +44,14 @@ def test_help_intent():
         "session": {
             "new": False,
             "sessionId": "amzn1.echo-api.session.test",
-            "application": {
-                "applicationId": "amzn1.ask.skill.test"
-            },
+            "application": {"applicationId": "amzn1.ask.skill.test"},
             "attributes": {},
-            "user": {
-                "userId": "amzn1.ask.account.test"
-            }
+            "user": {"userId": "amzn1.ask.account.test"},
         },
         "context": {
             "System": {
-                "application": {
-                    "applicationId": "amzn1.ask.skill.test"
-                },
-                "user": {
-                    "userId": "amzn1.ask.account.test"
-                }
+                "application": {"applicationId": "amzn1.ask.skill.test"},
+                "user": {"userId": "amzn1.ask.account.test"},
             }
         },
         "request": {
@@ -64,17 +59,15 @@ def test_help_intent():
             "requestId": "amzn1.echo-api.request.test",
             "timestamp": "2024-01-01T00:00:00Z",
             "locale": "en-US",
-            "intent": {
-                "name": "AMAZON.HelpIntent",
-                "confirmationStatus": "NONE"
-            }
-        }
+            "intent": {"name": "AMAZON.HelpIntent", "confirmationStatus": "NONE"},
+        },
     }
-    
+
     response = lambda_handler(event, None)
     print("Response:")
     print(json.dumps(response, indent=2))
     print("✓ HelpIntent test passed\n")
+
 
 if __name__ == "__main__":
     try:
@@ -83,6 +76,7 @@ if __name__ == "__main__":
         print("\n✓ All tests passed!")
     except Exception as e:
         import traceback
+
         print(f"\n✗ Test failed: {e}")
         traceback.print_exc()
         sys.exit(1)

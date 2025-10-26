@@ -24,15 +24,15 @@ from weather.base import WeatherBase
 class Observations(WeatherBase):
     """
     Handles current weather observations from NWS observation stations.
-    
+
     This class retrieves and processes current weather conditions including
     temperature, humidity, wind, pressure, and other metrics.
     """
-    
+
     def __init__(self, event, stations, cache_handler=None):
         """
         Initialize Observations with station list.
-        
+
         Args:
             event: Event dictionary
             stations: List of station IDs to query
@@ -46,7 +46,7 @@ class Observations(WeatherBase):
             station = self.get_station(stationId)
             if station:
                 data = self.https(f"stations/{stationId}/observations/latest")
-#                data = self.https(f"stations/{stationId}/observations?limit=1")
+                #                data = self.https(f"stations/{stationId}/observations?limit=1")
                 if data:
                     self.data = data
                     self.station = station
@@ -125,10 +125,9 @@ class Observations(WeatherBase):
     @property
     def description(self):
         """Current weather description."""
-        return "blah, blash, description" #self.data.get("stationName")
+        return "blah, blash, description"  # self.data.get("stationName")
 
     @property
     def pressure_trend(self):
         """Barometric pressure trend."""
         return None
-    
