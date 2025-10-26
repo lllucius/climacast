@@ -1,0 +1,86 @@
+# Example Test Cases for Clima Cast
+# Run with: python lambda_function.py --file examples/test_cases.txt
+
+# ============================================================================
+# Basic Request Types
+# ============================================================================
+
+# Launch the skill
+LaunchRequest
+
+# Get help information
+AMAZON.HelpIntent
+
+# Stop the skill
+AMAZON.StopIntent
+
+# ============================================================================
+# Location Management
+# ============================================================================
+
+# Set location using city and state
+SetLocationIntent location="Seattle, Washington"
+
+# Set location using zip code
+SetLocationIntent zipcode=98101
+
+# Get current location setting
+GetSettingIntent setting=location
+
+# ============================================================================
+# Voice Settings
+# ============================================================================
+
+# Set voice pitch (70-130%)
+SetPitchIntent percent=85
+
+# Set voice rate (50-150%)
+SetRateIntent percent=110
+
+# Get all settings
+GetSettingIntent
+
+# ============================================================================
+# Weather Queries
+# ============================================================================
+
+# Get current temperature
+MetricIntent metric=temperature
+
+# Get wind conditions for a specific location
+MetricIntent metric=wind location="Portland, Oregon"
+
+# Get forecast for tomorrow
+MetricIntent metric=forecast when_abs=tomorrow
+
+# Get temperature for tomorrow afternoon
+MetricIntent metric=temperature when_abs=tomorrow when_any=afternoon
+
+# ============================================================================
+# Custom Forecast Management
+# ============================================================================
+
+# Get current custom forecast settings
+GetCustomIntent
+
+# Add humidity to custom forecast
+AddCustomIntent metric=humidity
+
+# Remove dewpoint from custom forecast
+RemCustomIntent metric=dewpoint
+
+# Reset custom forecast to defaults
+RstCustomIntent
+
+# ============================================================================
+# Complex Scenarios
+# ============================================================================
+
+# Multiple weather metrics
+MetricIntent metric=weather
+
+# Check for alerts
+MetricIntent metric=alerts
+
+# Extended forecast
+MetricIntent metric="extended forecast"
