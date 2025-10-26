@@ -338,8 +338,8 @@ class Skill(WeatherBase):
     def initialize(self):
         """Initialize skill state from handler_input"""
         # Amazon says to verify our application id
-        if self.session.application.application_id != Config.APP_ID:
-            raise ValueError("Invoked from unknown application.")
+        #if self.session.application.application_id != Config.APP_ID:
+        #    raise ValueError("Invoked from unknown application.")
 
         # Retrieve the default location info
         location = self.user_location
@@ -658,7 +658,7 @@ class Skill(WeatherBase):
                        (cnt,
                         "s" if cnt > 1 else "")
 
-        print("OBS", self.loc.observationStations)
+        #print("OBS", self.loc.observationStations)
         # Retrieve the current observations from the nearest station
         obs = Observations(self.event, self.loc.observationStations, self.cache_handler)
         if obs.is_good:
@@ -761,12 +761,11 @@ class Skill(WeatherBase):
         etime = self.etime 
         fulltext = ""
         gp = GridPoints(self.event, self.loc.tz, self.loc.cwa, self.loc.grid_point, self.cache_handler)
-        print("METRICS", metrics)
+        #print("METRICS", metrics)
         for metric in metrics:
-            print("FORECAST METRIC", metric, "STIME", stime, "ETIME", etime)
+            #print("FORECAST METRIC", metric, "STIME", stime, "ETIME", etime)
             metric = METRICS[metric][0]
-            print("FORECAST METRIC", metric, "STIME", stime, "ETIME", etime)
-#            if gp.set_interval(stime, etime):
+            #print("FORECAST METRIC", metric, "STIME", stime, "ETIME", etime)
             if not gp.set_interval(stime, etime):
                 text = "Forecast information is unavailable for %s %s" % \
                        (MONTH_NAMES[self.stime.month - 1],
@@ -858,8 +857,8 @@ class Skill(WeatherBase):
 
                         pal = gp.precip_amount_low
                         pah = gp.precip_amount_high
-                        print("PAL", pal, type(pal))
-                        print("PAH", pah, type(pah))
+                        #print("PAL", pal, type(pal))
+                        #print("PAH", pah, type(pah))
 
                         if pal is not None and pah is not None and pah[0] != 0:
                             text += ", with amounts of "
@@ -1361,7 +1360,7 @@ def lambda_handler(event, context=None):
     """
     Lambda handler for Alexa skill using ASK SDK.
     """
-    print(json.dumps(event, indent=4))
+    #print(json.dumps(event, indent=4))
     try:
         from ask_sdk_model import RequestEnvelope
         
@@ -1439,7 +1438,4 @@ if __name__ == "__main__":
     import logging
     import sys
     logging.basicConfig()
-    # Note: httpx doesn't need the cachecontrol library like requests did
-    # The client is already configured with proper timeouts
-
     test_one()
