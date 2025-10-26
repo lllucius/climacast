@@ -18,14 +18,11 @@ HTTP communication, and text normalization.
 """
 
 import json
-from typing import Dict, List, Optional, Any, Union
-import httpx
-from tenacity import retry, stop_after_attempt, retry_if_exception_type, wait_exponential
+from typing import Any, Dict, List, Optional, Union
 
 from utils import converters
-from utils.text_normalizer import TextNormalizer
 from utils.constants import ANGLES
-
+from utils.text_normalizer import TextNormalizer
 
 # These will be lazily imported to avoid circular imports
 # No module-level globals needed - use lazy imports in methods
@@ -34,7 +31,7 @@ from utils.constants import ANGLES
 class WeatherBase(object):
     """
     Base class for weather data operations.
-    
+
     Provides common functionality for all weather classes including:
     - NWS API communication
     - Zone and station lookups
@@ -42,11 +39,11 @@ class WeatherBase(object):
     - Unit conversions
     - Text normalization
     """
-    
+
     def __init__(self, event: Dict[str, Any], cache_handler=None) -> None:
         """
         Initialize the weather base class.
-        
+
         Args:
             event: Event dictionary containing request information
             cache_handler: Optional cache handler for data persistence
@@ -58,17 +55,17 @@ class WeatherBase(object):
     def get_zone(self, zoneId: str, zoneType: str) -> Dict[str, Any]:
         """
         Returns the zone information for the given zone ID.
-        
+
         Args:
             zoneId: Zone identifier
             zoneType: Type of zone (forecast, county, fire)
-            
+
         Returns:
             Dict containing zone information
         """
         # Lazy import to avoid circular dependency
         from lambda_function import notify
-            
+
         zoneId = zoneId.rsplit("/")[-1]
         zone = self.cache_handler.get_zone(zoneId) if self.cache_handler else None
         if zone is None:
@@ -79,20 +76,18 @@ class WeatherBase(object):
             zone = self.put_zone(data)
 
         return zone
- 
+
     def put_zone(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Writes the zone information to the cache.
-        
+
         Args:
             data: Zone data from NWS API
-            
+
         Returns:
             Dict containing cached zone information
         """
-        zone = {"id": data["id"],
-                "type": data["type"],
-                "name": data["name"]}
+        zone = {"id": data["id"], "type": data["type"], "name": data["name"]}
 
         if self.cache_handler:
             self.cache_handler.put_zone(zone["id"], zone)
@@ -115,13 +110,16 @@ class WeatherBase(object):
         """
         Returns the list of stations nearest to furthest order
         from the given coordinates.
-        
+
         Args:
             coords: Coordinates in "lat,lon" format
-            
+
         Returns:
             List of station IDs
         """
+        # Lazy import to avoid circular dependency
+        from lambda_function import notify
+
         print("GETTING STATIONS================================")
         data = self.https("gridpoints/%s/stations" % coords)
         print("DATA", data)
@@ -134,15 +132,20 @@ class WeatherBase(object):
     def get_station(self, stationId: str) -> Optional[Dict[str, Any]]:
         """
         Returns the station information for the given station ID.
-        
+
         Args:
             stationId: Station identifier
-            
+
         Returns:
             Dict containing station information or None
         """
+        # Lazy import to avoid circular dependency
+        from lambda_function import notify
+
         stationId = stationId.rsplit("/")[-1]
-        station = self.cache_handler.get_station(stationId) if self.cache_handler else None
+        station = (
+            self.cache_handler.get_station(stationId) if self.cache_handler else None
+        )
         if station is None:
             data = self.https("stations/%s" % stationId)
             if data is None or data.get("status", 0) != 0:
@@ -155,10 +158,10 @@ class WeatherBase(object):
     def put_station(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Save station information to the cache.
-        
+
         Args:
             data: Station data from NWS API
-            
+
         Returns:
             Dict containing cached station information
         """
@@ -168,8 +171,7 @@ class WeatherBase(object):
         if name == "DC":
             name = data["name"].split(",")[0].strip().rstrip()
 
-        station = {"id": data["stationIdentifier"],
-                   "name": name}
+        station = {"id": data["stationIdentifier"], "name": name}
 
         if self.cache_handler:
             self.cache_handler.put_station(station["id"], station)
@@ -179,13 +181,16 @@ class WeatherBase(object):
     def get_product(self, product: str) -> Optional[str]:
         """
         Return the text for the given product.
-        
+
         Args:
             product: Product type code
-            
+
         Returns:
             Product text or None
         """
+        # Lazy import to avoid circular dependency
+        from lambda_function import notify
+
         text = ""
 
         # Retrieve list of features provided by the given CWA
@@ -204,49 +209,59 @@ class WeatherBase(object):
 
         return text
 
-    #@retry(
+    # @retry(
     #    stop=stop_after_attempt(3),
     #    retry=retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
     #    wait=wait_exponential(multiplier=1, min=1, max=10)
-    #)
-    def https(self, path: str, loc: str = "api.weather.gov") -> Optional[Dict[str, Any]]:
+    # )
+    def https(
+        self, path: str, loc: str = "api.weather.gov"
+    ) -> Optional[Dict[str, Any]]:
         """
         Retrieve the JSON data from the given path and location.
-        
+
         Args:
             path: API path
             loc: API location (default: api.weather.gov)
-            
+
         Returns:
             Dict containing JSON response or None
         """
         print("HTTPS:", path, loc)
         # Lazy import to avoid circular dependency
         from lambda_function import get_https_client, notify
-        
+
         client = get_https_client()
-        headers = {"User-Agent": "ClimacastAlexaSkill/1.0 (climacast@homerow.net)",
-                   "Accept": "application/ld+json"}
-        url = path if path.startswith("https") else f"https://{loc}/{path.replace(" ", "+")}"
+        headers = {
+            "User-Agent": "ClimacastAlexaSkill/1.0 (climacast@homerow.net)",
+            "Accept": "application/ld+json",
+        }
+        url = (
+            path
+            if path.startswith("https")
+            else f"https://{loc}/{path.replace(" ", "+")}"
+        )
         r = client.get(url, headers=headers)
         if r.status_code != 200 or r.text is None or r.text == "":
-            notify(self.event,
-                        "HTTPSTATUS: %s" % r.status_code,
-                        "URL: %s\n\n%s" % (r.url, r.content))
+            notify(
+                self.event,
+                "HTTPSTATUS: %s" % r.status_code,
+                "URL: %s\n\n%s" % (r.url, r.content),
+            )
             return None
         print("rESPNMSE", r.text)
-            
+
         return json.loads(r.text)
 
     # Unit conversion methods - delegate to converters module
     def to_skys(self, percent: Optional[float], isday: bool) -> Optional[str]:
         """Convert the sky cover percentage to text"""
         return converters.to_skys(percent, isday)
-    
+
     def to_percent(self, percent: Optional[float]) -> Optional[int]:
         """Return the given value, if any, as an integer"""
         return converters.to_percent(percent)
-    
+
     def mb_to_in(self, mb: Optional[float]) -> Optional[str]:
         """Convert the given millibar value, if any, to inches"""
         return converters.mb_to_in(mb)
@@ -255,7 +270,9 @@ class WeatherBase(object):
         """Convert the given pascals, if any, to inches"""
         return converters.pa_to_in(pa)
 
-    def mm_to_in(self, mm: Optional[float], as_text: bool = False) -> Optional[Union[str, tuple]]:
+    def mm_to_in(
+        self, mm: Optional[float], as_text: bool = False
+    ) -> Optional[Union[str, tuple]]:
         """
         Convert the given millimeters, if any, to inches.  If requested,
         further convert inches to words.
@@ -269,7 +286,9 @@ class WeatherBase(object):
 
     def kph_to_mph(self, kph):
         """Convert the given kilometers per hour, if any, to miles per hour"""
-        return None if kph is None or kph == 0 else "{:.0f}".format(kph * 0.62137119223733)
+        return (
+            None if kph is None or kph == 0 else "{:.0f}".format(kph * 0.62137119223733)
+        )
 
     def mps_to_mph(self, mps):
         """
@@ -302,7 +321,9 @@ class WeatherBase(object):
         if F > 50.0 or mph <= 3.0:
             return None
 
-        return round(35.74 + .6215*F - 35.75*pow(mph, 0.16) + 0.4275*F*pow(mph, 0.16))
+        return round(
+            35.74 + 0.6215 * F - 35.75 * pow(mph, 0.16) + 0.4275 * F * pow(mph, 0.16)
+        )
 
     def to_heat_index(self, F, rh):
         """
@@ -315,20 +336,31 @@ class WeatherBase(object):
         if F <= 40.0:
             return F
 
-        hitemp = 61.0+((F-68.0)*1.2)+(rh*0.094)
-        hifinal = 0.5*(F+hitemp)
+        hitemp = 61.0 + ((F - 68.0) * 1.2) + (rh * 0.094)
+        hifinal = 0.5 * (F + hitemp)
 
         if hifinal > 79.0:
-            hi = -42.379+2.04901523*F+10.14333127*rh-0.22475541*F*rh-6.83783*(pow(10, -3))*(pow(F, 2))-5.481717*(pow(10, -2))*(pow(rh, 2))+1.22874*(pow(10, -3))*(pow(F, 2))*rh+8.5282*(pow(10, -4))*F*(pow(rh, 2))-1.99*(pow(10, -6))*(pow(F, 2))*(pow(rh,2))
+            hi = (
+                -42.379
+                + 2.04901523 * F
+                + 10.14333127 * rh
+                - 0.22475541 * F * rh
+                - 6.83783 * (pow(10, -3)) * (pow(F, 2))
+                - 5.481717 * (pow(10, -2)) * (pow(rh, 2))
+                + 1.22874 * (pow(10, -3)) * (pow(F, 2)) * rh
+                + 8.5282 * (pow(10, -4)) * F * (pow(rh, 2))
+                - 1.99 * (pow(10, -6)) * (pow(F, 2)) * (pow(rh, 2))
+            )
             if (rh <= 13) and (F >= 80.0) and (F <= 112.0):
                 from math import sqrt
-                adj1 = (13.0-rh)/4.0
-                adj2 = sqrt((17.0-abs(F-95.0))/17.0)
+
+                adj1 = (13.0 - rh) / 4.0
+                adj2 = sqrt((17.0 - abs(F - 95.0)) / 17.0)
                 adj = adj1 * adj2
                 hi = hi - adj
             elif (rh > 85.0) and (F >= 80.0) and (F <= 87.0):
-                adj1 = (rh-85.0)/10.0
-                adj2 = (87.0-F)/5.0
+                adj1 = (rh - 85.0) / 10.0
+                adj2 = (87.0 - F) / 5.0
                 adj = adj1 * adj2
                 hi = hi + adj
         else:
@@ -339,7 +371,7 @@ class WeatherBase(object):
     def normalize(self, text: str) -> str:
         """
         Normalize text for speech output.
-        
+
         This method uses the TextNormalizer class instance.
         """
         return self._text_normalizer.normalize(text)

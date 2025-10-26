@@ -16,23 +16,23 @@ This module provides utility functions for converting between different units
 of measurement (temperature, pressure, distance, etc.).
 """
 
-from typing import Optional, Union, Tuple
+from typing import Optional, Tuple, Union
 
 
 def to_skys(percent: Optional[float], isday: bool) -> Optional[str]:
     """
     Convert the sky cover percentage to text.
-    
+
     Args:
         percent: Sky cover percentage (0-100)
         isday: True if daytime, False if nighttime
-        
+
     Returns:
         Text description of sky conditions
     """
     if percent is not None:
         if 0.0 <= percent < 12.5:
-            return "sunny" if isday else "clear" 
+            return "sunny" if isday else "clear"
         elif 12.5 <= percent < 25.0:
             return "mostly sunny" if isday else "mostly clear"
         elif 25.0 <= percent < 50.0:
@@ -41,17 +41,17 @@ def to_skys(percent: Optional[float], isday: bool) -> Optional[str]:
             return "mostly cloudy"
         elif 87.5 <= percent <= 100.0:
             return "cloudy"
-    
+
     return None
 
 
 def to_percent(percent: Optional[float]) -> Optional[int]:
     """
     Return the given value, if any, as an integer.
-    
+
     Args:
         percent: Float value to convert
-        
+
     Returns:
         Integer percentage or None
     """
@@ -61,10 +61,10 @@ def to_percent(percent: Optional[float]) -> Optional[int]:
 def mb_to_in(mb: Optional[float]) -> Optional[str]:
     """
     Convert millibars to inches of mercury.
-    
+
     Args:
         mb: Pressure in millibars
-        
+
     Returns:
         Pressure in inches (formatted string) or None
     """
@@ -78,24 +78,26 @@ def mb_to_in(mb: Optional[float]) -> Optional[str]:
 def pa_to_in(pa: Optional[float]) -> Optional[str]:
     """
     Convert pascals to inches of mercury.
-    
+
     Args:
         pa: Pressure in pascals
-        
+
     Returns:
         Pressure in inches (formatted string) or None
     """
     return None if pa is None else "{:.2f}".format(pa * 0.000295301)
 
 
-def mm_to_in(mm: Optional[float], as_text: bool = False) -> Optional[Union[str, Tuple[float, str, str]]]:
+def mm_to_in(
+    mm: Optional[float], as_text: bool = False
+) -> Optional[Union[str, Tuple[float, str, str]]]:
     """
     Convert millimeters to inches, optionally as descriptive text.
-    
+
     Args:
         mm: Length in millimeters
         as_text: If True, return descriptive text tuple
-        
+
     Returns:
         Inches as string, or tuple of (inches, amount_text, whole_text) if as_text=True
     """
@@ -136,10 +138,10 @@ def mm_to_in(mm: Optional[float], as_text: bool = False) -> Optional[Union[str, 
 def c_to_f(celsius: Optional[float]) -> Optional[int]:
     """
     Convert Celsius to Fahrenheit.
-    
+
     Args:
         celsius: Temperature in Celsius
-        
+
     Returns:
         Temperature in Fahrenheit (rounded to integer) or None
     """
@@ -149,10 +151,10 @@ def c_to_f(celsius: Optional[float]) -> Optional[int]:
 def m_to_mi(meters: Optional[float]) -> Optional[float]:
     """
     Convert meters to miles.
-    
+
     Args:
         meters: Distance in meters
-        
+
     Returns:
         Distance in miles or None
     """
@@ -162,10 +164,10 @@ def m_to_mi(meters: Optional[float]) -> Optional[float]:
 def kmh_to_mph(kmh: Optional[float]) -> Optional[int]:
     """
     Convert kilometers per hour to miles per hour.
-    
+
     Args:
         kmh: Speed in km/h
-        
+
     Returns:
         Speed in mph (rounded to integer) or None
     """

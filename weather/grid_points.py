@@ -16,26 +16,31 @@ This module provides the GridPoints class for processing weather forecast
 data from the National Weather Service gridpoints endpoint.
 """
 
+from aniso8601.duration import parse_duration
 from dateutil import parser
 from dateutil.relativedelta import relativedelta
-from aniso8601.duration import parse_duration
 
+from utils.constants import (
+    WEATHER_ATTRIBUTES,
+    WEATHER_COVERAGE,
+    WEATHER_INTENSITY,
+    WEATHER_WEATHER,
+)
 from weather.base import WeatherBase
-from utils.constants import WEATHER_COVERAGE, WEATHER_WEATHER, WEATHER_INTENSITY, WEATHER_ATTRIBUTES
 
 
 class GridPoints(WeatherBase):
     """
     Handles forecast grid data from the NWS API.
-    
+
     This class retrieves and processes weather forecast data for a specific
     grid point, including temperature, precipitation, wind, and other metrics.
     """
-    
+
     def __init__(self, event, tz, cwa, gridpoint, cache_handler=None):
         """
         Initialize GridPoints with location and time information.
-        
+
         Args:
             event: Event dictionary
             tz: Timezone object
@@ -54,11 +59,11 @@ class GridPoints(WeatherBase):
     def set_interval(self, stime, etime):
         """
         Set the time interval for weather data retrieval.
-        
+
         Args:
             stime: Start time
             etime: End time
-            
+
         Returns:
             True if valid data exists in range, False otherwise
         """
@@ -73,26 +78,25 @@ class GridPoints(WeatherBase):
             if dts and dte:
                 return True
 
-        return False    
+        return False
 
     def in_range(self, time, stime, etime):
         """
         Check if a time period overlaps with the given range.
-        
+
         Args:
             time: Time string in ISO 8601 format
             stime: Start time
             etime: End time
-            
+
         Returns:
             Tuple of (start_datetime, end_datetime) or (None, None)
         """
         dt, _, dur = time.partition("/")
         dts = parser.parse(dt).astimezone(self.tz)
-        dte = dts + parse_duration(dur) #, relative=True)
-    
-        if stime >= dts and stime < dte \
-           or etime >= dts and etime < dte:
+        dte = dts + parse_duration(dur)  # , relative=True)
+
+        if stime >= dts and stime < dte or etime >= dts and etime < dte:
             return dts, dte
 
         return None, None
@@ -100,10 +104,10 @@ class GridPoints(WeatherBase):
     def get_values(self, metric):
         """
         Get hourly values for a specific metric.
-        
+
         Args:
             metric: Metric name (e.g., 'temperature', 'precipitation')
-            
+
         Returns:
             List of values
         """
@@ -258,7 +262,9 @@ class GridPoints(WeatherBase):
 
     @property
     def precip_amount_initial(self):
-        return self.mm_to_in(self.get_initial("quantitativePrecipitation"), as_text=True)
+        return self.mm_to_in(
+            self.get_initial("quantitativePrecipitation"), as_text=True
+        )
 
     @property
     def precip_amount_final(self):
@@ -266,7 +272,11 @@ class GridPoints(WeatherBase):
 
     @property
     def precip_total(self):
-        values = [value for value in self.get_values("quantitativePrecipitation") if value is not None]
+        values = [
+            value
+            for value in self.get_values("quantitativePrecipitation")
+            if value is not None
+        ]
         if len(values) == 0:
             return None
         return self.mm_to_in(sum(values))
@@ -277,7 +287,15 @@ class GridPoints(WeatherBase):
 
     @property
     def precip_text(self):
-        inches, amt, whole = self.mm_to_in(sum([value if value else 0 for value in self.get_values("quantitativePrecipitation")]), True)
+        inches, amt, whole = self.mm_to_in(
+            sum(
+                [
+                    value if value else 0
+                    for value in self.get_values("quantitativePrecipitation")
+                ]
+            ),
+            True,
+        )
         if inches == "0.00":
             return ""
         text = []
@@ -311,14 +329,19 @@ class GridPoints(WeatherBase):
 
     @property
     def snow_total(self):
-        values = [value for value in self.get_values("snowfallAmount") if value is not None]
+        values = [
+            value for value in self.get_values("snowfallAmount") if value is not None
+        ]
         if len(values) == 0:
             return None
         return self.mm_to_in(sum(values))
 
     @property
     def snow_text(self):
-        inches, amt, whole = self.mm_to_in(sum([value if value else 0 for value in self.get_values("snowfallAmount")]), True)
+        inches, amt, whole = self.mm_to_in(
+            sum([value if value else 0 for value in self.get_values("snowfallAmount")]),
+            True,
+        )
         if inches == "0.00":
             return ""
         text = []
@@ -423,7 +446,7 @@ class GridPoints(WeatherBase):
         TODO: Not at all happy with this. It needs to be redone.
         """
         d = []
-        
+
         for w in self.data.get("weather", {}).get("values", []):
             dts, dte = self.in_range(w["validTime"], self.stime, self.etime)
             if not dts or not dte:

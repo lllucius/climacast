@@ -16,12 +16,12 @@ This module provides the Location class for converting location names
 and zip codes to coordinates and retrieving associated weather zones.
 """
 
-from dateutil import tz
 import json
 
-from weather.base import WeatherBase
-from utils.constants import STATES, LOCATION_XLATE
+from dateutil import tz
 
+from utils.constants import LOCATION_XLATE, STATES
+from weather.base import WeatherBase
 
 # No module-level globals needed - use lazy imports in methods
 
@@ -29,21 +29,22 @@ from utils.constants import STATES, LOCATION_XLATE
 def notify(event, subject, message=None):
     """Placeholder for notify function - will be replaced by lazy import"""
     import logging
+
     logging.error(f"{subject}: {message}")
 
 
 class Location(WeatherBase):
     """
     Handles location geocoding and NWS zone information.
-    
+
     This class converts location names or zip codes to coordinates,
     retrieves associated weather zones, and manages location data.
     """
-    
+
     def __init__(self, event, cache_handler=None):
         """
         Initialize Location handler.
-        
+
         Args:
             event: Event dictionary
             cache_handler: Optional cache handler
@@ -53,19 +54,19 @@ class Location(WeatherBase):
     def set(self, name, default=None):
         """
         Set the location by name or zip code.
-        
+
         Args:
             name: Location name or zip code
             default: Default location object if name doesn't have state
-            
+
         Returns:
             None on success, error message string on failure
         """
         # Lazy import to avoid circular dependency
-        from lambda_function import notify, get_geolocator
-        
+        from lambda_function import get_geolocator, notify
+
         get_geolocator()
-            
+
         # Normalize name
         name = name.strip().lower()
 
@@ -95,7 +96,11 @@ class Location(WeatherBase):
                 return "%s could not be located" % self.spoken_name(name)
 
             # Retrieve the location data from the cache
-            loc = self.cache_handler.get_location("%s" % name) if self.cache_handler else None
+            loc = (
+                self.cache_handler.get_location("%s" % name)
+                if self.cache_handler
+                else None
+            )
             if loc is not None:
                 self.loc = loc
                 return None
@@ -128,25 +133,39 @@ class Location(WeatherBase):
                 state = default.state
 
             # Retrieve the location data from the cache
-            loc = self.cache_handler.get_location("%s %s" % (city, state)) if self.cache_handler else None
+            loc = (
+                self.cache_handler.get_location("%s %s" % (city, state))
+                if self.cache_handler
+                else None
+            )
 
             # Have a new location, so retrieve the base info
             coords, props = self.mapquest("%s+%s" % (city, state))
             if coords is None:
-                return "%s %s could not be located.  Try using the zip code." % (city, state)
+                return "%s %s could not be located.  Try using the zip code." % (
+                    city,
+                    state,
+                )
         print("CORDS", coords)
         print("PROPS", json.dumps(props, indent=4))
 
         # Get the NWS location information (limit to 4 decimal places for the API)
         print("GETTING LOCAITON==========================")
-        point = self.https("points/%s,%s" % \
-                           (("%.4f" % coords[0]).rstrip("0").rstrip("."),
-                            ("%.4f" % coords[1]).rstrip("0").rstrip(".")))
+        point = self.https(
+            "points/%s,%s"
+            % (
+                ("%.4f" % coords[0]).rstrip("0").rstrip("."),
+                ("%.4f" % coords[1]).rstrip("0").rstrip("."),
+            )
+        )
         print("POINT", point)
 
         # Make sure we have the real location
         if point is None or "relativeLocation" not in point:
-            notify(self.event, "No relativeLocation for city '%s' state '%s'" % (city, state))
+            notify(
+                self.event,
+                "No relativeLocation for city '%s' state '%s'" % (city, state),
+            )
             return "%s %s could not be located" % (city, state)
 
         # Initialize location
@@ -163,7 +182,11 @@ class Location(WeatherBase):
         loc["timeZone"] = point["timeZone"]
 
         # Retrieve the location data from the cache
-        rloc = self.cache_handler.get_location("%s %s" % (loc["city"], loc["state"])) if self.cache_handler else None
+        rloc = (
+            self.cache_handler.get_location("%s %s" % (loc["city"], loc["state"]))
+            if self.cache_handler
+            else None
+        )
         if rloc is None:
             # Have a new location, so retrieve the base info
             rcoords, rprops = self.mapquest("%s+%s" % (loc["city"], loc["state"]))
@@ -189,9 +212,13 @@ class Location(WeatherBase):
             coords, props = self.mapquest("%s+county+%s" % (county, loc["state"]))
             if coords is not None:
                 print("PT==================================")
-                pt = self.https("points/%s,%s" % \
-                                (("%.4f" % coords[0]).rstrip("0").rstrip("."),
-                                 ("%.4f" % coords[1]).rstrip("0").rstrip(".")))
+                pt = self.https(
+                    "points/%s,%s"
+                    % (
+                        ("%.4f" % coords[0]).rstrip("0").rstrip("."),
+                        ("%.4f" % coords[1]).rstrip("0").rstrip("."),
+                    )
+                )
                 print("pt", pt)
                 if "county" in pt:
                     point["county"] = pt["county"]
@@ -202,7 +229,9 @@ class Location(WeatherBase):
         loc["countyZoneName"] = data.get("name", "missing")
 
         # Retrieve the observation stations
-        loc["observationStations"] = self.https(point["observationStations"] + "?limit=5")
+        loc["observationStations"] = self.https(
+            point["observationStations"] + "?limit=5"
+        )
 
         # Put it to the cache
         loc["location"] = "%s %s" % (city, state) if state else city
@@ -217,16 +246,16 @@ class Location(WeatherBase):
     def mapquest(self, search):
         """
         Geocode a location using the Geolocator class.
-        
+
         Args:
             search: Location string to geocode
-            
+
         Returns:
             Tuple of (coordinates, properties) where coordinates is (lat, lng) or None
         """
         # Lazy import to avoid circular dependency
         from lambda_function import get_geolocator
-        
+
         geolocator = get_geolocator()
         return geolocator.geocode(search)
 
@@ -270,22 +299,22 @@ class Location(WeatherBase):
         """Time zone identifier."""
         return self.loc["timeZone"]
 
-    @property 
+    @property
     def forecastZoneId(self):
         """Forecast zone ID."""
         return self.loc["forecastZoneId"]
 
-    @property 
+    @property
     def forecastZoneName(self):
         """Forecast zone name."""
         return self.loc["forecastZoneName"]
 
-    @property 
+    @property
     def countyZoneId(self):
         """County zone ID."""
         return self.loc["countyZoneId"]
 
-    @property 
+    @property
     def countyZoneName(self):
         """County zone name."""
         return self.loc["countyZoneName"]

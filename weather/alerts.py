@@ -22,15 +22,15 @@ from weather.base import WeatherBase
 class Alerts(WeatherBase):
     """
     Handles weather alerts for a specific zone.
-    
+
     This class retrieves and processes active weather alerts, watches,
     and warnings from the National Weather Service.
     """
-    
+
     def __init__(self, event, zone, cache_handler=None):
         """
         Initialize Alerts for a specific zone.
-        
+
         Args:
             event: Event dictionary
             zone: Zone identifier
@@ -44,15 +44,15 @@ class Alerts(WeatherBase):
 class Alert(WeatherBase):
     """
     Represents a single weather alert.
-    
+
     This class processes individual alert data including event type,
     severity, urgency, and descriptive text.
     """
-    
+
     def __init__(self, event, data, cache_handler=None):
         """
         Initialize Alert with alert data.
-        
+
         Args:
             event: Event dictionary
             data: Alert data dictionary
