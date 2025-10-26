@@ -1417,6 +1417,169 @@ def lambda_handler(event, context=None):
                }
 
 
+def build_test_event(intent_name, slots=None):
+    """
+    Build an Alexa event structure for testing from intent name and slots.
+    
+    Args:
+        intent_name: Name of the intent (e.g., 'MetricIntent', 'LaunchRequest')
+        slots: Dictionary of slot key-value pairs (e.g., {'location': 'Seattle', 'metric': 'temperature'})
+    
+    Returns:
+        Dictionary representing an Alexa event
+    """
+    if slots is None:
+        slots = {}
+    
+    # Base event structure
+    event = {
+        "version": "1.0",
+        "session": {
+            "new": True,
+            "sessionId": "amzn1.echo-api.session.test",
+            "application": {
+                "applicationId": "amzn1.ask.skill.test"
+            },
+            "attributes": {},
+            "user": {
+                "userId": "amzn1.ask.account.test"
+            }
+        },
+        "context": {
+            "System": {
+                "application": {
+                    "applicationId": "amzn1.ask.skill.test"
+                },
+                "user": {
+                    "userId": "amzn1.ask.account.test"
+                },
+                "device": {
+                    "deviceId": "amzn1.ask.device.test"
+                },
+                "apiEndpoint": "https://api.amazonalexa.com"
+            }
+        },
+        "request": {
+            "type": "IntentRequest",
+            "requestId": "amzn1.echo-api.request.test",
+            "timestamp": datetime.now(tz=tz.UTC).isoformat(),
+            "locale": "en-US"
+        }
+    }
+    
+    # Handle special request types (LaunchRequest, SessionEndedRequest, etc.)
+    if intent_name == "LaunchRequest":
+        event["request"]["type"] = "LaunchRequest"
+    elif intent_name == "SessionEndedRequest":
+        event["request"]["type"] = "SessionEndedRequest"
+        event["request"]["reason"] = "USER_INITIATED"
+    else:
+        # Intent request with slots
+        event["request"]["intent"] = {
+            "name": intent_name,
+            "confirmationStatus": "NONE",
+            "slots": {}
+        }
+        
+        # Add slots to the intent
+        for slot_name, slot_value in slots.items():
+            event["request"]["intent"]["slots"][slot_name] = {
+                "name": slot_name,
+                "value": slot_value,
+                "confirmationStatus": "NONE"
+            }
+    
+    return event
+
+
+def parse_slot_args(args):
+    """
+    Parse slot arguments in the form 'key=value'.
+    
+    Args:
+        args: List of strings in 'key=value' format
+    
+    Returns:
+        Dictionary of slot key-value pairs
+    """
+    slots = {}
+    for arg in args:
+        if '=' in arg:
+            key, value = arg.split('=', 1)
+            slots[key.strip()] = value.strip()
+        else:
+            logger.warning(f"Ignoring invalid slot argument: {arg} (expected key=value format)")
+    return slots
+
+
+def test_from_args(intent_name, slot_args):
+    """
+    Test the skill with command line arguments.
+    
+    Args:
+        intent_name: Name of the intent to test
+        slot_args: List of slot arguments in 'key=value' format
+    """
+    # Enable test mode
+    os.environ['SKILLTEST'] = 'true'
+    
+    # Parse slot arguments
+    slots = parse_slot_args(slot_args)
+    
+    # Build event
+    event = build_test_event(intent_name, slots)
+    
+    # Execute handler
+    response = lambda_handler(event)
+    
+    # Print response
+    print(json.dumps(response, indent=4))
+    
+    return response
+
+
+def test_from_file(filepath):
+    """
+    Test the skill by reading test cases from a file.
+    Each line in the file should be in the format:
+    IntentName [key=value ...]
+    
+    Lines starting with # are treated as comments.
+    Empty lines are ignored.
+    
+    Args:
+        filepath: Path to the file containing test cases
+    """
+    # Enable test mode
+    os.environ['SKILLTEST'] = 'true'
+    
+    with open(filepath, 'r') as f:
+        for line_num, line in enumerate(f, 1):
+            # Skip comments and empty lines
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            
+            # Parse the line
+            parts = line.split()
+            if not parts:
+                continue
+            
+            intent_name = parts[0]
+            slot_args = parts[1:] if len(parts) > 1 else []
+            
+            print(f"\n{'='*60}")
+            print(f"Test case {line_num}: {line}")
+            print('='*60)
+            
+            try:
+                test_from_args(intent_name, slot_args)
+            except Exception as e:
+                logger.error(f"Error processing test case {line_num}: {e}")
+                import traceback
+                traceback.print_exc()
+
+
 def test_one():
     """Test function for local development - sets up test mode via environment."""
     # Enable test mode via environment variable
@@ -1434,8 +1597,50 @@ def test_one():
         # Print output for testing (this is only used in __main__ test mode)
         print(json.dumps(lambda_handler(event), indent=4))
 
+
 if __name__ == "__main__":
+    import argparse
     import logging
     import sys
-    logging.basicConfig()
-    test_one()
+    
+    logging.basicConfig(level=logging.INFO)
+    
+    parser = argparse.ArgumentParser(
+        description='Test the Clima Cast Alexa skill from the command line',
+        epilog='''
+Examples:
+  # Test a launch request
+  python lambda_function.py LaunchRequest
+  
+  # Test an intent with slots
+  python lambda_function.py MetricIntent metric=temperature location="Seattle, Washington"
+  
+  # Test from a file
+  python lambda_function.py --file test_cases.txt
+  
+  # Use JSON file (legacy mode)
+  python lambda_function.py --json test.json
+        ''',
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    
+    parser.add_argument('intent', nargs='?', help='Intent name (e.g., LaunchRequest, MetricIntent)')
+    parser.add_argument('slots', nargs='*', help='Slot arguments in key=value format')
+    parser.add_argument('--file', '-f', help='Read test cases from a file (one per line)')
+    parser.add_argument('--json', '-j', help='Use a JSON event file (legacy mode)')
+    
+    args = parser.parse_args()
+    
+    # Legacy JSON file mode
+    if args.json:
+        sys.argv = [sys.argv[0], args.json]
+        test_one()
+    # File mode with multiple test cases
+    elif args.file:
+        test_from_file(args.file)
+    # Command line mode
+    elif args.intent:
+        test_from_args(args.intent, args.slots)
+    else:
+        parser.print_help()
+        sys.exit(1)

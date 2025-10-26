@@ -105,6 +105,7 @@ ENV/
 .webcache
 results
 test.json
+test_cases.txt
 tests/test_one_off
 .test_cache/
 .test_settings/
