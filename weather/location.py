@@ -149,11 +149,7 @@ class Location(WeatherBase):
         # Get the NWS location information (limit to 4 decimal places for the API)
         print("GETTING LOCAITON==========================")
         point = self.https(
-            "points/%s,%s"
-            % (
-                f"{coords[0]:.4f}".rstrip("0").rstrip("."),
-                f"{coords[1]:.4f}".rstrip("0").rstrip("."),
-            )
+            f"points/{f'{coords[0]:.4f}'.rstrip('0').rstrip('.')},{f'{coords[1]:.4f}'.rstrip('0').rstrip('.')}"
         )
         print("POINT", point)
 
@@ -210,11 +206,7 @@ class Location(WeatherBase):
             if coords is not None:
                 print("PT==================================")
                 pt = self.https(
-                    "points/%s,%s"
-                    % (
-                        f"{coords[0]:.4f}".rstrip("0").rstrip("."),
-                        f"{coords[1]:.4f}".rstrip("0").rstrip("."),
-                    )
+                    f"points/{f'{coords[0]:.4f}'.rstrip('0').rstrip('.')},{f'{coords[1]:.4f}'.rstrip('0').rstrip('.')}"
                 )
                 print("pt", pt)
                 if "county" in pt:
