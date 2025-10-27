@@ -72,7 +72,7 @@ def mb_to_in(mb: Optional[float]) -> Optional[str]:
     # some sort of "low value".  So, just consider it invalid.
     if mb == 900:
         return None
-    return None if mb is None else "{:.2f}".format(mb * 0.0295301)
+    return None if mb is None else f"{mb * 0.0295301:.2f}"
 
 
 def pa_to_in(pa: Optional[float]) -> Optional[str]:
@@ -85,7 +85,7 @@ def pa_to_in(pa: Optional[float]) -> Optional[str]:
     Returns:
         Pressure in inches (formatted string) or None
     """
-    return None if pa is None else "{:.2f}".format(pa * 0.000295301)
+    return None if pa is None else f"{pa * 0.000295301:.2f}"
 
 
 def mm_to_in(
@@ -101,7 +101,7 @@ def mm_to_in(
     Returns:
         Inches as string, or tuple of (inches, amount_text, whole_text) if as_text=True
     """
-    inches = None if mm is None else "{:.2f}".format(mm * 0.0393701)
+    inches = None if mm is None else f"{mm * 0.0393701:.2f}"
     if not as_text or not inches:
         return inches
 
