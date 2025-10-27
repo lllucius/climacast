@@ -282,19 +282,19 @@ class WeatherBase(object):
     def c_to_f(self, c):
         """Convert the given celsius value, if any, to fahrenheit"""
         result = converters.c_to_f(c)
-        return None if result is None else "{:.0f}".format(result)
+        return None if result is None else f"{result:.0f}"
 
     def kph_to_mph(self, kph):
         """Convert the given kilometers per hour, if any, to miles per hour"""
         return (
-            None if kph is None or kph == 0 else "{:.0f}".format(kph * 0.62137119223733)
+            None if kph is None or kph == 0 else f"{kph * 0.62137119223733:.0f}"
         )
 
     def mps_to_mph(self, mps):
         """
         Convert the given meters per second, if any, to miles per hour
         """
-        return None if mps is None or mps == 0 else "{:.0f}".format(mps * 2.23694)
+        return None if mps is None or mps == 0 else f"{mps * 2.23694:.0f}"
 
     def da_to_dir(self, da):
         """
