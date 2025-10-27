@@ -93,11 +93,11 @@ class Location(WeatherBase):
                 name = name[1:]
 
             if len(name) != 5:
-                return f"{self.spoken_name(name)} could not be located"
+                return "%s could not be located" % self.spoken_name(name)
 
             # Retrieve the location data from the cache
             loc = (
-                self.cache_handler.get_location(f"{name}")
+                self.cache_handler.get_location("%s" % name)
                 if self.cache_handler
                 else None
             )
@@ -106,9 +106,9 @@ class Location(WeatherBase):
                 return None
 
             # Have a new location, so retrieve the base info
-            coords, props = self.mapquest(f"{name}")
+            coords, props = self.mapquest("%s" % name)
             if coords is None:
-                return f"{self.spoken_name(name)} could not be located"
+                return "%s could not be located" % self.spoken_name(name)
             city = name
             state = ""
         else:
@@ -134,22 +134,29 @@ class Location(WeatherBase):
 
             # Retrieve the location data from the cache
             loc = (
-                self.cache_handler.get_location(f"{city} {state}")
+                self.cache_handler.get_location("%s %s" % (city, state))
                 if self.cache_handler
                 else None
             )
 
             # Have a new location, so retrieve the base info
-            coords, props = self.mapquest(f"{city}+{state}")
+            coords, props = self.mapquest("%s+%s" % (city, state))
             if coords is None:
-                return f"{city} {state} could not be located.  Try using the zip code."
+                return "%s %s could not be located.  Try using the zip code." % (
+                    city,
+                    state,
+                )
         print("CORDS", coords)
         print("PROPS", json.dumps(props, indent=4))
 
         # Get the NWS location information (limit to 4 decimal places for the API)
         print("GETTING LOCAITON==========================")
         point = self.https(
-            f"points/{f'{coords[0]:.4f}'.rstrip('0').rstrip('.')},{f'{coords[1]:.4f}'.rstrip('0').rstrip('.')}"
+            "points/%s,%s"
+            % (
+                ("%.4f" % coords[0]).rstrip("0").rstrip("."),
+                ("%.4f" % coords[1]).rstrip("0").rstrip("."),
+            )
         )
         print("POINT", point)
 
@@ -157,9 +164,9 @@ class Location(WeatherBase):
         if point is None or "relativeLocation" not in point:
             notify(
                 self.event,
-                f"No relativeLocation for city '{city}' state '{state}'",
+                "No relativeLocation for city '%s' state '%s'" % (city, state),
             )
-            return f"{city} {state} could not be located"
+            return "%s %s could not be located" % (city, state)
 
         # Initialize location
         loc = {}
@@ -171,20 +178,20 @@ class Location(WeatherBase):
         loc["city"] = rel["city"].lower()
         loc["state"] = STATES[STATES.index(rel["state"].lower()) - 1]
         loc["cwa"] = point["cwa"]
-        loc["gridPoint"] = f"{point['gridX']},{point['gridY']}"
+        loc["gridPoint"] = "%s,%s" % (point["gridX"], point["gridY"])
         loc["timeZone"] = point["timeZone"]
 
         # Retrieve the location data from the cache
         rloc = (
-            self.cache_handler.get_location(f"{loc['city']} {loc['state']}")
+            self.cache_handler.get_location("%s %s" % (loc["city"], loc["state"]))
             if self.cache_handler
             else None
         )
         if rloc is None:
             # Have a new location, so retrieve the base info
-            rcoords, rprops = self.mapquest(f"{loc['city']}+{loc['state']}")
+            rcoords, rprops = self.mapquest("%s+%s" % (loc["city"], loc["state"]))
             if rcoords is not None:
-                loc["coords"] = f"{rcoords[0]},{rcoords[1]}"
+                loc["coords"] = "%s,%s" % (rcoords[0], rcoords[1])
             else:
                 loc["coords"] = coords
         else:
@@ -202,11 +209,15 @@ class Location(WeatherBase):
             if county[-1] == "county":
                 county[-1] = ""
             county = " ".join(list(county))
-            coords, props = self.mapquest(f"{county}+county+{loc['state']}")
+            coords, props = self.mapquest("%s+county+%s" % (county, loc["state"]))
             if coords is not None:
                 print("PT==================================")
                 pt = self.https(
-                    f"points/{f'{coords[0]:.4f}'.rstrip('0').rstrip('.')},{f'{coords[1]:.4f}'.rstrip('0').rstrip('.')}"
+                    "points/%s,%s"
+                    % (
+                        ("%.4f" % coords[0]).rstrip("0").rstrip("."),
+                        ("%.4f" % coords[1]).rstrip("0").rstrip("."),
+                    )
                 )
                 print("pt", pt)
                 if "county" in pt:
@@ -223,7 +234,7 @@ class Location(WeatherBase):
         )
 
         # Put it to the cache
-        loc["location"] = f"{city} {state}" if state else city
+        loc["location"] = "%s %s" % (city, state) if state else city
         if self.cache_handler:
             self.cache_handler.put_location(loc["location"], loc)
 

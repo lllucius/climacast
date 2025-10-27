@@ -396,7 +396,8 @@ class Skill(WeatherBase):
 
         # Build SSML speech
         speech_ssml = (
-            f'<speak><prosody rate="{self.user_rate}%" pitch="{self.user_pitch - 100:+d}%">{text}</prosody></speak>'
+            '<speak><prosody rate="%d%%" pitch="%+d%%">%s</prosody></speak>'
+            % (self.user_rate, self.user_pitch - 100, text)
         )
 
         # Use ASK SDK response builder
@@ -405,7 +406,8 @@ class Skill(WeatherBase):
 
         if not end and prompt:
             reprompt_ssml = (
-                f'<speak><prosody rate="{self.user_rate}%" pitch="{self.user_pitch - 100:+d}%">{prompt}</prosody></speak>'
+                '<speak><prosody rate="%d%%" pitch="%+d%%">%s</prosody></speak>'
+                % (self.user_rate, self.user_pitch - 100, prompt)
             )
             response_builder.ask(reprompt_ssml)
 
@@ -514,7 +516,7 @@ class Skill(WeatherBase):
             return text
 
         if metric not in METRICS:
-            return f"{metric} is an unrecognized metric."
+            return "%s is an unrecognized metric." % metric
 
         metrics = (
             self.user_metrics if METRICS[metric][0] == "all" else [METRICS[metric][0]]
@@ -627,18 +629,18 @@ class Skill(WeatherBase):
             return "You must include a metric like temperature, humidity or wind."
 
         if metric not in METRICS:
-            return f"{metric} is an unrecognized metric."
+            return "%s is an unrecognized metric." % metric
 
         metric = METRICS[metric]
         if not metric[1]:
-            return f"{metric[0]} can't be used when customizing the forecast."
+            return "%s can't be used when customizing the forecast." % metric[0]
 
         if self.has_metric(metric[0]):
-            return f"{metric[0]} is already included in the custom forecast."
+            return "%s is already included in the custom forecast." % metric[0]
 
         self.add_metric(metric[0])
 
-        return f"{metric[0]} has been added to the custom forecast."
+        return "%s has been added to the custom forecast." % metric[0]
 
     def remove_custom_intent(self):
         metric = self.slots.metric
@@ -646,18 +648,18 @@ class Skill(WeatherBase):
             return "You must include a metric like temperature, humidity or wind."
 
         if metric not in METRICS:
-            return f"{metric} is an unrecognized metric."
+            return "%s is an unrecognized metric." % metric
 
         metric = METRICS[metric]
         if not metric[1]:
-            return f"{metric[0]} can't be used when customizing the forecast."
+            return "%s can't be used when customizing the forecast." % metric[0]
 
         if not self.has_metric(metric[0]):
-            return f"{metric[0]} is already excluded from the custom forecast."
+            return "%s is already excluded from the custom forecast." % metric[0]
 
         self.remove_metric(metric[0])
 
-        return f"{metric[0]} has been removed from the custom forecast."
+        return "%s has been removed from the custom forecast." % metric[0]
 
     def reset_custom_intent(self):
         self.reset_metrics()
@@ -695,7 +697,11 @@ class Skill(WeatherBase):
         obs = Observations(self.event, self.loc.observationStations, self.cache_handler)
         if obs.is_good:
             # data = self.https("gridpoints/%s/%s" % (self.loc.cwa, self.loc.grid_point))
-            text += f"At {obs.time_reported.astimezone(self.loc.tz).strftime('%I:%M%p')}, {obs.station_name} reported {obs.description}, "
+            text += "At %s, %s reported %s, " % (
+                obs.time_reported.astimezone(self.loc.tz).strftime("%I:%M%p"),
+                obs.station_name,
+                obs.description,
+            )
 
             for metric in metrics:
                 if metric == "wind":
@@ -703,33 +709,39 @@ class Skill(WeatherBase):
                         text += "winds are calm"
                     else:
                         if obs.wind_direction is None:
-                            text += f"Winds are {obs.wind_speed} miles per hour"
+                            text += "Winds are %s miles per hour" % obs.wind_speed
                         elif obs.wind_direction == "Variable":
-                            text += f"Winds are {obs.wind_direction} at {obs.wind_speed} miles per hour"
+                            text += "Winds are %s at %s miles per hour" % (
+                                obs.wind_direction,
+                                obs.wind_speed,
+                            )
                         else:
-                            text += f"Winds are out of the {obs.wind_direction} at {obs.wind_speed} miles per hour"
+                            text += "Winds are out of the %s at %s miles per hour" % (
+                                obs.wind_direction,
+                                obs.wind_speed,
+                            )
 
                         if obs.wind_gust is not None:
-                            text += f", gusting to {obs.wind_gust}"
+                            text += ", gusting to %s" % obs.wind_gust
                 elif metric == "temperature":
                     if obs.temp is not None:
-                        text += f"The temperature is {obs.temp} degrees"
+                        text += "The temperature is %s degrees" % obs.temp
                         if obs.wind_chill is not None:
-                            text += f", with a wind chill of {obs.wind_chill} degrees"
+                            text += ", with a wind chill of %s degrees" % obs.wind_chill
                         elif obs.heat_index is not None:
-                            text += f", with a heat index of {obs.heat_index} degrees"
+                            text += ", with a heat index of %s degrees" % obs.heat_index
                 elif metric == "dewpoint":
                     if obs.dewpoint is not None:
-                        text += f"The dewpoint is {obs.dewpoint} degrees"
+                        text += "The dewpoint is %s degrees" % obs.dewpoint
                 elif metric == "barometric pressure":
                     if obs.pressure is not None:
-                        text += f"The barometric pressure is at {obs.pressure} inches"
+                        text += "The barometric pressure is at %s inches" % obs.pressure
                         trend = obs.pressure_trend
                         if trend is not None:
-                            text += f" and {trend}"
+                            text += " and %s" % trend
                 elif metric == "relative humidity":
                     if obs.humidity is not None:
-                        text += f"The relative humidity is {obs.humidity} percent"
+                        text += "The relative humidity is %s percent" % obs.humidity
                 text += ". "
         else:
             text += "Observation information is currently unavailable."
@@ -792,7 +804,10 @@ class Skill(WeatherBase):
             metric = METRICS[metric][0]
             # print("FORECAST METRIC", metric, "STIME", stime, "ETIME", etime)
             if not gp.set_interval(stime, etime):
-                text = f"Forecast information is unavailable for {MONTH_NAMES[self.stime.month - 1]} {MONTH_DAYS[self.stime.day - 1]}"
+                text = "Forecast information is unavailable for %s %s" % (
+                    MONTH_NAMES[self.stime.month - 1],
+                    MONTH_DAYS[self.stime.day - 1],
+                )
                 return text
 
             isday = self.is_day(stime)
@@ -807,68 +822,83 @@ class Skill(WeatherBase):
                 else:
                     if wsh == wsl:
                         if wdi is None:
-                            text = f"winds will be {wsh} miles per hour"
+                            text = "winds will be %s miles per hour" % (wsh)
                         else:
-                            text = f"winds will be out of the {wdi} at {wsh} miles per hour"
+                            text = (
+                                "winds will be out of the %s at %s miles per hour"
+                                % (wdi, wsh)
+                            )
                     else:
                         if wdi is None:
-                            text = f"winds will be {wsl} to {wsh} miles per hour"
+                            text = "winds will be %s to %s miles per hour" % (wsl, wsh)
                         else:
-                            text = f"winds will be out of the {wdi} at {wsl} to {wsh} miles per hour"
+                            text = (
+                                "winds will be out of the %s at %s to %s miles per hour"
+                                % (wdi, wsl, wsh)
+                            )
                     wg = gp.wind_gust_high
                     if wg is not None:
-                        text += f", with gusts as high as {wg}"
+                        text += ", with gusts as high as %s" % wg
             elif metric == "temperature":
                 t = gp.temp_high if isday else gp.temp_low
                 if t is not None:
-                    text = f"the {'high' if isday else 'low'} temperature will be {t} degrees"
+                    text = "the %s temperature will be %s degrees" % (
+                        "high" if isday else "low",
+                        t,
+                    )
 
                     wcl = gp.wind_chill_low
                     wch = gp.wind_chill_high
                     if wcl is not None:
                         if wcl == wch:
                             if wcl != t:
-                                text += f", with a wind chill of {wcl} degrees"
+                                text += ", with a wind chill of %s degrees" % wcl
                         else:
-                            text += f", with a wind chill of {wcl} to {wch} degrees"
+                            text += ", with a wind chill of %s to %s degrees" % (
+                                wcl,
+                                wch,
+                            )
 
                     hil = gp.heat_index_low
                     hih = gp.heat_index_high
                     if hil is not None:
                         if hil == hih:
                             if hil != t:
-                                text += f", with a heat index of {hil} degrees"
+                                text += ", with a heat index of %s degrees" % hil
                         else:
-                            text += f", with a heat index of {hil} to {hih} degrees"
+                            text += ", with a heat index of %s to %s degrees" % (
+                                hil,
+                                hih,
+                            )
             elif metric == "dewpoint":
                 dh = gp.dewpoint_high
                 if dh is not None:
-                    text = f"the dewpoint will be {dh} degrees"
+                    text = "the dewpoint will be %s degrees" % dh
             elif metric == "barometric pressure":
                 pl = gp.pressure_low
                 if pl is not None:
-                    text = f"the barometric pressure will be {pl} inches"
+                    text = "the barometric pressure will be %s inches" % pl
             elif metric == "skys":
                 si = gp.skys_initial
                 sf = gp.skys_final
                 if si is not None:
                     if si == sf:
-                        text = f"it will be {si}"
+                        text = "it will be %s" % si
                     elif si is None or sf is None:
-                        text = f"it will be {si or sf}"
+                        text = "it will be %s" % si or sf
                     else:
-                        text = f"it will be {si} changing to {sf}"
+                        text = "it will be %s changing to %s" % (si, sf)
             elif metric == "relative humidity":
                 hh = gp.humidity_high
                 if hh is not None:
-                    text = f"the relative humidity will be {hh:.0f} percent"
+                    text = "the relative humidity will be %.0f percent" % hh
             elif metric == "precipitation":
                 pch = gp.precip_chance_high
                 if pch is not None:
                     if pch == 0:
                         text = "No precipitation forecasted"
                     else:
-                        text = f"the chance of precipitation will be {pch:d} percent"
+                        text = "the chance of precipitation will be %d percent" % pch
 
                         pal = gp.precip_amount_low
                         pah = gp.precip_amount_high
@@ -879,9 +909,13 @@ class Skill(WeatherBase):
                             text += ", with amounts of "
 
                             if pal[1] == pah[1] or pal[0] < 0.1:
-                                text += f"{pah[1]} {pah[2]} possible"
+                                text += "%s %s possible" % (pah[1], pah[2])
                             else:
-                                text += f"{pal[1]} to {pah[1]} {pah[2]} possible"
+                                text += "%s to %s %s possible" % (
+                                    pal[1],
+                                    pah[1],
+                                    pah[2],
+                                )
 
                         sal = gp.snow_amount_low
                         sah = gp.snow_amount_high
@@ -889,9 +923,13 @@ class Skill(WeatherBase):
                             text += ", snowfall amounts of "
 
                             if sal[1] == sah[1] or sal[0] < 0.1:
-                                text += f"{sah[1]} {sah[2]} possible"
+                                text += "%s %s possible" % (sah[1], sah[2])
                             else:
-                                text += f"{sal[1]} to {sah[1]} {sah[2]} possible"
+                                text += "%s to %s %s possible" % (
+                                    sal[1],
+                                    sah[1],
+                                    sah[2],
+                                )
             elif metric == "summary":
                 wt = gp.weather_text
                 if wt:
@@ -901,9 +939,12 @@ class Skill(WeatherBase):
                 fulltext += text + ". "
 
         if fulltext != "":
-            fulltext = f"{self.sname} in {self.loc.city}, {fulltext}"
+            fulltext = "%s in %s, %s" % (self.sname, self.loc.city, fulltext)
         else:
-            fulltext = f"Forecast information is unavailable for {self.sname} in {self.loc.city}"
+            fulltext = "Forecast information is unavailable for %s in %s" % (
+                self.sname,
+                self.loc.city,
+            )
 
         return fulltext
 
@@ -1422,7 +1463,7 @@ def lambda_handler(event, context=None):
         return {
             "version": "1.0",
             "response": {
-                "outputSpeech": {"type": "SSML", "ssml": f"<speak>{text}</speak>"},
+                "outputSpeech": {"type": "SSML", "ssml": "<speak>%s</speak>" % text},
                 "reprompt": {
                     "outputSpeech": {"type": "SSML", "ssml": None},
                 },
