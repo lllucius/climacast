@@ -9,8 +9,9 @@
 #
 # =============================================================================
 
-import httpx
 import logging
+
+import httpx
 
 from storage.cache_handler import CacheHandler
 from utils.config import Config

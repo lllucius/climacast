@@ -42,6 +42,7 @@ class Observations(WeatherBase):
         self.data = None
         self.station = None
         import json
+
         for station in stations["@graph"]:
             print("STATIOPNS")
             print(json.dumps(station, indent=4))
