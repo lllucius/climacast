@@ -5,6 +5,8 @@ This module contains all constant definitions used throughout the skill,
 including weather-related dictionaries, date/time mappings, and location data.
 """
 
+from typing import List
+
 # Slot names used in Alexa interaction model
 SLOTS = [
     "day",
@@ -402,7 +404,7 @@ NORMALIZE_RE = [
 ]
 
 
-def get_default_metrics():
+def get_default_metrics() -> List[str]:
     """
     Returns the default ordered list of forecast metrics.
 

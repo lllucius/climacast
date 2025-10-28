@@ -63,7 +63,7 @@ class Config:
     HTTP_TIMEOUT: int = 30
 
     @classmethod
-    def validate(cls):
+    def validate(cls) -> None:
         """
         Validate required configuration values.
 
