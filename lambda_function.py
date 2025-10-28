@@ -16,24 +16,34 @@ import re
 import sys
 from datetime import datetime
 
-from ask_sdk_core.dispatch_components import (AbstractExceptionHandler,
-                                              AbstractRequestHandler,
-                                              AbstractRequestInterceptor,
-                                              AbstractResponseInterceptor)
+from ask_sdk_core.dispatch_components import (
+    AbstractExceptionHandler,
+    AbstractRequestHandler,
+    AbstractRequestInterceptor,
+    AbstractResponseInterceptor,
+)
 from ask_sdk_core.serialize import DefaultSerializer
 from ask_sdk_core.skill_builder import CustomSkillBuilder
 from ask_sdk_core.utils import is_intent_name, is_request_type
 from ask_sdk_dynamodb.adapter import DynamoDbAdapter
+
 # from aniso8601 import parse_duration
 from dateutil import parser, tz
 from dateutil.relativedelta import relativedelta
 
-from storage.local_handlers import (LocalJsonCacheHandler,
-                                    LocalJsonSettingsHandler)
+from storage.local_handlers import LocalJsonCacheHandler, LocalJsonSettingsHandler
 from storage.settings_handler import AlexaSettingsHandler
 from utils.config import Config
-from utils.constants import (DAYS, METRICS, MONTH_DAYS, MONTH_DAYS_XLATE,
-                             MONTH_NAMES, SETTINGS, SLOTS, get_default_metrics)
+from utils.constants import (
+    DAYS,
+    METRICS,
+    MONTH_DAYS,
+    MONTH_DAYS_XLATE,
+    MONTH_NAMES,
+    SETTINGS,
+    SLOTS,
+    get_default_metrics,
+)
 from utils.factories import get_cache_handler
 from utils.notify import notify
 from weather.alerts import Alerts
@@ -1439,9 +1449,7 @@ def run_test_one():
     # Enable test mode via environment variable
     os.environ["SKILLTEST"] = "true"
 
-    with open(
-        sys.argv[1] if len(sys.argv) > 1 else "test.json", encoding="utf-8"
-    ) as f:
+    with open(sys.argv[1] if len(sys.argv) > 1 else "test.json", encoding="utf-8") as f:
         event = json.load(f)
         event["session"]["application"]["applicationId"] = "amzn1.ask.skill.test"
         event["session"]["testing"] = True

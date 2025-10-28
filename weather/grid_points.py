@@ -20,8 +20,12 @@ from aniso8601.duration import parse_duration
 from dateutil import parser
 from dateutil.relativedelta import relativedelta
 
-from utils.constants import (WEATHER_ATTRIBUTES, WEATHER_COVERAGE,
-                             WEATHER_INTENSITY, WEATHER_WEATHER)
+from utils.constants import (
+    WEATHER_ATTRIBUTES,
+    WEATHER_COVERAGE,
+    WEATHER_INTENSITY,
+    WEATHER_WEATHER,
+)
 from weather.base import WeatherBase
 
 
