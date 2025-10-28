@@ -301,11 +301,11 @@ class Location(WeatherBase):
         return self.loc["countyZoneName"]
 
     @property
-    def observationStations(self):
+    def observationStations(self) -> Any:
         """List of observation stations."""
         return self.loc["observationStations"]
 
     @property
-    def tz(self):
+    def tz(self) -> Any:
         """Timezone object."""
         return tz.gettz(self.loc["timeZone"])
