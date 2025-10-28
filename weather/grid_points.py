@@ -117,7 +117,7 @@ class GridPoints(WeatherBase):
             stime = self.stime
             for value in self.data.get(metric, {}).get("values", {}):
                 dts, dte = self.in_range(value["validTime"], stime, self.etime)
-                if dte and dte:
+                if dts and dte:
                     v = value["value"]
                     while stime < self.etime and stime < dte:
                         vals.append(v)

@@ -18,7 +18,7 @@ os.environ["AWS_ACCESS_KEY_ID"] = "test"
 os.environ["AWS_SECRET_ACCESS_KEY"] = "test"
 
 # Import the lambda handler
-from lambda_function import lambda_handler
+from lambda_function import lambda_handler  # noqa: E402
 
 
 def test_ask_sdk_handlers():

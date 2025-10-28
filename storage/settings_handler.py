@@ -35,7 +35,6 @@ class SettingsHandler(object):
 
     def __init__(self) -> None:
         """Initialize the settings handler."""
-        pass
 
     def get_location(self) -> Optional[str]:
         """Get user's default location."""

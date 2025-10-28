@@ -42,6 +42,7 @@ class Observations(WeatherBase):
         self.data = None
         self.station = None
         import json
+
         for station in stations["@graph"]:
             print("STATIOPNS")
             print(json.dumps(station, indent=4))
@@ -50,7 +51,7 @@ class Observations(WeatherBase):
             print("STAT")
             print(json.dumps(station, indent=4))
             if station:
-#                data = self.https(f"stations/{stationId}/observations/latest")
+                # data = self.https(f"stations/{stationId}/observations/latest")
                 print("ASDFASDFASDFASDFASDF")
                 data = self.https(f"stations/{stationId}/observations?limit=10")
                 if data:

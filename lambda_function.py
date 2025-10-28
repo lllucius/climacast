@@ -28,12 +28,12 @@ from ask_sdk_core.utils import is_intent_name, is_request_type
 from ask_sdk_dynamodb.adapter import DynamoDbAdapter
 
 # from aniso8601 import parse_duration
-from boto3 import resource as resource
 from dateutil import parser, tz
 from dateutil.relativedelta import relativedelta
 
 from storage.local_handlers import LocalJsonCacheHandler, LocalJsonSettingsHandler
 from storage.settings_handler import AlexaSettingsHandler
+from utils.config import Config
 from utils.constants import (
     DAYS,
     METRICS,
@@ -46,7 +46,6 @@ from utils.constants import (
 )
 from utils.factories import get_cache_handler
 from utils.notify import notify
-from utils.config import Config
 from weather.alerts import Alerts
 from weather.base import WeatherBase
 from weather.grid_points import GridPoints
@@ -63,6 +62,7 @@ logger.setLevel(logging.INFO)
 """
 VERSION = 1
 REVISION = 0
+
 
 class Skill(WeatherBase):
     def __init__(self, handler_input, cache_handler=None, settings_handler=None):
@@ -1416,7 +1416,7 @@ def run_test_from_file(filepath):
     # Enable test mode
     os.environ["SKILLTEST"] = "true"
 
-    with open(filepath, "r") as f:
+    with open(filepath, "r", encoding="utf-8") as f:
         for line_num, line in enumerate(f, 1):
             # Skip comments and empty lines
             line = line.strip()
@@ -1449,7 +1449,7 @@ def run_test_one():
     # Enable test mode via environment variable
     os.environ["SKILLTEST"] = "true"
 
-    with open(sys.argv[1] if len(sys.argv) > 1 else "test.json") as f:
+    with open(sys.argv[1] if len(sys.argv) > 1 else "test.json", encoding="utf-8") as f:
         event = json.load(f)
         event["session"]["application"]["applicationId"] = "amzn1.ask.skill.test"
         event["session"]["testing"] = True
@@ -1464,40 +1464,40 @@ def run_test_one():
 
 if __name__ == "__main__":
     import argparse
-    import logging
-    import sys
 
     logging.basicConfig(level=logging.INFO)
 
-    parser = argparse.ArgumentParser(
+    arg_parser = argparse.ArgumentParser(
         description="Test the Clima Cast Alexa skill from the command line",
         epilog="""
 Examples:
   # Test a launch request
   python lambda_function.py LaunchRequest
-  
+
   # Test an intent with slots
   python lambda_function.py MetricIntent metric=temperature location="Seattle, Washington"
-  
+
   # Test from a file
   python lambda_function.py --file test_cases.txt
-  
+
   # Use JSON file (legacy mode)
   python lambda_function.py --json test.json
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    parser.add_argument(
+    arg_parser.add_argument(
         "intent", nargs="?", help="Intent name (e.g., LaunchRequest, MetricIntent)"
     )
-    parser.add_argument("slots", nargs="*", help="Slot arguments in key=value format")
-    parser.add_argument(
+    arg_parser.add_argument(
+        "slots", nargs="*", help="Slot arguments in key=value format"
+    )
+    arg_parser.add_argument(
         "--file", "-f", help="Read test cases from a file (one per line)"
     )
-    parser.add_argument("--json", "-j", help="Use a JSON event file (legacy mode)")
+    arg_parser.add_argument("--json", "-j", help="Use a JSON event file (legacy mode)")
 
-    args = parser.parse_args()
+    args = arg_parser.parse_args()
 
     # Legacy JSON file mode
     if args.json:

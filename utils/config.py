@@ -9,9 +9,9 @@
 
 import logging
 import os
+from typing import List
 
 from dotenv import load_dotenv
-from typing import List
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -87,5 +87,3 @@ class Config:
                 raise ValueError("DYNAMODB_REGION must be set")
 
         logger.info("Configuration validated successfully")
-
-
