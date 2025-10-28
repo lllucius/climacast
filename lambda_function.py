@@ -15,7 +15,7 @@ import os
 import re
 import sys
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 from ask_sdk_core.dispatch_components import (
     AbstractExceptionHandler,
@@ -738,7 +738,7 @@ class Skill(WeatherBase):
             )
 
         return fulltext
-    def get_location(self, req: bool = False) -> Optional[Location]:
+    def get_location(self, req: bool = False) -> Optional[str]:
         if self.slots.location or self.slots.zipcode:
             loc = Location(self.event, self.cache_handler)
             text = loc.set(self.slots.location or self.slots.zipcode, self.loc)
@@ -757,7 +757,7 @@ class Skill(WeatherBase):
             text = None
 
         return text
-    def get_when(self) -> Optional[Tuple[Any, Any]]:
+    def get_when(self) -> None:
         self.has_when = (
             self.slots.when_abs
             or self.slots.when_any

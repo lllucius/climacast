@@ -17,6 +17,7 @@ and zip codes to coordinates and retrieving associated weather zones.
 """
 
 from typing import Any, Dict, Optional, Tuple
+from datetime import tzinfo
 
 import json
 
@@ -306,6 +307,6 @@ class Location(WeatherBase):
         return self.loc["observationStations"]
 
     @property
-    def tz(self) -> Any:
+    def tz(self) -> Optional[tzinfo]:
         """Timezone object."""
         return tz.gettz(self.loc["timeZone"])
