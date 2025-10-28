@@ -42,7 +42,7 @@ class WeatherBase(object):
     - Text normalization
     """
 
-    def __init__(self, event: Dict[str, Any], cache_handler=None) -> None:
+    def __init__(self, event: Dict[str, Any], cache_handler: Optional[Any] = None) -> None:
         """
         Initialize the weather base class.
 
@@ -266,24 +266,24 @@ class WeatherBase(object):
         """
         return converters.mm_to_in(mm, as_text)
 
-    def c_to_f(self, c):
+    def c_to_f(self, c: Optional[float]) -> Optional[str]:
         """Convert the given celsius value, if any, to fahrenheit"""
         result = converters.c_to_f(c)
         return None if result is None else "{:.0f}".format(result)
 
-    def kph_to_mph(self, kph):
+    def kph_to_mph(self, kph: Optional[float]) -> Optional[str]:
         """Convert the given kilometers per hour, if any, to miles per hour"""
         return (
             None if kph is None or kph == 0 else "{:.0f}".format(kph * 0.62137119223733)
         )
 
-    def mps_to_mph(self, mps):
+    def mps_to_mph(self, mps: Optional[float]) -> Optional[str]:
         """
         Convert the given meters per second, if any, to miles per hour
         """
         return None if mps is None or mps == 0 else "{:.0f}".format(mps * 2.23694)
 
-    def da_to_dir(self, da):
+    def da_to_dir(self, da: Optional[float]) -> Optional[str]:
         """
         Convert the given degrees (angle), if any, to a compass direction
         """
@@ -293,7 +293,7 @@ class WeatherBase(object):
                     return item[0]
         return None
 
-    def dir_to_dir(self, da):
+    def dir_to_dir(self, da: Optional[str]) -> Optional[str]:
         """
         Convert the given short direction to long
         """
@@ -303,7 +303,7 @@ class WeatherBase(object):
                     return item[0]
         return None
 
-    def to_wind_chill(self, F, mph):
+    def to_wind_chill(self, F: float, mph: float) -> Optional[int]:
         """Calculate wind chill temperature"""
         if F > 50.0 or mph <= 3.0:
             return None
@@ -312,7 +312,7 @@ class WeatherBase(object):
             35.74 + 0.6215 * F - 35.75 * pow(mph, 0.16) + 0.4275 * F * pow(mph, 0.16)
         )
 
-    def to_heat_index(self, F, rh):
+    def to_heat_index(self, F: float, rh: float) -> Optional[int]:
         """
         Calculate the heat index
         Taken from: http://www.wpc.ncep.noaa.gov/html/heatindex.shtml
@@ -363,7 +363,7 @@ class WeatherBase(object):
         """
         return self._text_normalizer.normalize(text)
 
-    def is_day(self, when):
+    def is_day(self, when: Any) -> bool:
         """
         Determine if given time is during the day
         """

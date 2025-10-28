@@ -16,6 +16,9 @@ This module provides the Location class for converting location names
 and zip codes to coordinates and retrieving associated weather zones.
 """
 
+from typing import Any, Dict, Optional, Tuple
+from datetime import tzinfo
+
 import json
 
 from dateutil import tz
@@ -36,7 +39,7 @@ class Location(WeatherBase):
     retrieves associated weather zones, and manages location data.
     """
 
-    def set(self, name, default=None):
+    def set(self, name: str, default: Optional[Any] = None) -> Optional[str]:
         """
         Set the location by name or zip code.
 
@@ -225,7 +228,7 @@ class Location(WeatherBase):
 
         return None
 
-    def mapquest(self, search):
+    def mapquest(self, search: str) -> Tuple[Optional[Tuple[float, float]], Optional[Dict[str, str]]]:
         """
         Geocode a location using the Geolocator class.
 
@@ -238,72 +241,72 @@ class Location(WeatherBase):
         geolocator = get_geolocator()
         return geolocator.geocode(search)
 
-    def spoken_name(self, name=None):
+    def spoken_name(self, name: Optional[str] = None) -> str:
         """Get the spoken form of the location name."""
         loc = name or self.loc["location"]
         return "zip code " + " ".join(list(loc)) if loc and loc.isdigit() else loc
 
     @property
-    def name(self):
+    def name(self) -> str:
         """Location name."""
         return self.loc["location"]
 
     @property
-    def coords(self):
+    def coords(self) -> str:
         """Location coordinates."""
         return self.loc["coords"]
 
     @property
-    def city(self):
+    def city(self) -> str:
         """City name."""
         return self.loc["city"]
 
     @property
-    def state(self):
+    def state(self) -> str:
         """State name."""
         return self.loc["state"]
 
     @property
-    def cwa(self):
+    def cwa(self) -> str:
         """County Warning Area."""
         return self.loc["cwa"]
 
     @property
-    def grid_point(self):
+    def grid_point(self) -> str:
         """Grid point coordinates."""
         return self.loc["gridPoint"]
 
     @property
-    def timeZone(self):
+    def timeZone(self) -> str:
         """Time zone identifier."""
         return self.loc["timeZone"]
 
     @property
-    def forecastZoneId(self):
+    def forecastZoneId(self) -> str:
         """Forecast zone ID."""
         return self.loc["forecastZoneId"]
 
     @property
-    def forecastZoneName(self):
+    def forecastZoneName(self) -> str:
         """Forecast zone name."""
         return self.loc["forecastZoneName"]
 
     @property
-    def countyZoneId(self):
+    def countyZoneId(self) -> str:
         """County zone ID."""
         return self.loc["countyZoneId"]
 
     @property
-    def countyZoneName(self):
+    def countyZoneName(self) -> str:
         """County zone name."""
         return self.loc["countyZoneName"]
 
     @property
-    def observationStations(self):
+    def observationStations(self) -> Any:
         """List of observation stations."""
         return self.loc["observationStations"]
 
     @property
-    def tz(self):
+    def tz(self) -> Optional[tzinfo]:
         """Timezone object."""
         return tz.gettz(self.loc["timeZone"])

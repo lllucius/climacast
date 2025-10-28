@@ -16,6 +16,8 @@ This module provides classes for processing weather alerts and warnings
 from the National Weather Service.
 """
 
+from typing import Any, Dict, List, Optional
+
 from weather.base import WeatherBase
 
 
@@ -27,7 +29,7 @@ class Alerts(WeatherBase):
     and warnings from the National Weather Service.
     """
 
-    def __init__(self, event, zone, cache_handler=None):
+    def __init__(self, event: Dict[str, Any], zone: str, cache_handler: Optional[Any] = None) -> None:
         """
         Initialize Alerts for a specific zone.
 
@@ -49,7 +51,7 @@ class Alert(WeatherBase):
     severity, urgency, and descriptive text.
     """
 
-    def __init__(self, event, data, cache_handler=None):
+    def __init__(self, event: Dict[str, Any], data: Dict[str, Any], cache_handler: Optional[Any] = None) -> None:
         """
         Initialize Alert with alert data.
 
@@ -62,21 +64,21 @@ class Alert(WeatherBase):
         self.data = data.get("properties", {})
 
     @property
-    def evt(self):
+    def evt(self) -> Optional[str]:
         """Alert event type."""
         return self.data.get("event")
 
     @property
-    def headline(self):
+    def headline(self) -> Optional[str]:
         """Alert headline."""
         return self.data.get("headline")
 
     @property
-    def description(self):
+    def description(self) -> Optional[str]:
         """Alert description."""
         return self.data.get("description")
 
     @property
-    def instruction(self):
+    def instruction(self) -> Optional[str]:
         """Alert instructions."""
         return self.data.get("instruction")

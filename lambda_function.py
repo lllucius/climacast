@@ -15,6 +15,7 @@ import os
 import re
 import sys
 from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
 
 from ask_sdk_core.dispatch_components import (
     AbstractExceptionHandler,
@@ -65,7 +66,7 @@ REVISION = 0
 
 
 class Skill(WeatherBase):
-    def __init__(self, handler_input, cache_handler=None, settings_handler=None):
+    def __init__(self, handler_input: Any, cache_handler: Optional[Any] = None, settings_handler: Optional[Any] = None) -> None:
         # Create minimal event dict for Base class (used for notifications)
         request_envelope = handler_input.request_envelope
         event = {
@@ -101,67 +102,63 @@ class Skill(WeatherBase):
         self.end = True
 
     @property
-    def user_location(self):
+    def user_location(self) -> Optional[Any]:
         return self.settings_handler.get_location() if self.settings_handler else None
 
     @user_location.setter
-    def user_location(self, location):
+    def user_location(self, location: Any) -> None:
         if self.settings_handler:
             self.settings_handler.set_location(location)
 
     @property
-    def user_rate(self):
+    def user_rate(self) -> int:
         return self.settings_handler.get_rate() if self.settings_handler else 100
 
     @user_rate.setter
-    def user_rate(self, rate):
+    def user_rate(self, rate: int) -> None:
         if self.settings_handler:
             self.settings_handler.set_rate(rate)
 
     @property
-    def user_pitch(self):
+    def user_pitch(self) -> int:
         return self.settings_handler.get_pitch() if self.settings_handler else 100
 
     @user_pitch.setter
-    def user_pitch(self, pitch):
+    def user_pitch(self, pitch: int) -> None:
         if self.settings_handler:
             self.settings_handler.set_pitch(pitch)
 
     @property
-    def user_metrics(self):
+    def user_metrics(self) -> List[str]:
         if self.settings_handler:
             return self.settings_handler.get_metrics()
         # Return default metrics if no settings handler
         return get_default_metrics()
 
     @user_metrics.setter
-    def user_metrics(self, metrics):
+    def user_metrics(self, metrics: List[str]) -> None:
         if self.settings_handler:
             self.settings_handler.set_metrics(metrics)
 
-    def add_metric(self, metric):
+    def add_metric(self, metric: str) -> None:
         if self.settings_handler:
             current_metrics = self.settings_handler.get_metrics()
             if metric not in current_metrics:
                 current_metrics.append(metric)
                 self.settings_handler.set_metrics(current_metrics)
-
-    def remove_metric(self, metric):
+    def remove_metric(self, metric: str) -> None:
         if self.settings_handler:
             current_metrics = self.settings_handler.get_metrics()
             if metric in current_metrics:
                 current_metrics.remove(metric)
                 self.settings_handler.set_metrics(current_metrics)
-
-    def reset_metrics(self):
+    def reset_metrics(self) -> None:
         if self.settings_handler:
             # Get default metrics
             self.settings_handler.set_metrics(get_default_metrics())
-
-    def has_metric(self, metric):
+    def has_metric(self, metric: str) -> bool:
         return metric in self.user_metrics
-
-    def initialize(self):
+    def initialize(self) -> Optional[str]:
         """Initialize skill state from handler_input"""
         # Amazon says to verify our application id
         # if self.session.application.application_id != Config.APP_ID:
@@ -195,8 +192,7 @@ class Skill(WeatherBase):
             logger.info("INTENT: %s", self.request.intent.name)
         else:
             logger.info("REQUEST: %s", self.request.object_type)
-
-    def respond(self, text, end=None):
+    def respond(self, text: str, end: Optional[bool] = None) -> Any:
         new = self.session.new
         if end is None:
             end = new
@@ -234,8 +230,7 @@ class Skill(WeatherBase):
         self.handler_input.attributes_manager.session_attributes.update(self.attrs)
 
         return response_builder.response
-
-    def default_handler(self):
+    def default_handler(self) -> Any:
         notify(self.event, "Unrecognized event", json.dumps(self.event, indent=4))
         return self.respond(
             "Unhandled event %s, %s."
@@ -244,8 +239,7 @@ class Skill(WeatherBase):
                 self.intent["name"] if self.request["type"] == "IntentRequest" else "",
             )
         )
-
-    def launch_request(self):
+    def launch_request(self) -> Any:
         text = (
             "Welcome to Clime a Cast. "
             "For current conditions, use phrases like: What's the weather. "
@@ -258,25 +252,20 @@ class Skill(WeatherBase):
             )
 
         return text
-
-    def session_end_request(self):
+    def session_end_request(self) -> Any:
         return "Thank you for using Clime a Cast."
-
-    def session_ended_request(self):
+    def session_ended_request(self) -> Any:
         if "error" in self.request:
             notify(self.event, "Error detected", self.request["error"]["message"])
             return self.request["error"]["message"]
 
         notify(self.event, "Session Ended", self.request["reason"])
         return self.request["reason"]
-
-    def cancel_intent(self):
+    def cancel_intent(self) -> Any:
         return "Canceled."
-
-    def stop_intent(self):
+    def stop_intent(self) -> Any:
         return self.session_end_request()
-
-    def help_intent(self):
+    def help_intent(self) -> Any:
         text = """
             For complete information, please refer to the Clima Cast skill
             page in the Alexa app.
@@ -310,8 +299,7 @@ class Skill(WeatherBase):
             zip code.
             """
         return text
-
-    def metric_intent(self):
+    def metric_intent(self) -> Any:
         # Verify the location if needed
         text = self.get_location()
         if text is not None:
@@ -352,8 +340,7 @@ class Skill(WeatherBase):
 
         text = self.get_current(metrics)
         return text
-
-    def get_setting_intent(self):
+    def get_setting_intent(self) -> Any:
         # Verify location first
         text = self.get_location()
         if text is not None:
@@ -396,16 +383,14 @@ class Skill(WeatherBase):
                 )
 
         return text
-
-    def set_location_intent(self):
+    def set_location_intent(self) -> Any:
         text = self.get_location(req=True)
         if text is None:
             self.user_location = self.loc.name
             text = "Your default location has been set to %s." % self.loc.spoken_name()
 
         return text
-
-    def set_pitch_intent(self):
+    def set_pitch_intent(self) -> Any:
         if self.slots.percent and self.slots.percent.isdigit():
             pitch = int(self.slots.percent)
             if 130 >= pitch >= 70:
@@ -417,8 +402,7 @@ class Skill(WeatherBase):
             text = "Expected a percentage when setting the pitch"
 
         return text
-
-    def set_rate_intent(self):
+    def set_rate_intent(self) -> Any:
         if self.slots.percent and self.slots.percent.isdigit():
             rate = int(self.slots.percent)
             if 150 >= rate >= 50:
@@ -430,8 +414,7 @@ class Skill(WeatherBase):
             text = "Expected a percentage when setting the rate"
 
         return text
-
-    def get_custom_intent(self):
+    def get_custom_intent(self) -> Any:
         text = (
             "The custom forecast will include the %s."
             % ", ".join(list(self.user_metrics[:-1]))
@@ -439,8 +422,7 @@ class Skill(WeatherBase):
             + self.user_metrics[-1]
         )
         return text
-
-    def add_custom_intent(self):
+    def add_custom_intent(self) -> Any:
         metric = self.slots.metric
         if metric is None:
             return "You must include a metric like temperature, humidity or wind."
@@ -458,8 +440,7 @@ class Skill(WeatherBase):
         self.add_metric(metric[0])
 
         return "%s has been added to the custom forecast." % metric[0]
-
-    def remove_custom_intent(self):
+    def remove_custom_intent(self) -> Any:
         metric = self.slots.metric
         if metric is None:
             return "You must include a metric like temperature, humidity or wind."
@@ -477,13 +458,11 @@ class Skill(WeatherBase):
         self.remove_metric(metric[0])
 
         return "%s has been removed from the custom forecast." % metric[0]
-
-    def reset_custom_intent(self):
+    def reset_custom_intent(self) -> Any:
         self.reset_metrics()
 
         return "the custom forecast has been reset to defaults."
-
-    def get_alerts(self):
+    def get_alerts(self) -> Any:
         alerts = Alerts(self.event, self.loc.countyZoneId, self.cache_handler)
         if len(alerts) == 0:
             text = "No alerts in effect at this time for %s." % self.loc.city
@@ -496,8 +475,7 @@ class Skill(WeatherBase):
                 text += alert.instruction + "...\n"
 
         return self.normalize(text)
-
-    def get_current(self, metrics):
+    def get_current(self, metrics: List[str]) -> Any:
         text = ""
 
         if False:
@@ -563,8 +541,7 @@ class Skill(WeatherBase):
             text += "Observation information is currently unavailable."
 
         return self.normalize(text)
-
-    def get_discussion(self):
+    def get_discussion(self) -> Any:
         match = re.compile(r".*(^\.SHORT TERM.*?)^&&$", re.MULTILINE | re.DOTALL).match(
             self.get_product("AFD")
         )
@@ -574,8 +551,7 @@ class Skill(WeatherBase):
         text = match.group(1)
 
         return text
-
-    def get_extended(self):
+    def get_extended(self) -> Any:
         data = self.https(
             "gridpoints/%s/%s/forecast" % (self.loc.cwa, self.loc.grid_point)
         )
@@ -600,8 +576,7 @@ class Skill(WeatherBase):
         header = "The extended forecast for the %s zone " % self.loc.forecastZoneName
 
         return self.normalize(header + text)
-
-    def get_forecast(self, metrics):
+    def get_forecast(self, metrics: List[str]) -> Any:
         text = ""
 
         stime = self.stime
@@ -763,8 +738,7 @@ class Skill(WeatherBase):
             )
 
         return fulltext
-
-    def get_location(self, req=False):
+    def get_location(self, req: bool = False) -> Optional[str]:
         if self.slots.location or self.slots.zipcode:
             loc = Location(self.event, self.cache_handler)
             text = loc.set(self.slots.location or self.slots.zipcode, self.loc)
@@ -783,8 +757,7 @@ class Skill(WeatherBase):
             text = None
 
         return text
-
-    def get_when(self):
+    def get_when(self) -> None:
         self.has_when = (
             self.slots.when_abs
             or self.slots.when_any
@@ -922,7 +895,7 @@ class Skill(WeatherBase):
 class BaseIntentHandler(AbstractRequestHandler):
     """Base handler providing common functionality for all intent handlers"""
 
-    def get_skill_helper(self, handler_input):
+    def get_skill_helper(self, handler_input: Any) -> Skill:
         """Create and initialize Skill instance from handler_input"""
         # Check if running in test mode via environment variable
         is_test_mode = os.environ.get("SKILLTEST", "").lower() == "true"
@@ -953,11 +926,9 @@ class BaseIntentHandler(AbstractRequestHandler):
 
 class LaunchRequestHandler(BaseIntentHandler):
     """Handler for Skill Launch"""
-
-    def can_handle(self, handler_input):
+    def can_handle(self, handler_input: Any) -> bool:
         return is_request_type("LaunchRequest")(handler_input)
-
-    def handle(self, handler_input):
+    def handle(self, handler_input: Any) -> Any:
         skill = self.get_skill_helper(handler_input)
         text = skill.launch_request()
         return skill.respond(text, end=False)
@@ -965,11 +936,9 @@ class LaunchRequestHandler(BaseIntentHandler):
 
 class SessionEndedRequestHandler(BaseIntentHandler):
     """Handler for Session End"""
-
-    def can_handle(self, handler_input):
+    def can_handle(self, handler_input: Any) -> bool:
         return is_request_type("SessionEndedRequest")(handler_input)
-
-    def handle(self, handler_input):
+    def handle(self, handler_input: Any) -> Any:
         skill = self.get_skill_helper(handler_input)
 
         # Check for errors in the request
@@ -990,13 +959,11 @@ class SessionEndedRequestHandler(BaseIntentHandler):
 
 class CancelAndStopIntentHandler(BaseIntentHandler):
     """Handler for Cancel and Stop Intents"""
-
-    def can_handle(self, handler_input):
+    def can_handle(self, handler_input: Any) -> bool:
         return is_intent_name("AMAZON.CancelIntent")(handler_input) or is_intent_name(
             "AMAZON.StopIntent"
         )(handler_input)
-
-    def handle(self, handler_input):
+    def handle(self, handler_input: Any) -> Any:
         skill = self.get_skill_helper(handler_input)
 
         if is_intent_name("AMAZON.CancelIntent")(handler_input):
@@ -1007,11 +974,9 @@ class CancelAndStopIntentHandler(BaseIntentHandler):
 
 class HelpIntentHandler(BaseIntentHandler):
     """Handler for Help Intent"""
-
-    def can_handle(self, handler_input):
+    def can_handle(self, handler_input: Any) -> bool:
         return is_intent_name("AMAZON.HelpIntent")(handler_input)
-
-    def handle(self, handler_input):
+    def handle(self, handler_input: Any) -> Any:
         skill = self.get_skill_helper(handler_input)
         text = skill.help_intent()
         return skill.respond(text, end=False)
@@ -1019,13 +984,11 @@ class HelpIntentHandler(BaseIntentHandler):
 
 class MetricIntentHandler(BaseIntentHandler):
     """Handler for Metric Intent"""
-
-    def can_handle(self, handler_input):
+    def can_handle(self, handler_input: Any) -> bool:
         return is_intent_name("MetricIntent")(handler_input) or is_intent_name(
             "MetricPosIntent"
         )(handler_input)
-
-    def handle(self, handler_input):
+    def handle(self, handler_input: Any) -> Any:
         skill = self.get_skill_helper(handler_input)
         text = skill.metric_intent()
         return skill.respond(text, end=False)
@@ -1033,11 +996,9 @@ class MetricIntentHandler(BaseIntentHandler):
 
 class GetSettingIntentHandler(BaseIntentHandler):
     """Handler for Get Setting Intent"""
-
-    def can_handle(self, handler_input):
+    def can_handle(self, handler_input: Any) -> bool:
         return is_intent_name("GetSettingIntent")(handler_input)
-
-    def handle(self, handler_input):
+    def handle(self, handler_input: Any) -> Any:
         skill = self.get_skill_helper(handler_input)
         text = skill.get_setting_intent()
         return skill.respond(text, end=False)
@@ -1045,11 +1006,9 @@ class GetSettingIntentHandler(BaseIntentHandler):
 
 class SetLocationIntentHandler(BaseIntentHandler):
     """Handler for Set Location Intent"""
-
-    def can_handle(self, handler_input):
+    def can_handle(self, handler_input: Any) -> bool:
         return is_intent_name("SetLocationIntent")(handler_input)
-
-    def handle(self, handler_input):
+    def handle(self, handler_input: Any) -> Any:
         skill = self.get_skill_helper(handler_input)
         text = skill.set_location_intent()
         return skill.respond(text, end=False)
@@ -1057,11 +1016,9 @@ class SetLocationIntentHandler(BaseIntentHandler):
 
 class SetPitchIntentHandler(BaseIntentHandler):
     """Handler for Set Pitch Intent"""
-
-    def can_handle(self, handler_input):
+    def can_handle(self, handler_input: Any) -> bool:
         return is_intent_name("SetPitchIntent")(handler_input)
-
-    def handle(self, handler_input):
+    def handle(self, handler_input: Any) -> Any:
         skill = self.get_skill_helper(handler_input)
         text = skill.set_pitch_intent()
         return skill.respond(text, end=False)
@@ -1069,11 +1026,9 @@ class SetPitchIntentHandler(BaseIntentHandler):
 
 class SetRateIntentHandler(BaseIntentHandler):
     """Handler for Set Rate Intent"""
-
-    def can_handle(self, handler_input):
+    def can_handle(self, handler_input: Any) -> bool:
         return is_intent_name("SetRateIntent")(handler_input)
-
-    def handle(self, handler_input):
+    def handle(self, handler_input: Any) -> Any:
         skill = self.get_skill_helper(handler_input)
         text = skill.set_rate_intent()
         return skill.respond(text, end=False)
@@ -1081,11 +1036,9 @@ class SetRateIntentHandler(BaseIntentHandler):
 
 class GetCustomIntentHandler(BaseIntentHandler):
     """Handler for Get Custom Forecast Intent"""
-
-    def can_handle(self, handler_input):
+    def can_handle(self, handler_input: Any) -> bool:
         return is_intent_name("GetCustomIntent")(handler_input)
-
-    def handle(self, handler_input):
+    def handle(self, handler_input: Any) -> Any:
         skill = self.get_skill_helper(handler_input)
         text = skill.get_custom_intent()
         return skill.respond(text, end=False)
@@ -1093,11 +1046,9 @@ class GetCustomIntentHandler(BaseIntentHandler):
 
 class AddCustomIntentHandler(BaseIntentHandler):
     """Handler for Add Custom Forecast Intent"""
-
-    def can_handle(self, handler_input):
+    def can_handle(self, handler_input: Any) -> bool:
         return is_intent_name("AddCustomIntent")(handler_input)
-
-    def handle(self, handler_input):
+    def handle(self, handler_input: Any) -> Any:
         skill = self.get_skill_helper(handler_input)
         text = skill.add_custom_intent()
         return skill.respond(text, end=False)
@@ -1105,11 +1056,9 @@ class AddCustomIntentHandler(BaseIntentHandler):
 
 class RemoveCustomIntentHandler(BaseIntentHandler):
     """Handler for Remove Custom Forecast Intent"""
-
-    def can_handle(self, handler_input):
+    def can_handle(self, handler_input: Any) -> bool:
         return is_intent_name("RemCustomIntent")(handler_input)
-
-    def handle(self, handler_input):
+    def handle(self, handler_input: Any) -> Any:
         skill = self.get_skill_helper(handler_input)
         text = skill.remove_custom_intent()
         return skill.respond(text, end=False)
@@ -1117,11 +1066,9 @@ class RemoveCustomIntentHandler(BaseIntentHandler):
 
 class ResetCustomIntentHandler(BaseIntentHandler):
     """Handler for Reset Custom Forecast Intent"""
-
-    def can_handle(self, handler_input):
+    def can_handle(self, handler_input: Any) -> bool:
         return is_intent_name("RstCustomIntent")(handler_input)
-
-    def handle(self, handler_input):
+    def handle(self, handler_input: Any) -> Any:
         skill = self.get_skill_helper(handler_input)
         text = skill.reset_custom_intent()
         return skill.respond(text, end=False)
@@ -1135,14 +1082,14 @@ class ResetCustomIntentHandler(BaseIntentHandler):
 class RequestLogger(AbstractRequestInterceptor):
     """Log the request envelope."""
 
-    def process(self, handler_input):
+    def process(self, handler_input: Any) -> None:
         logger.info("Request Envelope: %s", handler_input.request_envelope)
 
 
 class ResponseLogger(AbstractResponseInterceptor):
     """Log the response envelope."""
 
-    def process(self, handler_input, response):
+    def process(self, handler_input: Any, response: Any) -> None:
         logger.info("Response: %s", response)
 
 
@@ -1154,10 +1101,10 @@ class ResponseLogger(AbstractResponseInterceptor):
 class AllExceptionHandler(AbstractExceptionHandler):
     """Catch all exception handler."""
 
-    def can_handle(self, handler_input, exception):
+    def can_handle(self, handler_input: Any, exception: Exception) -> bool:
         return True
 
-    def handle(self, handler_input, exception):
+    def handle(self, handler_input: Any, exception: Exception) -> Any:
         logger.error("Exception encountered: %s", exception)
 
         # Get event-like structure for notify
@@ -1236,7 +1183,7 @@ skill_instance = sb.create()
 # ============================================================================
 
 
-def lambda_handler(event, context=None):
+def lambda_handler(event: Dict[str, Any], context: Optional[Any] = None) -> Dict[str, Any]:
     """
     Lambda handler for Alexa skill using ASK SDK.
     """
@@ -1288,7 +1235,7 @@ def lambda_handler(event, context=None):
         }
 
 
-def build_test_event(intent_name, slots=None):
+def build_test_event(intent_name: str, slots: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     """
     Build an Alexa event structure for testing from intent name and slots.
 
@@ -1353,7 +1300,7 @@ def build_test_event(intent_name, slots=None):
     return event
 
 
-def parse_slot_args(args):
+def parse_slot_args(args: List[str]) -> Dict[str, str]:
     """
     Parse slot arguments in the form 'key=value'.
 
@@ -1375,7 +1322,7 @@ def parse_slot_args(args):
     return slots
 
 
-def run_test_from_args(intent_name, slot_args):
+def run_test_from_args(intent_name: str, slot_args: List[str]) -> None:
     """
     Test the skill with command line arguments.
 
@@ -1401,7 +1348,7 @@ def run_test_from_args(intent_name, slot_args):
     return response
 
 
-def run_test_from_file(filepath):
+def run_test_from_file(filepath: str) -> None:
     """
     Test the skill by reading test cases from a file.
     Each line in the file should be in the format:
@@ -1444,7 +1391,7 @@ def run_test_from_file(filepath):
                 traceback.print_exc()
 
 
-def run_test_one():
+def run_test_one() -> None:
     """Test function for local development - sets up test mode via environment."""
     # Enable test mode via environment variable
     os.environ["SKILLTEST"] = "true"

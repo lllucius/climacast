@@ -16,6 +16,8 @@ This module provides the GridPoints class for processing weather forecast
 data from the National Weather Service gridpoints endpoint.
 """
 
+from typing import Any, Dict, List, Optional, Tuple, Union
+
 from aniso8601.duration import parse_duration
 from dateutil import parser
 from dateutil.relativedelta import relativedelta
@@ -37,7 +39,7 @@ class GridPoints(WeatherBase):
     grid point, including temperature, precipitation, wind, and other metrics.
     """
 
-    def __init__(self, event, tz, cwa, gridpoint, cache_handler=None):
+    def __init__(self, event: Dict[str, Any], tz: Any, cwa: str, gridpoint: str, cache_handler: Optional[Any] = None) -> None:
         """
         Initialize GridPoints with location and time information.
 
@@ -56,7 +58,7 @@ class GridPoints(WeatherBase):
         self.highs = {}
         self.lows = {}
 
-    def set_interval(self, stime, etime):
+    def set_interval(self, stime: Any, etime: Any) -> bool:
         """
         Set the time interval for weather data retrieval.
 
@@ -80,7 +82,7 @@ class GridPoints(WeatherBase):
 
         return False
 
-    def in_range(self, time, stime, etime):
+    def in_range(self, time: str, stime: Any, etime: Any) -> Tuple[Optional[Any], Optional[Any]]:
         """
         Check if a time period overlaps with the given range.
 
@@ -101,7 +103,7 @@ class GridPoints(WeatherBase):
 
         return None, None
 
-    def get_values(self, metric):
+    def get_values(self, metric: str) -> List[Optional[float]]:
         """
         Get hourly values for a specific metric.
 
@@ -130,7 +132,7 @@ class GridPoints(WeatherBase):
 
         return self.values[metric]
 
-    def get_low(self, metric):
+    def get_low(self, metric: str) -> Optional[float]:
         """Get the low value for a metric."""
         if metric not in self.lows:
             values = [value for value in self.get_values(metric) if value is not None]
@@ -141,7 +143,7 @@ class GridPoints(WeatherBase):
 
         return self.lows[metric]
 
-    def get_high(self, metric):
+    def get_high(self, metric: str) -> Optional[float]:
         """Get the high value for a metric."""
         if metric not in self.highs:
             values = [value for value in self.get_values(metric) if value is not None]
@@ -152,126 +154,126 @@ class GridPoints(WeatherBase):
 
         return self.highs[metric]
 
-    def get_initial(self, metric):
+    def get_initial(self, metric: str) -> Optional[float]:
         """Get the initial value for a metric."""
         values = self.get_values(metric)
         return values[0] if len(values) > 0 else None
 
-    def get_final(self, metric):
+    def get_final(self, metric: str) -> Optional[float]:
         """Get the final value for a metric."""
         values = self.get_values(metric)
         return values[-1] if len(values) > 0 else None
 
-    def get_times(self, metric):
+    def get_times(self, metric: str) -> List[Any]:
         """Get the times associated with a metric."""
         self.get_values(metric)
         return self.times.get(metric, [])
 
     # Temperature properties
     @property
-    def temp_low(self):
+    def temp_low(self): -> Optional[str]:
         return self.c_to_f(self.get_low("temperature"))
 
     @property
-    def temp_high(self):
+    def temp_high(self): -> Optional[str]:
         return self.c_to_f(self.get_high("temperature"))
 
     @property
-    def temp_initial(self):
+    def temp_initial(self): -> Optional[str]:
         return self.c_to_f(self.get_initial("temperature"))
 
     @property
-    def temp_final(self):
+    def temp_final(self): -> Optional[str]:
         return self.c_to_f(self.get_final("temperature"))
 
     # Humidity properties
     @property
-    def humidity_low(self):
+    def humidity_low(self): -> Optional[int]:
         return self.to_percent(self.get_low("relativeHumidity"))
 
     @property
-    def humidity_high(self):
+    def humidity_high(self): -> Optional[int]:
         return self.to_percent(self.get_high("relativeHumidity"))
 
     @property
-    def humidity_initial(self):
+    def humidity_initial(self): -> Optional[int]:
         return self.to_percent(self.get_initial("relativeHumidity"))
 
     @property
-    def humidity_final(self):
+    def humidity_final(self): -> Optional[int]:
         return self.to_percent(self.get_final("relativeHumidity"))
 
     # Dewpoint properties
     @property
-    def dewpoint_low(self):
+    def dewpoint_low(self): -> Optional[str]:
         return self.c_to_f(self.get_low("dewpoint"))
 
     @property
-    def dewpoint_high(self):
+    def dewpoint_high(self): -> Optional[str]:
         return self.c_to_f(self.get_high("dewpoint"))
 
     @property
-    def dewpoint_initial(self):
+    def dewpoint_initial(self): -> Optional[str]:
         return self.c_to_f(self.get_initial("dewpoint"))
 
     @property
-    def dewpoint_final(self):
+    def dewpoint_final(self): -> Optional[str]:
         return self.c_to_f(self.get_final("dewpoint"))
 
     # Barometric pressure properties
     @property
-    def pressure_low(self):
+    def pressure_low(self): -> Optional[str]:
         return self.pa_to_in(self.get_low("pressure"))
 
     @property
-    def pressure_high(self):
+    def pressure_high(self): -> Optional[str]:
         return self.pa_to_in(self.get_high("pressure"))
 
     @property
-    def pressure_initial(self):
+    def pressure_initial(self): -> Optional[str]:
         return self.pa_to_in(self.get_initial("pressure"))
 
     @property
-    def pressure_final(self):
+    def pressure_final(self): -> Optional[str]:
         return self.pa_to_in(self.get_final("pressure"))
 
     # Precipitation properties
     @property
-    def precip_chance_low(self):
+    def precip_chance_low(self): -> Optional[int]:
         return self.to_percent(self.get_low("probabilityOfPrecipitation"))
 
     @property
-    def precip_chance_high(self):
+    def precip_chance_high(self): -> Optional[int]:
         return self.to_percent(self.get_high("probabilityOfPrecipitation"))
 
     @property
-    def precip_chance_initial(self):
+    def precip_chance_initial(self): -> Optional[int]:
         return self.to_percent(self.get_initial("probabilityOfPrecipitation"))
 
     @property
-    def precip_chance_final(self):
+    def precip_chance_final(self): -> Optional[int]:
         return self.to_percent(self.get_final("probabilityOfPrecipitation"))
 
     @property
-    def precip_amount_low(self):
+    def precip_amount_low(self): -> Optional[Union[str, Tuple[float, str, str]]]:
         return self.mm_to_in(self.get_low("quantitativePrecipitation"), as_text=True)
 
     @property
-    def precip_amount_high(self):
+    def precip_amount_high(self): -> Optional[Union[str, Tuple[float, str, str]]]:
         return self.mm_to_in(self.get_high("quantitativePrecipitation"), as_text=True)
 
     @property
-    def precip_amount_initial(self):
+    def precip_amount_initial(self): -> Optional[Union[str, Tuple[float, str, str]]]:
         return self.mm_to_in(
             self.get_initial("quantitativePrecipitation"), as_text=True
         )
 
     @property
-    def precip_amount_final(self):
+    def precip_amount_final(self): -> Optional[Union[str, Tuple[float, str, str]]]:
         return self.mm_to_in(self.get_final("quantitativePrecipitation"), as_text=True)
 
     @property
-    def precip_total(self):
+    def precip_total(self): -> Optional[Union[str, Tuple[float, str, str]]]:
         values = [
             value
             for value in self.get_values("quantitativePrecipitation")
@@ -282,11 +284,11 @@ class GridPoints(WeatherBase):
         return self.mm_to_in(sum(values))
 
     @property
-    def precip_probability(self):
+    def precip_probability(self): -> Optional[str]:
         return self.to_percent(self.get_high("probabilityOfPrecipitation"))
 
     @property
-    def precip_text(self):
+    def precip_text(self): -> str:
         inches, amt, whole = self.mm_to_in(
             sum(
                 [
@@ -312,23 +314,23 @@ class GridPoints(WeatherBase):
 
     # Snow properties
     @property
-    def snow_amount_low(self):
+    def snow_amount_low(self): -> Optional[Union[str, Tuple[float, str, str]]]:
         return self.mm_to_in(self.get_low("snowfallAmount"), as_text=True)
 
     @property
-    def snow_amount_high(self):
+    def snow_amount_high(self): -> Optional[Union[str, Tuple[float, str, str]]]:
         return self.mm_to_in(self.get_high("snowfallAmount"), as_text=True)
 
     @property
-    def snow_amount_initial(self):
+    def snow_amount_initial(self): -> Optional[Union[str, Tuple[float, str, str]]]:
         return self.mm_to_in(self.get_initial("snowfallAmount"), as_text=True)
 
     @property
-    def snow_amount_final(self):
+    def snow_amount_final(self): -> Optional[Union[str, Tuple[float, str, str]]]:
         return self.mm_to_in(self.get_final("snowfallAmount"), as_text=True)
 
     @property
-    def snow_total(self):
+    def snow_total(self): -> Optional[Union[str, Tuple[float, str, str]]]:
         values = [
             value for value in self.get_values("snowfallAmount") if value is not None
         ]
@@ -337,7 +339,7 @@ class GridPoints(WeatherBase):
         return self.mm_to_in(sum(values))
 
     @property
-    def snow_text(self):
+    def snow_text(self): -> str:
         inches, amt, whole = self.mm_to_in(
             sum([value if value else 0 for value in self.get_values("snowfallAmount")]),
             True,
@@ -358,89 +360,89 @@ class GridPoints(WeatherBase):
 
     # Wind properties
     @property
-    def wind_speed_low(self):
+    def wind_speed_low(self): -> Optional[str]:
         return self.kph_to_mph(self.get_low("windSpeed"))
 
     @property
-    def wind_speed_high(self):
+    def wind_speed_high(self): -> Optional[str]:
         return self.kph_to_mph(self.get_high("windSpeed"))
 
     @property
-    def wind_speed_initial(self):
+    def wind_speed_initial(self): -> Optional[str]:
         return self.kph_to_mph(self.get_initial("windSpeed"))
 
     @property
-    def wind_speed_final(self):
+    def wind_speed_final(self): -> Optional[str]:
         return self.kph_to_mph(self.get_final("windSpeed"))
 
     @property
-    def wind_direction_initial(self):
+    def wind_direction_initial(self): -> Optional[str]:
         return self.da_to_dir(self.get_initial("windDirection"))
 
     @property
-    def wind_direction_final(self):
+    def wind_direction_final(self): -> Optional[str]:
         return self.da_to_dir(self.get_final("windDirection"))
 
     @property
-    def wind_gust_low(self):
+    def wind_gust_low(self): -> Optional[str]:
         return self.kph_to_mph(self.get_low("windGust"))
 
     @property
-    def wind_gust_high(self):
+    def wind_gust_high(self): -> Optional[str]:
         return self.kph_to_mph(self.get_high("windGust"))
 
     @property
-    def wind_gust_initial(self):
+    def wind_gust_initial(self): -> Optional[str]:
         return self.kph_to_mph(self.get_initial("windGust"))
 
     @property
-    def wind_gust_final(self):
+    def wind_gust_final(self): -> Optional[str]:
         return self.kph_to_mph(self.get_final("windGust"))
 
     # Heat index and wind chill
     @property
-    def heat_index_low(self):
+    def heat_index_low(self): -> Optional[str]:
         return self.c_to_f(self.get_low("heatIndex"))
 
     @property
-    def heat_index_high(self):
+    def heat_index_high(self): -> Optional[str]:
         return self.c_to_f(self.get_high("heatIndex"))
 
     @property
-    def heat_index_initial(self):
+    def heat_index_initial(self): -> Optional[str]:
         return self.c_to_f(self.get_initial("heatIndex"))
 
     @property
-    def heat_index_final(self):
+    def heat_index_final(self): -> Optional[str]:
         return self.c_to_f(self.get_final("heatIndex"))
 
     @property
-    def wind_chill_low(self):
+    def wind_chill_low(self): -> Optional[str]:
         return self.c_to_f(self.get_low("windChill"))
 
     @property
-    def wind_chill_high(self):
+    def wind_chill_high(self): -> Optional[str]:
         return self.c_to_f(self.get_high("windChill"))
 
     @property
-    def wind_chill_initial(self):
+    def wind_chill_initial(self): -> Optional[str]:
         return self.c_to_f(self.get_initial("windChill"))
 
     @property
-    def wind_chill_final(self):
+    def wind_chill_final(self): -> Optional[str]:
         return self.c_to_f(self.get_final("windChill"))
 
     # Sky cover
     @property
-    def skys_initial(self):
+    def skys_initial(self): -> Optional[str]:
         return self.to_skys(self.get_initial("skyCover"), self.is_day(self.stime))
 
     @property
-    def skys_final(self):
+    def skys_final(self): -> Optional[str]:
         return self.to_skys(self.get_final("skyCover"), self.is_day(self.stime))
 
     @property
-    def weather_text(self):
+    def weather_text(self): -> str:
         """
         Provides a description of the expected weather.
         TODO: Not at all happy with this. It needs to be redone.

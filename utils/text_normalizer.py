@@ -35,7 +35,7 @@ class TextNormalizer:
     - Special weather service codes
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the text normalizer and compile regex patterns."""
         self._compiled_pattern: Optional[re.Pattern] = None
 

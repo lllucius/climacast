@@ -11,6 +11,7 @@
 
 import json
 import logging
+from typing import Any, Dict, Optional
 
 from utils.constants import SLOTS
 
@@ -19,7 +20,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def notify(event, sub, msg=None):
+def notify(event: Dict[str, Any], sub: str, msg: Optional[str] = None) -> None:
     """
     Send SNS message of an unusual event
     """
