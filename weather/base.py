@@ -22,6 +22,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from utils import converters
 from utils.constants import ANGLES
+from utils.factories import get_https_client
+from utils.notify import notify
 from utils.text_normalizer import TextNormalizer
 
 # These will be lazily imported to avoid circular imports
@@ -63,9 +65,6 @@ class WeatherBase(object):
         Returns:
             Dict containing zone information
         """
-        # Lazy import to avoid circular dependency
-        from lambda_function import notify
-
         zoneId = zoneId.rsplit("/")[-1]
         zone = self.cache_handler.get_zone(zoneId) if self.cache_handler else None
         if zone is None:
@@ -117,9 +116,6 @@ class WeatherBase(object):
         Returns:
             List of station IDs
         """
-        # Lazy import to avoid circular dependency
-        from lambda_function import notify
-
         print("GETTING STATIONS================================")
         data = self.https("gridpoints/%s/stations" % coords)
         print("DATA", data)
@@ -139,9 +135,6 @@ class WeatherBase(object):
         Returns:
             Dict containing station information or None
         """
-        # Lazy import to avoid circular dependency
-        from lambda_function import notify
-
         stationId = stationId.rsplit("/")[-1]
         station = (
             self.cache_handler.get_station(stationId) if self.cache_handler else None
@@ -188,9 +181,6 @@ class WeatherBase(object):
         Returns:
             Product text or None
         """
-        # Lazy import to avoid circular dependency
-        from lambda_function import notify
-
         text = ""
 
         # Retrieve list of features provided by the given CWA
@@ -228,9 +218,6 @@ class WeatherBase(object):
             Dict containing JSON response or None
         """
         print("HTTPS:", path, loc)
-        # Lazy import to avoid circular dependency
-        from lambda_function import get_https_client, notify
-
         client = get_https_client()
         headers = {
             "User-Agent": "ClimacastAlexaSkill/1.0 (climacast@homerow.net)",
@@ -239,7 +226,7 @@ class WeatherBase(object):
         url = (
             path
             if path.startswith("https")
-            else f"https://{loc}/{path.replace(" ", "+")}"
+            else f"https://{loc}/{path.replace(' ', '+')}"
         )
         r = client.get(url, headers=headers)
         if r.status_code != 200 or r.text is None or r.text == "":

@@ -41,12 +41,18 @@ class Observations(WeatherBase):
         super().__init__(event, cache_handler)
         self.data = None
         self.station = None
+        import json
         for station in stations["@graph"]:
+            print("STATIOPNS")
+            print(json.dumps(station, indent=4))
             stationId = station["stationIdentifier"]
             station = self.get_station(stationId)
+            print("STAT")
+            print(json.dumps(station, indent=4))
             if station:
-                data = self.https(f"stations/{stationId}/observations/latest")
-                #                data = self.https(f"stations/{stationId}/observations?limit=1")
+#                data = self.https(f"stations/{stationId}/observations/latest")
+                print("ASDFASDFASDFASDFASDF")
+                data = self.https(f"stations/{stationId}/observations?limit=10")
                 if data:
                     self.data = data
                     self.station = station
@@ -80,7 +86,7 @@ class Observations(WeatherBase):
     @property
     def wind_speed(self):
         """Current wind speed in mph."""
-        return self.mps_to_mph(self.data.get("windSpeed", {}).get("value"))
+        return self.kph_to_mph(self.data.get("windSpeed", {}).get("value"))
 
     @property
     def wind_direction(self):
@@ -90,7 +96,7 @@ class Observations(WeatherBase):
     @property
     def wind_gust(self):
         """Current wind speed gusts in mph."""
-        return self.mps_to_mph(self.data.get("windGust", {}).get("value"))
+        return self.kph_to_mph(self.data.get("windGust", {}).get("value"))
 
     @property
     def skys(self):
@@ -125,7 +131,7 @@ class Observations(WeatherBase):
     @property
     def description(self):
         """Current weather description."""
-        return "blah, blash, description"  # self.data.get("stationName")
+        return self.data.get("textDescription")
 
     @property
     def pressure_trend(self):

@@ -15,9 +15,7 @@ import os
 import re
 import sys
 from datetime import datetime
-from typing import List
 
-import httpx
 from ask_sdk_core.dispatch_components import (
     AbstractExceptionHandler,
     AbstractRequestHandler,
@@ -33,9 +31,7 @@ from ask_sdk_dynamodb.adapter import DynamoDbAdapter
 from boto3 import resource as resource
 from dateutil import parser, tz
 from dateutil.relativedelta import relativedelta
-from dotenv import load_dotenv
 
-from storage.cache_handler import CacheHandler
 from storage.local_handlers import LocalJsonCacheHandler, LocalJsonSettingsHandler
 from storage.settings_handler import AlexaSettingsHandler
 from utils.constants import (
@@ -48,7 +44,9 @@ from utils.constants import (
     SLOTS,
     get_default_metrics,
 )
-from utils.geolocator import Geolocator
+from utils.factories import get_cache_handler
+from utils.notify import notify
+from utils.config import Config
 from weather.alerts import Alerts
 from weather.base import WeatherBase
 from weather.grid_points import GridPoints
@@ -65,187 +63,6 @@ logger.setLevel(logging.INFO)
 """
 VERSION = 1
 REVISION = 0
-
-load_dotenv()
-
-
-class Config:
-    """
-    Configuration class for managing environment variables and application settings.
-    Provides a centralized location for all configuration values.
-
-    Environment Variables:
-        event_id: Event identifier for notifications
-        app_id: Alexa skill application ID (default: amzn1.ask.skill.test)
-        dataupdate_id: Data update identifier (default: amzn1.ask.data.update)
-        here_api_key: HERE.com API key for geocoding
-        DYNAMODB_PERSISTENCE_TABLE_NAME: DynamoDB table name (default: ask-{app_id})
-        DYNAMODB_PERSISTENCE_REGION: AWS region (default: us-east-1)
-
-    Example:
-        Access configuration values:
-            app_id = Config.APP_ID
-            table_name = Config.DYNAMODB_TABLE_NAME
-    """
-
-    # Application identifiers
-    EVENT_ID: str = os.environ.get("event_id", "")
-    APP_ID: str = os.environ.get("app_id", "amzn1.ask.skill.test")
-    DATA_UPDATE_ID: str = os.environ.get("dataupdate_id", "amzn1.ask.data.update")
-
-    # API keys
-    HERE_API_KEY: str = os.environ.get("here_api_key", "")
-
-    # DynamoDB settings
-    DYNAMODB_TABLE_NAME: str = os.environ.get(
-        "DYNAMODB_PERSISTENCE_TABLE_NAME", f"ask-{os.environ.get('app_id', 'test')}"
-    )
-    DYNAMODB_REGION: str = os.environ.get("DYNAMODB_PERSISTENCE_REGION", "us-east-1")
-
-    # Cache settings
-    DEFAULT_CACHE_TTL_DAYS: int = 35
-
-    # HTTP retry settings
-    HTTP_RETRY_TOTAL: int = 3
-    HTTP_RETRY_STATUS_CODES: List[int] = [429, 500, 502, 503, 504]
-    HTTP_TIMEOUT: int = 30
-
-    @classmethod
-    def validate(cls):
-        """
-        Validate required configuration values.
-
-        Raises:
-            ValueError: If required configuration is missing or invalid
-        """
-        # Check for required values in production (not in test mode)
-        is_test_mode = os.environ.get("SKILLTEST", "").lower() == "true"
-
-        if not is_test_mode:
-            if not cls.APP_ID or cls.APP_ID == "amzn1.ask.skill.test":
-                logger.warning("APP_ID not set or using test value")
-
-            if not cls.HERE_API_KEY:
-                logger.warning("HERE_API_KEY not set - geocoding will not work")
-
-            if not cls.DYNAMODB_TABLE_NAME:
-                raise ValueError("DYNAMODB_TABLE_NAME must be set")
-
-            if not cls.DYNAMODB_REGION:
-                raise ValueError("DYNAMODB_REGION must be set")
-
-        logger.info("Configuration validated successfully")
-
-
-# =============================================================================
-# Factory Functions for Singleton Instances
-# =============================================================================
-
-_https_client = None
-
-
-def get_https_client() -> httpx.Client:
-    """
-    Get or create the global HTTPS client instance.
-
-    Returns:
-        httpx.Client: Configured HTTP client for API calls
-    """
-    global _https_client
-    if _https_client is None:
-        _https_client = httpx.Client(timeout=Config.HTTP_TIMEOUT, follow_redirects=True)
-    return _https_client
-
-
-_geolocator_instance = None
-
-
-def get_geolocator() -> Geolocator:
-    """
-    Get or create the global geolocator instance.
-
-    Returns:
-        Geolocator: Configured geolocator for geocoding operations
-    """
-    global _geolocator_instance
-    if _geolocator_instance is None:
-        _geolocator_instance = Geolocator(
-            api_key=Config.HERE_API_KEY, session=get_https_client()
-        )
-    return _geolocator_instance
-
-
-_cache_handler_instance = None
-
-
-def get_cache_handler() -> CacheHandler:
-    """
-    Get or create the global cache handler instance.
-
-    Returns:
-        CacheHandler: Configured cache handler for DynamoDB operations
-    """
-    global _cache_handler_instance
-    if _cache_handler_instance is None:
-        _cache_handler_instance = CacheHandler(
-            table_name=Config.DYNAMODB_TABLE_NAME, region=Config.DYNAMODB_REGION
-        )
-    return _cache_handler_instance
-
-
-# =============================================================================
-# Notification function
-# =============================================================================
-
-
-def notify(event, sub, msg=None):
-    """
-    Send SNS message of an unusual event
-    """
-    text = ""
-    if "request" in event:
-        request = event["request"]
-        intent = request.get("intent", None) if request else None
-        slots = intent.get("slots", None) if intent else None
-
-        if intent:
-            text += "REQUEST:\n\n"
-            text += "  " + request["type"]
-            if "name" in intent:
-                text += " - " + intent["name"]
-            text += "\n\n"
-
-        if slots:
-            text += "SLOTS:\n\n"
-            for slot in SLOTS:
-                text += "  %-15s %s\n" % (
-                    slot + ":",
-                    str(slots.get(slot, {}).get("value", None)),
-                )
-            text += "\n"
-
-    text += "EVENT:\n\n"
-    text += json.dumps(event, indent=4)
-    text += "\n\n"
-
-    if msg:
-        text += "MESSAGE:\n\n"
-        text += "  " + msg
-        text += "\n\n"
-
-    logger.info(f"NOTIFY:\n\n  {sub}\n\n{text}")
-
-
-# Base class now imported from weather.base module
-
-# GridPoints class now imported from weather.gridpoints module
-
-# Observations class now imported from weather.observations module
-
-# Alerts class now imported from weather.alerts module
-
-# Location class now imported from weather.location module
-
 
 class Skill(WeatherBase):
     def __init__(self, handler_input, cache_handler=None, settings_handler=None):
@@ -692,7 +509,6 @@ class Skill(WeatherBase):
                     "s" if cnt > 1 else "",
                 )
 
-        # print("OBS", self.loc.observationStations)
         # Retrieve the current observations from the nearest station
         obs = Observations(self.event, self.loc.observationStations, self.cache_handler)
         if obs.is_good:

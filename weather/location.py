@@ -21,17 +21,11 @@ import json
 from dateutil import tz
 
 from utils.constants import LOCATION_XLATE, STATES
+from utils.factories import get_geolocator
+from utils.notify import notify
 from weather.base import WeatherBase
 
 # No module-level globals needed - use lazy imports in methods
-
-
-def notify(event, subject, message=None):
-    """Placeholder for notify function - will be replaced by lazy import"""
-    import logging
-
-    logging.error(f"{subject}: {message}")
-
 
 class Location(WeatherBase):
     """
@@ -62,9 +56,6 @@ class Location(WeatherBase):
         Returns:
             None on success, error message string on failure
         """
-        # Lazy import to avoid circular dependency
-        from lambda_function import get_geolocator, notify
-
         get_geolocator()
 
         # Normalize name
@@ -253,9 +244,6 @@ class Location(WeatherBase):
         Returns:
             Tuple of (coordinates, properties) where coordinates is (lat, lng) or None
         """
-        # Lazy import to avoid circular dependency
-        from lambda_function import get_geolocator
-
         geolocator = get_geolocator()
         return geolocator.geocode(search)
 

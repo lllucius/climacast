@@ -359,19 +359,19 @@ class GridPoints(WeatherBase):
     # Wind properties
     @property
     def wind_speed_low(self):
-        return self.mps_to_mph(self.get_low("windSpeed"))
+        return self.kph_to_mph(self.get_low("windSpeed"))
 
     @property
     def wind_speed_high(self):
-        return self.mps_to_mph(self.get_high("windSpeed"))
+        return self.kph_to_mph(self.get_high("windSpeed"))
 
     @property
     def wind_speed_initial(self):
-        return self.mps_to_mph(self.get_initial("windSpeed"))
+        return self.kph_to_mph(self.get_initial("windSpeed"))
 
     @property
     def wind_speed_final(self):
-        return self.mps_to_mph(self.get_final("windSpeed"))
+        return self.kph_to_mph(self.get_final("windSpeed"))
 
     @property
     def wind_direction_initial(self):
