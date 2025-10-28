@@ -16,7 +16,7 @@ os.environ["event_id"] = ""
 os.environ["dataupdate_id"] = "amzn1.ask.data.update"
 
 # Import the lambda handler
-from lambda_function import lambda_handler
+from lambda_function import lambda_handler  # noqa: E402
 
 
 def test_launch():

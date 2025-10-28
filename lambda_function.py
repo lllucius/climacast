@@ -28,7 +28,6 @@ from ask_sdk_core.utils import is_intent_name, is_request_type
 from ask_sdk_dynamodb.adapter import DynamoDbAdapter
 
 # from aniso8601 import parse_duration
-from boto3 import resource as resource
 from dateutil import parser, tz
 from dateutil.relativedelta import relativedelta
 
@@ -63,6 +62,7 @@ logger.setLevel(logging.INFO)
 """
 VERSION = 1
 REVISION = 0
+
 
 class Skill(WeatherBase):
     def __init__(self, handler_input, cache_handler=None, settings_handler=None):
@@ -1464,40 +1464,38 @@ def run_test_one():
 
 if __name__ == "__main__":
     import argparse
-    import logging
-    import sys
 
     logging.basicConfig(level=logging.INFO)
 
-    parser = argparse.ArgumentParser(
+    arg_parser = argparse.ArgumentParser(
         description="Test the Clima Cast Alexa skill from the command line",
         epilog="""
 Examples:
   # Test a launch request
   python lambda_function.py LaunchRequest
-  
+
   # Test an intent with slots
   python lambda_function.py MetricIntent metric=temperature location="Seattle, Washington"
-  
+
   # Test from a file
   python lambda_function.py --file test_cases.txt
-  
+
   # Use JSON file (legacy mode)
   python lambda_function.py --json test.json
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    parser.add_argument(
+    arg_parser.add_argument(
         "intent", nargs="?", help="Intent name (e.g., LaunchRequest, MetricIntent)"
     )
-    parser.add_argument("slots", nargs="*", help="Slot arguments in key=value format")
-    parser.add_argument(
+    arg_parser.add_argument("slots", nargs="*", help="Slot arguments in key=value format")
+    arg_parser.add_argument(
         "--file", "-f", help="Read test cases from a file (one per line)"
     )
-    parser.add_argument("--json", "-j", help="Use a JSON event file (legacy mode)")
+    arg_parser.add_argument("--json", "-j", help="Use a JSON event file (legacy mode)")
 
-    args = parser.parse_args()
+    args = arg_parser.parse_args()
 
     # Legacy JSON file mode
     if args.json:

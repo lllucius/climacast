@@ -55,5 +55,3 @@ def notify(event, sub, msg=None):
         text += "\n\n"
 
     logger.info(f"NOTIFY:\n\n  {sub}\n\n{text}")
-
-

@@ -27,6 +27,7 @@ from weather.base import WeatherBase
 
 # No module-level globals needed - use lazy imports in methods
 
+
 class Location(WeatherBase):
     """
     Handles location geocoding and NWS zone information.

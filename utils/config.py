@@ -87,5 +87,3 @@ class Config:
                 raise ValueError("DYNAMODB_REGION must be set")
 
         logger.info("Configuration validated successfully")
-
-

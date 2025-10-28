@@ -74,4 +74,3 @@ def get_cache_handler() -> CacheHandler:
             table_name=Config.DYNAMODB_TABLE_NAME, region=Config.DYNAMODB_REGION
         )
     return _cache_handler_instance
-

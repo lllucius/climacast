@@ -12,7 +12,7 @@ os.environ["here_api_key"] = "test"
 # Add the parent directory to the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from utils.geolocator import Geolocator
+from utils.geolocator import Geolocator  # noqa: E402
 
 
 def test_geolocator_initialization():

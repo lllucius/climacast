@@ -76,7 +76,7 @@ class TextNormalizer:
 
         for match in pattern.finditer(text):
             # Add unmatched text before this match
-            out += text[last : match.start()]
+            out += text[last: match.start()]
             last = match.end()
 
             # Process the matched group
