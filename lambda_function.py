@@ -1406,7 +1406,7 @@ def run_test_from_file(filepath):
     # Enable test mode
     os.environ["SKILLTEST"] = "true"
 
-    with open(filepath, "r") as f:
+    with open(filepath, "r", encoding="utf-8") as f:
         for line_num, line in enumerate(f, 1):
             # Skip comments and empty lines
             line = line.strip()
@@ -1439,7 +1439,9 @@ def run_test_one():
     # Enable test mode via environment variable
     os.environ["SKILLTEST"] = "true"
 
-    with open(sys.argv[1] if len(sys.argv) > 1 else "test.json") as f:
+    with open(
+        sys.argv[1] if len(sys.argv) > 1 else "test.json", encoding="utf-8"
+    ) as f:
         event = json.load(f)
         event["session"]["application"]["applicationId"] = "amzn1.ask.skill.test"
         event["session"]["testing"] = True

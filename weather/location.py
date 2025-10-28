@@ -36,16 +36,6 @@ class Location(WeatherBase):
     retrieves associated weather zones, and manages location data.
     """
 
-    def __init__(self, event, cache_handler=None):
-        """
-        Initialize Location handler.
-
-        Args:
-            event: Event dictionary
-            cache_handler: Optional cache handler
-        """
-        super().__init__(event, cache_handler)
-
     def set(self, name, default=None):
         """
         Set the location by name or zip code.
@@ -181,7 +171,7 @@ class Location(WeatherBase):
         )
         if rloc is None:
             # Have a new location, so retrieve the base info
-            rcoords, rprops = self.mapquest("%s+%s" % (loc["city"], loc["state"]))
+            rcoords, _ = self.mapquest("%s+%s" % (loc["city"], loc["state"]))
             if rcoords is not None:
                 loc["coords"] = "%s,%s" % (rcoords[0], rcoords[1])
             else:

@@ -94,7 +94,7 @@ class LocalJsonCacheHandler(object):
             if not os.path.exists(file_path):
                 return None
 
-            with open(file_path, "r") as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
             # Check TTL if present
@@ -132,7 +132,7 @@ class LocalJsonCacheHandler(object):
             if ttl_days > 0:
                 data["ttl"] = int(time()) + (ttl_days * 24 * 60 * 60)
 
-            with open(file_path, "w") as f:
+            with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
         except Exception as e:
             logger.error(f"Error putting cache item {cache_type}{cache_id}: {e}")
@@ -264,7 +264,7 @@ class LocalJsonSettingsHandler:
 
         if os.path.exists(file_path):
             try:
-                with open(file_path, "r") as f:
+                with open(file_path, "r", encoding="utf-8") as f:
                     settings = json.load(f)
 
                 self._location = settings.get("location", None)
@@ -296,7 +296,7 @@ class LocalJsonSettingsHandler:
         }
 
         try:
-            with open(file_path, "w") as f:
+            with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(settings, f, indent=2)
         except Exception as e:
             logger.error(f"Error saving settings for {self.user_id}: {e}")
